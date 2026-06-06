@@ -13,7 +13,7 @@ agents using the official SDKs, and that its translations conform to the real sc
 | Live A2A agent handshake (real uvicorn HTTP server) | ✅ PASS |
 | Real A2A AgentCard discovery + `message/send` | ✅ PASS (agent replied "echo: hello from the bridge") |
 | Bridge A2A→MCP on the real message, validated vs official `mcp.types` | ✅ PASS |
-| Full test suite (incl. real-SDK conformance) | ✅ 98/98 |
+| Full test suite (incl. real-SDK conformance) | ✅ 75 passing |
 
 ## How to reproduce
 ```bash

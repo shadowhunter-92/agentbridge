@@ -9,8 +9,8 @@ built into the call path.
 *The whole product in 12 seconds: an unknown agent blocked, six protocols reaching one live MCP tool through the mesh, budget tracked, tamper-evident audit chain verified. Reproduce with `python examples/demo_story.py`.*
 
 > Status: working prototype. 6 protocols live + conformance-tested against real SDKs, a
-> governance moat, and an HTTP control plane. Business demand still being validated
-> (see `docs/MOM_TEST_TARGETS.md`). Honest assessment lives in `docs/`.
+> governance plane, and an HTTP control plane. Business demand still being validated — this
+> is an early, honest work-in-progress, not a finished product.
 
 ## What it does
 - **N-protocol mesh (any-to-any):** MCP (Anthropic), A2A (Google/LF), ACP (IBM/LF), OpenAI
@@ -40,7 +40,7 @@ python -m src.serve.mcp_gateway
 .venv/Scripts/python examples/live_governed_proxy.py    # identity + budget + audit in action
 
 # Tests
-.venv/Scripts/python -m pytest tests/ -q                # 169 passing
+.venv/Scripts/python -m pytest tests/ -q                # 75 passing
 ```
 
 ## Architecture
@@ -49,7 +49,6 @@ python -m src.serve.mcp_gateway
 - `src/proxy/` — real transport clients + in-line proxy
 - `src/api/control_plane.py` — the shipped HTTP API (mesh + governed routing, authenticated)
 - `src/serve/mcp_gateway.py` — drop-in MCP server packaging
-- `src/api/api.py` — **legacy** MCP↔A2A-only app (deprecated; kept for back-compat tests)
 
 ## Security model
 - **Operator endpoints** require an admin key (`X-Admin-Key`).
@@ -57,10 +56,10 @@ python -m src.serve.mcp_gateway
   with nonce replay protection. Identities can be revoked.
 - Audit is hash-chained and tamper-evident; export via `/control/audit/export`.
 
-## Docs (read these — honest, no hype)
-`docs/VISION_META_BRIDGE.md`, `docs/PROTOCOL_SUPPORT.md`, `docs/GOVERNANCE.md`,
-`docs/DEMAND_VALIDATION.md`, `docs/MOM_TEST_KIT.md` + `docs/MOM_TEST_TARGETS.md`,
-`docs/DEEP_REVIEW_2026-06-06.md`, `docs/PROJECT_STATE.md`.
+## Docs
+- `docs/PROTOCOL_SUPPORT.md` — the protocol support matrix + conformance approach
+- `docs/LIVE_AGENT_TESTING.md` — how the bridge is tested against real, running agents
+- `docs/PROTOBUF_A2A.md` — notes on A2A's JSON-RPC vs protobuf wire formats
 
 ## License
 Apache 2.0

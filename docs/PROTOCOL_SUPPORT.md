@@ -41,7 +41,7 @@ Plus the original A2A live handshakes (`examples/live_mcp_handshake.py`, `live_a
 - `tests/test_nprotocol_live.py` — every source protocol (mcp/a2a/acp/openai) routed to a **live**
   MCP tool, asserting it really computed 5.
 - `tests/test_real_conformance.py`, `tests/test_inline_proxy.py` — MCP/A2A real-SDK + live proxy.
-- Full suite: **125 passing.**
+- Full suite: **75 passing** (after retiring the legacy MCP↔A2A app and its tests).
 
 ## ANP — why it's deferred (and where it belongs)
 ANP (`agent-connect`) is not a tool-call/message protocol like the others — it's an **identity +

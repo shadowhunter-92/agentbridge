@@ -21,6 +21,5 @@ agntcy-acp>=1.5.0       # AGNTCY Agent Connect Protocol (RunCreateStateless, Mes
 # Governance plane (runtime): Ed25519 agent identity / signatures
 cryptography>=42.0.0
 
-# Optional: for production
-redis>=5.0.0
-asyncpg>=0.29.0
+# Note: durable governance uses stdlib sqlite3 (no dep). Add `asyncpg` only when/if
+# you swap the GovernanceStore to Postgres (see docs/ROADMAP_AND_MONETIZATION.md).

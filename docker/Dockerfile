@@ -66,6 +66,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Run the Meta-Bridge control plane (N-protocol mesh + governance).
 # Set AGENTBRIDGE_ADMIN_KEY and AGENTBRIDGE_DB in production.
 CMD ["uvicorn", "src.api.control_plane:app", "--host", "0.0.0.0", "--port", "8000"]
-
-# Legacy MCP<->A2A app (deprecated):
-# CMD ["python", "-m", "src.api.api"]
