@@ -4,6 +4,10 @@
 Any protocol in, any protocol out — with identity, budgets, and a tamper-evident audit trail
 built into the call path.
 
+![AgentBridge demo](demo.gif)
+
+*The whole product in 12 seconds: an unknown agent blocked, six protocols reaching one live MCP tool through the mesh, budget tracked, tamper-evident audit chain verified. Reproduce with `python examples/demo_story.py`.*
+
 > Status: working prototype. 6 protocols live + conformance-tested against real SDKs, a
 > governance moat, and an HTTP control plane. Business demand still being validated
 > (see `docs/MOM_TEST_TARGETS.md`). Honest assessment lives in `docs/`.
