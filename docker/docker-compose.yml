@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # Agent Bridge API - Enterprise Edition
+  agent-bridge:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+      # TLS/HTTPS port (uncomment when certificates are configured)
+      # - "8443:8443"
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0
+      - LOG_LEVEL=INFO
+      - ROUTING_STRATEGY=round_robin
+      # Redis configuration
+      - REDIS_URL=redis://redis:6379
+      # TLS Configuration (uncomment when certificates are ready)
+      # - TLS_CERT_PATH=/app/certs/cert.pem
+      # - TLS_KEY_PATH=/app/certs/key.pem
+      # - TLS_VERIFY_CLIENT=false
+    volumes:
+      # Mount certificates directory (uncomment when using TLS)
+      # - ./certs:/app/certs:ro
+      - redis_data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Redis for caching, sessions, and rate limiting
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  # Optional: Nginx reverse proxy with TLS termination
+  # Uncomment and configure for production TLS/HTTPS
+  # nginx:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "443:443"
+  #     - "80:80"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./certs:/etc/nginx/certs:ro
+  #   depends_on:
+  #     - agent-bridge
+  #   restart: unless-stopped
+
+  # Optional: Prometheus for metrics
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #   restart: unless-stopped
+
+volumes:
+  redis_data:
+
+# Networks for service isolation
+networks:
+  default:
+    driver: bridge

@@ -1,0 +1,60 @@
+# Python build artefacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env/
+
+# Environment / secrets
+.env
+.env.*
+*.env
+secrets.*
+*.key
+*.pem
+*credentials*
+
+# Runtime state / local databases
+*.db
+*.sqlite
+*.sqlite3
+agentbridge_governance.db
+*.log
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ----------------------------------------------------------------------
+# INTERNAL-ONLY docs — kept locally, NOT published to the public repo.
+# These contain strategy / sales / discovery notes / pricing / candid
+# self-critique and would help competitors more than they'd help us.
+# ----------------------------------------------------------------------
+docs/PROJECT_STATE.md
+docs/DEEP_REVIEW_2026-06-06.md
+docs/DEMAND_VALIDATION.md
+docs/MOM_TEST_KIT.md
+docs/MOM_TEST_TARGETS.md
+docs/customer_discovery_log.md
+docs/LAUNCH_KIT.md
+docs/COMPETITIVE_LANDSCAPE.md
+docs/ROADMAP_AND_MONETIZATION.md
+docs/EU_AI_ACT_PLAN.md
+docs/VISION_META_BRIDGE.md
+docs/GOVERNANCE.md
+docs/VALIDATION_SPRINT.md

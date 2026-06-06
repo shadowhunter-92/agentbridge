@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AgentBridge — Make every agent call provable</title>
+<meta name="description" content="The neutral governance &amp; audit layer for multi-agent systems. Translate across MCP, A2A, ACP, OpenAI, Gemini &amp; AGNTCY — with identity, budgets, and a tamper-evident audit trail. Any protocol. Any cloud. EU AI Act-ready." />
+<meta property="og:title" content="AgentBridge — Make every agent call provable" />
+<meta property="og:description" content="Neutral governance + tamper-evident audit for AI agents, across every protocol. EU AI Act-ready." />
+<meta property="og:type" content="website" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,900;1,9..144,500&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --ink:#0b0c0f; --ink-2:#101218; --ink-3:#171a23;
+    --line:rgba(236,233,226,.10); --line-2:rgba(236,233,226,.06);
+    --bone:#ece9e2; --bone-dim:#9b9ea7; --bone-faint:#676a74;
+    --lime:#c8f24e; --amber:#e7b24c; --danger:#ff6f6b;
+    --glow:rgba(200,242,78,.14);
+    --display:'Fraunces',Georgia,serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --body:'IBM Plex Sans',system-ui,sans-serif;
+    --maxw:1140px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--ink);color:var(--bone);font-family:var(--body);
+    line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden;
+    background-image:
+      repeating-linear-gradient(90deg, transparent, transparent 119px, var(--line-2) 119px, var(--line-2) 120px);
+  }
+  /* grain overlay */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.035;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px;position:relative;z-index:2}
+  a{color:inherit;text-decoration:none}
+  .mono{font-family:var(--mono)}
+
+  /* ---- nav ---- */
+  nav{display:flex;align-items:center;justify-content:space-between;padding:26px 0;position:relative;z-index:5}
+  .logo{font-family:var(--mono);font-weight:600;font-size:15px;letter-spacing:.02em;display:flex;align-items:center;gap:10px}
+  .logo .dot{width:9px;height:9px;background:var(--lime);border-radius:2px;box-shadow:0 0 12px var(--glow);transform:rotate(45deg)}
+  .nav-links{display:flex;gap:30px;font-size:13.5px;color:var(--bone-dim);font-family:var(--mono)}
+  .nav-links a:hover{color:var(--bone)}
+  .nav-cta{font-family:var(--mono);font-size:13px;border:1px solid var(--line);padding:9px 16px;border-radius:7px;color:var(--bone);transition:.25s}
+  .nav-cta:hover{border-color:var(--lime);color:var(--lime)}
+  @media(max-width:720px){.nav-links{display:none}}
+
+  /* ---- hero ---- */
+  .hero{display:grid;grid-template-columns:1.05fr .95fr;gap:54px;align-items:center;padding:60px 0 90px}
+  @media(max-width:920px){.hero{grid-template-columns:1fr;gap:40px;padding:36px 0 60px}}
+  .eyebrow{font-family:var(--mono);font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--amber);
+    display:inline-flex;align-items:center;gap:10px;margin-bottom:26px}
+  .eyebrow .pulse{width:7px;height:7px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 0 rgba(231,178,76,.6);animation:pulse 2.4s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(231,178,76,.5)}70%{box-shadow:0 0 0 9px rgba(231,178,76,0)}100%{box-shadow:0 0 0 0 rgba(231,178,76,0)}}
+  h1{font-family:var(--display);font-weight:900;font-size:clamp(40px,6.2vw,72px);line-height:.98;letter-spacing:-.02em;margin-bottom:24px}
+  h1 em{font-style:italic;font-weight:500;color:var(--lime)}
+  .lede{font-size:18px;color:var(--bone-dim);max-width:30em;margin-bottom:32px}
+  .lede strong{color:var(--bone);font-weight:600}
+
+  /* ---- waitlist form ---- */
+  .waitlist{display:flex;gap:10px;max-width:440px;margin-bottom:18px}
+  .waitlist input[type=email]{
+    flex:1;background:var(--ink-2);border:1px solid var(--line);color:var(--bone);
+    font-family:var(--mono);font-size:14px;padding:14px 16px;border-radius:9px;transition:.25s}
+  .waitlist input[type=email]::placeholder{color:var(--bone-faint)}
+  .waitlist input[type=email]:focus{outline:none;border-color:var(--lime);box-shadow:0 0 0 3px var(--glow)}
+  .btn{background:var(--lime);color:#0a0b08;font-family:var(--mono);font-weight:600;font-size:14px;
+    border:none;padding:14px 22px;border-radius:9px;cursor:pointer;white-space:nowrap;transition:.2s;letter-spacing:.01em}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px var(--glow)}
+  .btn:active{transform:translateY(0)}
+  .hp{position:absolute;left:-9999px}
+  .form-note{font-family:var(--mono);font-size:12px;color:var(--bone-faint);max-width:440px}
+  .form-note b{color:var(--bone-dim);font-weight:500}
+  .form-ok{display:none;font-family:var(--mono);font-size:14px;color:var(--lime);align-items:center;gap:9px}
+  .form-ok.show{display:flex}
+  @media(max-width:460px){.waitlist{flex-direction:column}}
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:34px;align-items:center}
+  .chips .lbl{font-family:var(--mono);font-size:11px;color:var(--bone-faint);letter-spacing:.12em;text-transform:uppercase;margin-right:4px}
+  .chip{font-family:var(--mono);font-size:12.5px;color:var(--bone-dim);border:1px solid var(--line);
+    padding:5px 11px;border-radius:6px;background:var(--ink-2)}
+  .chip b{color:var(--lime);font-weight:500}
+
+  /* ---- audit card (hero visual) ---- */
+  .audit{background:linear-gradient(180deg,var(--ink-2),#0d0f15);border:1px solid var(--line);border-radius:16px;
+    padding:22px;box-shadow:0 30px 80px rgba(0,0,0,.5),inset 0 1px 0 rgba(236,233,226,.04);position:relative}
+  .audit::after{content:"";position:absolute;inset:0;border-radius:16px;pointer-events:none;
+    background:radial-gradient(120% 60% at 100% 0%,var(--glow),transparent 55%);opacity:.5}
+  .audit-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;position:relative;z-index:2}
+  .audit-title{font-family:var(--mono);font-size:13px;color:var(--bone-dim)}
+  .audit-title b{color:var(--bone)}
+  .badge{font-family:var(--mono);font-size:11.5px;display:inline-flex;align-items:center;gap:7px;
+    padding:5px 10px;border-radius:20px;border:1px solid rgba(200,242,78,.35);color:var(--lime);background:rgba(200,242,78,.06);transition:.3s}
+  .badge.broken{border-color:rgba(255,111,107,.4);color:var(--danger);background:rgba(255,111,107,.07)}
+  .ledger{display:flex;flex-direction:column;position:relative;z-index:2}
+  .row{display:grid;grid-template-columns:auto 54px 1fr auto;align-items:center;gap:12px;
+    font-family:var(--mono);font-size:12.5px;padding:10px 0;border-bottom:1px solid var(--line-2);position:relative}
+  .row:last-child{border-bottom:none}
+  .node{position:relative;width:14px;display:flex;justify-content:center}
+  .node::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--lime);box-shadow:0 0 9px var(--glow);z-index:2}
+  .node::after{content:"";position:absolute;top:14px;bottom:-14px;width:1px;background:var(--line);z-index:1}
+  .row:last-child .node::after{display:none}
+  .decision{font-size:11px;letter-spacing:.04em}
+  .decision.allow{color:var(--lime)}
+  .decision.deny{color:var(--amber)}
+  .route{color:var(--bone-dim)}
+  .route b{color:var(--bone)}
+  .hash{color:var(--bone-faint);text-align:right;transition:.3s}
+  .row.tampered .hash{color:var(--danger)}
+  .row.tampered .route b{color:var(--danger);text-decoration:line-through}
+  .audit-foot{margin-top:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;position:relative;z-index:2}
+  .audit-cap{font-family:var(--mono);font-size:11px;color:var(--bone-faint);max-width:60%}
+  .tamper-btn{font-family:var(--mono);font-size:11.5px;color:var(--bone-dim);background:transparent;
+    border:1px dashed var(--line);padding:7px 12px;border-radius:7px;cursor:pointer;transition:.2s}
+  .tamper-btn:hover{border-color:var(--danger);color:var(--danger)}
+
+  /* ---- generic section ---- */
+  section{padding:78px 0;border-top:1px solid var(--line-2)}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--lime);margin-bottom:16px}
+  .sec-title{font-family:var(--display);font-weight:600;font-size:clamp(28px,3.6vw,40px);line-height:1.05;letter-spacing:-.01em;margin-bottom:14px;max-width:18em}
+  .sec-sub{color:var(--bone-dim);max-width:40em;font-size:16.5px}
+
+  /* problem cards */
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:44px}
+  @media(max-width:820px){.cards{grid-template-columns:1fr}}
+  .card{background:var(--ink-2);border:1px solid var(--line);border-radius:13px;padding:26px;transition:.3s}
+  .card:hover{border-color:rgba(236,233,226,.2);transform:translateY(-3px)}
+  .card .num{font-family:var(--mono);font-size:12px;color:var(--bone-faint);margin-bottom:16px}
+  .card h3{font-family:var(--display);font-weight:600;font-size:20px;margin-bottom:9px}
+  .card p{color:var(--bone-dim);font-size:14.5px}
+
+  /* eu table */
+  .eu{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:42px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  @media(max-width:760px){.eu{grid-template-columns:1fr}}
+  .eu-row{display:contents}
+  .eu-cell{padding:20px 24px;border-bottom:1px solid var(--line-2);background:var(--ink-2)}
+  .eu-cell.req{border-right:1px solid var(--line-2)}
+  @media(max-width:760px){.eu-cell.req{border-right:none}}
+  .eu-cell .art{font-family:var(--mono);font-size:11.5px;color:var(--amber);letter-spacing:.04em;margin-bottom:6px;text-transform:uppercase}
+  .eu-cell .req-t{font-weight:600;font-size:15.5px}
+  .eu-cell .req-d{color:var(--bone-dim);font-size:13.5px;margin-top:3px}
+  .eu-cell.cap{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:13.5px;color:var(--bone)}
+  .eu-cell.cap .tick{color:var(--lime);flex-shrink:0}
+  .disclaimer{font-family:var(--mono);font-size:11.5px;color:var(--bone-faint);margin-top:18px}
+
+  /* neutral / positioning */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center;margin-top:34px}
+  @media(max-width:820px){.split{grid-template-columns:1fr;gap:26px}}
+  .pos-list{list-style:none;display:flex;flex-direction:column;gap:16px}
+  .pos-list li{display:flex;gap:14px;align-items:flex-start}
+  .pos-list .b{font-family:var(--mono);color:var(--lime);font-size:13px;margin-top:2px}
+  .pos-list .t b{font-weight:600}.pos-list .t span{color:var(--bone-dim)}
+  .mesh-vis{background:var(--ink-2);border:1px solid var(--line);border-radius:14px;padding:30px;font-family:var(--mono);font-size:13px}
+  .mesh-vis .lane{display:flex;align-items:center;gap:12px;padding:9px 0;color:var(--bone-dim)}
+  .mesh-vis .lane .src{width:80px;color:var(--bone)}
+  .mesh-vis .arrow{color:var(--lime)}
+  .mesh-vis .hub{text-align:center;color:var(--lime);border:1px dashed rgba(200,242,78,.3);border-radius:8px;padding:8px;margin:10px 0}
+
+  /* final cta */
+  .final{text-align:center;padding:96px 0}
+  .final h2{font-family:var(--display);font-weight:900;font-size:clamp(32px,5vw,56px);line-height:1;letter-spacing:-.02em;margin-bottom:20px}
+  .final h2 em{font-style:italic;font-weight:500;color:var(--lime)}
+  .final .lede{margin:0 auto 30px}
+  .final .waitlist{margin:0 auto 16px}
+  .final .form-note{margin:0 auto;text-align:center}
+
+  footer{border-top:1px solid var(--line-2);padding:40px 0;color:var(--bone-faint);font-family:var(--mono);font-size:12.5px}
+  .foot-row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;align-items:center}
+  footer a:hover{color:var(--bone)}
+  .foot-honest{max-width:46em;margin-top:18px;color:var(--bone-faint);line-height:1.6}
+
+  /* load animation */
+  .reveal{opacity:0;transform:translateY(14px);animation:rise .8s cubic-bezier(.2,.7,.2,1) forwards}
+  @keyframes rise{to{opacity:1;transform:none}}
+  .d1{animation-delay:.05s}.d2{animation-delay:.15s}.d3{animation-delay:.25s}.d4{animation-delay:.35s}.d5{animation-delay:.5s}.d6{animation-delay:.65s}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav>
+    <div class="logo reveal d1"><span class="dot"></span>AgentBridge</div>
+    <div class="nav-links reveal d2">
+      <a href="#problem">Problem</a>
+      <a href="#eu">EU AI Act</a>
+      <a href="#neutral">Why neutral</a>
+    </div>
+    <a href="#join" class="nav-cta reveal d2">Join waitlist</a>
+  </nav>
+
+  <!-- HERO -->
+  <header class="hero">
+    <div>
+      <div class="eyebrow reveal d1"><span class="pulse"></span>The EU AI Act starts Aug 2, 2026</div>
+      <h1 class="reveal d2">Your agents are about to be <em>regulated.</em></h1>
+      <p class="lede reveal d3">AgentBridge is the <strong>neutral governance &amp; audit layer</strong> for multi-agent systems. Translate across MCP, A2A, ACP, OpenAI, Gemini &amp; AGNTCY — and give every call a <strong>verified identity, a budget, and a tamper-evident audit trail.</strong> Any protocol. Any cloud.</p>
+
+      <form class="waitlist reveal d4" id="wl1" action="REPLACE_WITH_YOUR_FORM_ENDPOINT" method="POST">
+        <input type="email" name="email" placeholder="you@company.com" required aria-label="Email" />
+        <input type="text" name="_gotcha" class="hp" tabindex="-1" autocomplete="off" />
+        <button class="btn" type="submit">Get early access</button>
+      </form>
+      <div class="form-ok" id="ok1"><span>✓</span> You're on the list. We'll be in touch.</div>
+      <p class="form-note reveal d4">No spam. We're building this with early users — <b>tell us what your agents do and we'll prioritize your use case.</b></p>
+
+      <div class="chips reveal d5">
+        <span class="lbl">One mesh:</span>
+        <span class="chip">MCP</span><span class="chip">A2A</span><span class="chip">ACP</span>
+        <span class="chip">OpenAI</span><span class="chip">Gemini</span><span class="chip">AGNTCY</span>
+        <span class="chip"><b>+ any next</b></span>
+      </div>
+    </div>
+
+    <!-- audit ledger visual -->
+    <div class="audit reveal d4" aria-hidden="true">
+      <div class="audit-head">
+        <div class="audit-title"><b>audit.log</b> · tamper-evident</div>
+        <div class="badge" id="badge"><span id="badge-mark">✓</span> <span id="badge-text">integrity verified</span></div>
+      </div>
+      <div class="ledger" id="ledger">
+        <div class="row"><div class="node"></div><div class="decision allow">ALLOW</div><div class="route"><b>openai</b> → mcp · add</div><div class="hash">9451a7…</div></div>
+        <div class="row" id="trow"><div class="node"></div><div class="decision allow">ALLOW</div><div class="route"><b>a2a</b> → acp · transfer</div><div class="hash">0f625c…</div></div>
+        <div class="row"><div class="node"></div><div class="decision deny">DENY</div><div class="route"><b>gemini</b> → mcp · delete</div><div class="hash">ef37a9…</div></div>
+        <div class="row"><div class="node"></div><div class="decision allow">ALLOW</div><div class="route"><b>acp</b> → mcp · add</div><div class="hash">23e4da…</div></div>
+      </div>
+      <div class="audit-foot">
+        <div class="audit-cap">Each entry hashes the previous one. Edit a record — the chain breaks.</div>
+        <button class="tamper-btn" id="tamper" type="button">Tamper with a record →</button>
+      </div>
+    </div>
+  </header>
+</div>
+
+<!-- PROBLEM -->
+<section id="problem">
+  <div class="wrap">
+    <div class="kicker">The problem</div>
+    <h2 class="sec-title">Agents talk in different dialects — and nobody's watching the conversation.</h2>
+    <p class="sec-sub">Every protocol speaks differently, so teams hand-wire each pair. And once agents start calling each other and your tools, there's no cost control and no record of who did what — right as regulators start asking.</p>
+    <div class="cards">
+      <div class="card"><div class="num">01 — fragmentation</div><h3>Six protocols, no common ground</h3><p>MCP, A2A, ACP, OpenAI &amp; Gemini function-calling, AGNTCY — each a different shape. Bridges built "from the spec" quietly break on real agents.</p></div>
+      <div class="card"><div class="num">02 — no control</div><h3>Agents spend with no leash</h3><p>Once agents call tools and each other, there's no budget, no approval gate, no identity behind the call. Costs and blast radius are unbounded.</p></div>
+      <div class="card"><div class="num">03 — no proof</div><h3>No audit when it matters</h3><p>When something goes wrong — or an auditor asks — there's no tamper-evident record of what each agent did. The EU AI Act now requires one.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- EU AI ACT -->
+<section id="eu">
+  <div class="wrap">
+    <div class="kicker">EU AI Act — Aug 2, 2026</div>
+    <h2 class="sec-title">Built for the record-keeping the law now demands.</h2>
+    <p class="sec-sub">High-risk agents (credit, hiring, healthcare, insurance) must log their behavior, keep it, and stay under human oversight. AgentBridge maps to those obligations by design.</p>
+    <div class="eu">
+      <div class="eu-cell req"><div class="art">Article 12 · logging</div><div class="req-t">Automatic event logging across the workflow</div><div class="req-d">Timestamped events, not just final outputs.</div></div>
+      <div class="eu-cell cap"><span class="tick">✓</span> Per-call, tamper-evident (hash-chained) audit trail</div>
+
+      <div class="eu-cell req"><div class="art">Article 19 · retention</div><div class="req-t">Keep logs ≥ 6 months</div><div class="req-d">Durable, append-only storage.</div></div>
+      <div class="eu-cell cap"><span class="tick">✓</span> Durable persistence, exportable for auditors</div>
+
+      <div class="eu-cell req"><div class="art">Article 14 · oversight</div><div class="req-t">Effective human oversight</div><div class="req-d">Intervene, approve, or stop.</div></div>
+      <div class="eu-cell cap"><span class="tick">✓</span> Approval gates · budgets · identity revocation</div>
+
+      <div class="eu-cell req"><div class="art">Traceability · attribution</div><div class="req-t">Know which agent did what</div><div class="req-d">Provable, not guessed.</div></div>
+      <div class="eu-cell cap"><span class="tick">✓</span> Cryptographic agent identity (Ed25519 DID)</div>
+    </div>
+    <p class="disclaimer">We provide the capabilities that support compliance — we don't make you compliant by ourselves. Not legal advice.</p>
+  </div>
+</section>
+
+<!-- NEUTRAL -->
+<section id="neutral">
+  <div class="wrap">
+    <div class="kicker">Why neutral</div>
+    <h2 class="sec-title">The Switzerland of agent infrastructure.</h2>
+    <div class="split">
+      <ul class="pos-list">
+        <li><span class="b">[01]</span><span class="t"><b>No cloud lock-in.</b> <span>Runs anywhere. Not tied to Azure, Google, or one vendor's gateway.</span></span></li>
+        <li><span class="b">[02]</span><span class="t"><b>Protocol-agnostic by design.</b> <span>One canonical hub — add a protocol with one adapter, not N² mappings. Validated against each protocol's real SDK.</span></span></li>
+        <li><span class="b">[03]</span><span class="t"><b>Governance across all of them.</b> <span>One identity, budget, and audit model for every protocol — not just MCP.</span></span></li>
+        <li><span class="b">[04]</span><span class="t"><b>Open core.</b> <span>Self-host the mesh for free; pay for hosted governance &amp; compliance.</span></span></li>
+      </ul>
+      <div class="mesh-vis" aria-hidden="true">
+        <div class="lane"><span class="src">openai</span><span class="arrow">──▶</span> translate + govern</div>
+        <div class="lane"><span class="src">a2a</span><span class="arrow">──▶</span> translate + govern</div>
+        <div class="lane"><span class="src">acp</span><span class="arrow">──▶</span> translate + govern</div>
+        <div class="hub">▼  AgentBridge mesh  ▼<br/>identity · budget · audit</div>
+        <div class="lane"><span class="src">→ mcp</span> deliver to any target agent</div>
+        <div class="lane"><span class="src">→ gemini</span> &nbsp;·&nbsp; any protocol out</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="final" id="join">
+  <div class="wrap">
+    <h2>Make every agent call <em>provable.</em></h2>
+    <p class="lede">Get early access. Tell us what your agents do — we'll build the governance you actually need.</p>
+    <form class="waitlist" id="wl2" action="REPLACE_WITH_YOUR_FORM_ENDPOINT" method="POST">
+      <input type="email" name="email" placeholder="you@company.com" required aria-label="Email" />
+      <input type="text" name="_gotcha" class="hp" tabindex="-1" autocomplete="off" />
+      <button class="btn" type="submit">Get early access</button>
+    </form>
+    <div class="form-ok" id="ok2"><span>✓</span> You're on the list. We'll be in touch.</div>
+    <p class="form-note">Building in the open · early access · no spam.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-row">
+      <div class="logo"><span class="dot"></span>AgentBridge</div>
+      <div>Translate · route · verify · govern — any protocol, one mesh.</div>
+      <div>© 2026 · early access</div>
+    </div>
+    <p class="foot-honest">An early-stage project. We translate and govern agent calls across six protocols today, with a tamper-evident audit trail aligned to the EU AI Act. We're talking to early users to build the right thing — if multi-agent governance is a pain for you, we want to hear it.</p>
+  </div>
+</footer>
+
+<script>
+  // Tamper demo — show the core differentiator interactively.
+  (function(){
+    var btn=document.getElementById('tamper'),row=document.getElementById('trow'),
+        badge=document.getElementById('badge'),mark=document.getElementById('badge-mark'),
+        text=document.getElementById('badge-text'),tampered=false,hashEl=row.querySelector('.hash');
+    var orig=hashEl.textContent;
+    btn.addEventListener('click',function(){
+      tampered=!tampered;
+      if(tampered){
+        row.classList.add('tampered');badge.classList.add('broken');
+        mark.textContent='✗';text.textContent='integrity broken';
+        hashEl.textContent='b0rk3d…';btn.textContent='Restore record →';
+      }else{
+        row.classList.remove('tampered');badge.classList.remove('broken');
+        mark.textContent='✓';text.textContent='integrity verified';
+        hashEl.textContent=orig;btn.textContent='Tamper with a record →';
+      }
+    });
+  })();
+
+  // Progressive form handling: post to your endpoint via fetch; graceful fallback + demo state.
+  function wire(formId, okId){
+    var form=document.getElementById(formId), ok=document.getElementById(okId);
+    form.addEventListener('submit',function(e){
+      var action=form.getAttribute('action');
+      var placeholder = action.indexOf('REPLACE_WITH')===0;
+      if(placeholder){
+        // No endpoint set yet — show success state so the page demos cleanly.
+        e.preventDefault();
+        form.style.display='none'; ok.classList.add('show');
+        console.warn('[AgentBridge] Set the form action to your Formspree/Tally/Google-Form endpoint to capture signups.');
+        return;
+      }
+      // Endpoint set: submit via fetch for a smooth UX, fallback to native post.
+      e.preventDefault();
+      fetch(action,{method:'POST',body:new FormData(form),headers:{'Accept':'application/json'}})
+        .then(function(){form.style.display='none';ok.classList.add('show');})
+        .catch(function(){form.submit();});
+    });
+  }
+  wire('wl1','ok1'); wire('wl2','ok2');
+</script>
+</body>
+</html>
