@@ -7,7 +7,7 @@ Result wire  = an OpenAI tool result message: {role:"tool", tool_call_id, conten
 import json
 from typing import Any, Dict
 
-from .base import ProtocolAdapter
+from .base import ProtocolAdapter, require_mapping
 from .canonical import CanonicalCall, CanonicalResult
 
 
@@ -15,6 +15,7 @@ class OpenAIFunctionAdapter(ProtocolAdapter):
     name = "openai"
 
     def to_canonical_call(self, wire: Dict[str, Any]) -> CanonicalCall:
+        require_mapping(wire, self.name)
         fn = wire.get("function", {}) or {}
         raw_args = fn.get("arguments", "{}")
         try:

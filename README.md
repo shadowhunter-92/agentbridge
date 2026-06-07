@@ -40,7 +40,7 @@ python -m src.serve.mcp_gateway
 .venv/Scripts/python examples/live_governed_proxy.py    # identity + budget + audit in action
 
 # Tests
-.venv/Scripts/python -m pytest tests/ -q                # 75 passing
+.venv/Scripts/python -m pytest tests/ -q                # 121 passing
 ```
 
 ## Architecture

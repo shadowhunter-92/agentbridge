@@ -2,7 +2,7 @@
 
 from typing import Any, Dict
 
-from .base import ProtocolAdapter
+from .base import ProtocolAdapter, require_mapping
 from .canonical import CanonicalCall, CanonicalResult
 
 
@@ -10,6 +10,7 @@ class McpAdapter(ProtocolAdapter):
     name = "mcp"
 
     def to_canonical_call(self, wire: Dict[str, Any]) -> CanonicalCall:
+        require_mapping(wire, self.name)
         params = wire.get("params", {}) or {}
         kwargs = dict(
             capability=params.get("name") or params.get("tool") or "",

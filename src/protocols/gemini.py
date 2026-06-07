@@ -7,7 +7,7 @@ Unlike OpenAI, Gemini `args` is a real object, not a JSON string.
 
 from typing import Any, Dict
 
-from .base import ProtocolAdapter
+from .base import ProtocolAdapter, require_mapping
 from .canonical import CanonicalCall, CanonicalResult
 
 
@@ -15,6 +15,7 @@ class GeminiFunctionAdapter(ProtocolAdapter):
     name = "gemini"
 
     def to_canonical_call(self, wire: Dict[str, Any]) -> CanonicalCall:
+        require_mapping(wire, self.name)
         kwargs = dict(capability=wire.get("name", ""),
                       arguments=wire.get("args", {}) or {},
                       source_protocol=self.name)

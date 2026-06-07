@@ -11,7 +11,7 @@ Result wire  = {role, content} (a Message).
 import json
 from typing import Any, Dict, List
 
-from .base import ProtocolAdapter
+from .base import ProtocolAdapter, require_mapping
 from .canonical import CanonicalCall, CanonicalResult
 
 
@@ -38,7 +38,8 @@ class AgntcyAcpAdapter(ProtocolAdapter):
         return content if isinstance(content, str) else ""
 
     def to_canonical_call(self, wire: Dict[str, Any]) -> CanonicalCall:
-        capability = wire.get("agent_id", "") if isinstance(wire, dict) else ""
+        require_mapping(wire, self.name)
+        capability = wire.get("agent_id", "")
         arguments, text = {}, None
         for msg in self._messages(wire):
             raw = self._text_of(msg.get("content"))

@@ -1,8 +1,8 @@
 """
 AgentBridge — Main Entry Point (the Meta-Bridge control plane).
 
-Launches the N-protocol mesh + governance control plane. The legacy MCP<->A2A app
-(`src/api/api.py`) is deprecated and no longer the default entrypoint.
+Launches the N-protocol mesh + governance control plane (`src/api/control_plane.py`).
+The legacy MCP<->A2A app was retired; the control plane is the single entrypoint.
 
 Env:
   PORT, HOST                  — bind address (default 0.0.0.0:8000)

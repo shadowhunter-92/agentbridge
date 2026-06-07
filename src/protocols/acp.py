@@ -9,7 +9,7 @@ arguments survive, plus a text part for prose-only agents.
 import json
 from typing import Any, Dict
 
-from .base import ProtocolAdapter
+from .base import ProtocolAdapter, require_mapping
 from .canonical import CanonicalCall, CanonicalResult
 
 
@@ -20,8 +20,9 @@ class AcpAdapter(ProtocolAdapter):
         return msg.get("parts", []) if isinstance(msg, dict) else []
 
     def to_canonical_call(self, wire: Dict[str, Any]) -> CanonicalCall:
+        require_mapping(wire, self.name)
         # Accept a single Message, or a run-create {agent_name, input:[Message,...]}.
-        capability = wire.get("agent_name", "") if isinstance(wire, dict) else ""
+        capability = wire.get("agent_name", "")
         messages = []
         if isinstance(wire, dict) and "input" in wire:
             messages = wire["input"]

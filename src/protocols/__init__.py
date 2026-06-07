@@ -7,13 +7,15 @@ translation goes: source wire -> canonical -> target wire.
 """
 
 from .canonical import CanonicalCall, CanonicalResult
-from .base import ProtocolAdapter
+from .base import ProtocolAdapter, MalformedWireError, require_mapping
 from .registry import ProtocolRegistry, default_registry
 
 __all__ = [
     "CanonicalCall",
     "CanonicalResult",
     "ProtocolAdapter",
+    "MalformedWireError",
+    "require_mapping",
     "ProtocolRegistry",
     "default_registry",
 ]

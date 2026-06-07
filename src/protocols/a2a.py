@@ -3,7 +3,7 @@
 import uuid
 from typing import Any, Dict
 
-from .base import ProtocolAdapter
+from .base import ProtocolAdapter, require_mapping
 from .canonical import CanonicalCall, CanonicalResult
 
 
@@ -18,6 +18,7 @@ class A2aAdapter(ProtocolAdapter):
         return task.get("history") or task.get("messages") or []
 
     def to_canonical_call(self, wire: Dict[str, Any]) -> CanonicalCall:
+        require_mapping(wire, self.name)
         # Accept either a raw task, or a JSON-RPC envelope {params:{task:{...}}}.
         task = wire
         if "params" in wire and isinstance(wire["params"], dict) and "task" in wire["params"]:

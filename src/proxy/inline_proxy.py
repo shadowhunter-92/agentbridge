@@ -12,6 +12,12 @@ Flows:
 
 from typing import Any, Dict, List, Optional
 
+# TODO (tech debt — deferred on purpose): this proxy uses the older src/engine
+# TranslationEngine (MCP<->A2A, wraps results as {"task": ...}) rather than the canonical
+# src/protocols mesh. Consolidating onto src/protocols changes the wire bytes the proxy
+# emits, so it MUST be re-validated against the live MCP/A2A/ACP handshakes (live_*_proxy.py,
+# live_*_handshake.py, test_real_conformance.py). Do it on a branch AFTER demand is validated —
+# it's invisible to users and risky to touch right before a launch. ~1-3h, mostly re-testing.
 from ..engine.translation_engine import TranslationEngine, TranslationDirection
 from . import transport
 

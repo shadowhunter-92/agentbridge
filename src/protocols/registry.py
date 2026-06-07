@@ -8,7 +8,7 @@ Register N adapters; translate between any pair without pairwise code:
 
 from typing import Any, Dict, List
 
-from .base import ProtocolAdapter
+from .base import ProtocolAdapter, MalformedWireError
 from .mcp import McpAdapter
 from .a2a import A2aAdapter
 from .acp import AcpAdapter
@@ -34,6 +34,12 @@ class ProtocolRegistry:
 
     def translate_call(self, wire: Dict[str, Any], src: str, dst: str) -> Dict[str, Any]:
         canonical = self.get(src).to_canonical_call(wire)
+        # Backstop: a structurally-valid but empty payload (e.g. {} or {"params": {}})
+        # yields nothing to route. Fail loudly instead of forwarding an empty call.
+        if not (canonical.capability or canonical.text or canonical.arguments):
+            raise MalformedWireError(
+                f"{src}: could not extract a capability, arguments, or text from the request"
+            )
         return self.get(dst).from_canonical_call(canonical)
 
     def translate_result(self, wire: Dict[str, Any], src: str, dst: str) -> Dict[str, Any]:
