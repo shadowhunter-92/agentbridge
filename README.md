@@ -40,7 +40,7 @@ python -m src.serve.mcp_gateway
 .venv/Scripts/python examples/live_governed_proxy.py    # identity + budget + audit in action
 
 # Tests
-.venv/Scripts/python -m pytest tests/ -q                # 121 passing
+.venv/Scripts/python -m pytest tests/ -q                # 124 passing (+4 Postgres tests skip w/o a DB)
 ```
 
 ## Architecture
@@ -54,9 +54,16 @@ python -m src.serve.mcp_gateway
 - **Operator endpoints** require an admin key (`X-Admin-Key`).
 - **Agent endpoints** require Ed25519 **signed requests** (`X-Agent-Id`/`X-Nonce`/`X-Signature`)
   with nonce replay protection. Identities can be revoked.
+- **Per-IP rate limiting** on `/control/*` (blunts admin-key brute force; `AGENTBRIDGE_RATE_LIMIT`).
 - Audit is hash-chained and tamper-evident; export via `/control/audit/export`.
 
+## Persistence
+Chosen from `AGENTBRIDGE_DB`: unset → in-memory; a file path → SQLite (single node);
+a `postgres://` URL → Postgres (multi-instance; `pip install "psycopg[binary]"`).
+
 ## Docs
+- `docs/DEPLOYMENT.md` — how to run it, configure it, and the honest production checklist
+- `docs/API_REFERENCE.md` — the control-plane HTTP endpoints
 - `docs/PROTOCOL_SUPPORT.md` — the protocol support matrix + conformance approach
 - `docs/LIVE_AGENT_TESTING.md` — how the bridge is tested against real, running agents
 - `docs/PROTOBUF_A2A.md` — notes on A2A's JSON-RPC vs protobuf wire formats

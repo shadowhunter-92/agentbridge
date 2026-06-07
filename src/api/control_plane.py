@@ -22,13 +22,15 @@ import secrets
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Header, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from .ratelimit import RateLimiter
 from ..protocols import default_registry
 from ..governance import (
     AgentIdentity, IdentityRegistry, BudgetManager, Budget, ApprovalQueue,
     PolicyEngine, AuditLog, GovernanceGateway, GovernanceError,
-    RequestAuthenticator, InMemoryStore, SqliteStore,
+    RequestAuthenticator, make_store,
 )
 
 logger = logging.getLogger("control_plane")
@@ -39,7 +41,7 @@ if not os.getenv("AGENTBRIDGE_ADMIN_KEY"):
     logger.warning("AGENTBRIDGE_ADMIN_KEY not set; generated one for this run: %s", ADMIN_KEY)
 
 _db = os.getenv("AGENTBRIDGE_DB")
-store = SqliteStore(_db) if _db else InMemoryStore()
+store = make_store(_db)  # None->in-memory, postgres URL->Postgres, else SQLite path
 
 app = FastAPI(title="AgentBridge Meta-Bridge Control Plane", version="1.0.0")
 
@@ -52,6 +54,22 @@ audit = AuditLog(store=store)
 gateway = GovernanceGateway(identities=identities, budgets=budgets, approvals=approvals,
                             policy=policy, audit=audit, registry=registry)
 authenticator = RequestAuthenticator(identities)
+
+# --- rate limiting: throttle /control/* per client IP (blunts admin-key brute force) ---
+RATE_LIMIT_PER_MIN = int(os.getenv("AGENTBRIDGE_RATE_LIMIT", "240"))
+rate_limiter = RateLimiter(RATE_LIMIT_PER_MIN, window_seconds=60)
+
+
+@app.middleware("http")
+async def _rate_limit(request: Request, call_next):
+    if request.url.path.startswith("/control"):
+        client = request.client.host if request.client else "unknown"
+        if not rate_limiter.allow(client):
+            return JSONResponse(
+                {"detail": f"rate limit exceeded ({RATE_LIMIT_PER_MIN}/min)"},
+                status_code=429,
+            )
+    return await call_next(request)
 
 
 # --- guards ---------------------------------------------------------------------------

@@ -1,13 +1,16 @@
 """
 Durable persistence for the governance plane.
 
-Two backends behind one interface:
+Three backends behind one interface:
   - InMemoryStore: default; fast, ephemeral (tests/dev).
-  - SqliteStore:   durable across restarts (identities, budgets, append-only audit).
+  - SqliteStore:   durable across restarts, single node (identities, budgets, audit).
+  - PostgresStore: durable + multi-instance (shared state for horizontally-scaled
+                   control planes). Same method surface; opt in via a postgres URL.
 
-SQLite is used because it needs no external service and gives real durability. The
-interface (`GovernanceStore`) is the seam to drop in Postgres later for scale — same
-method surface, swap the implementation.
+Pick a backend with `make_store(db)`:
+  - None / unset      -> InMemoryStore
+  - "/path/to.db"     -> SqliteStore
+  - "postgres://..."  -> PostgresStore   (requires `psycopg`; pip install psycopg[binary])
 """
 
 from __future__ import annotations
@@ -156,3 +159,119 @@ class SqliteStore(GovernanceStore):
     def close(self) -> None:
         with self._lock:
             self._db.close()
+
+
+class PostgresStore(GovernanceStore):
+    """Durable, multi-instance store backed by Postgres.
+
+    Mirrors SqliteStore exactly behind the same interface, so the governance plane
+    (identities/budgets/audit) gets shared state across horizontally-scaled control
+    planes. `psycopg` (v3) is imported lazily, so it's only required when you actually
+    choose a postgres URL — the default SQLite/in-memory paths need no extra deps.
+
+    NOTE: validate against a live Postgres before relying on it in production
+    (integration test: tests/test_postgres_store.py, skipped unless AGENTBRIDGE_TEST_PG
+    points at a throwaway database).
+    """
+
+    def __init__(self, dsn: str):
+        try:
+            import psycopg
+            from psycopg.rows import dict_row
+        except ImportError as e:  # pragma: no cover - exercised only without the dep
+            raise RuntimeError(
+                "PostgresStore needs the 'psycopg' package. Install it with "
+                "`pip install \"psycopg[binary]\"`, or use a SQLite path instead."
+            ) from e
+        self._lock = threading.RLock()
+        self._db = psycopg.connect(dsn, autocommit=True, row_factory=dict_row)
+        self._init_schema()
+
+    def _init_schema(self):
+        with self._lock, self._db.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS identities (
+                    agent_id TEXT PRIMARY KEY,
+                    public_key_hex TEXT NOT NULL,
+                    revoked BOOLEAN NOT NULL DEFAULT FALSE
+                );
+                CREATE TABLE IF NOT EXISTS budgets (
+                    agent_id TEXT PRIMARY KEY,
+                    state TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS audit (
+                    seq BIGINT PRIMARY KEY,
+                    entry TEXT NOT NULL
+                );
+                """
+            )
+
+    def upsert_identity(self, agent_id, public_key_hex, revoked=False):
+        with self._lock, self._db.cursor() as cur:
+            cur.execute(
+                "INSERT INTO identities(agent_id, public_key_hex, revoked) VALUES(%s,%s,%s) "
+                "ON CONFLICT(agent_id) DO UPDATE SET public_key_hex=EXCLUDED.public_key_hex, "
+                "revoked=EXCLUDED.revoked",
+                (agent_id, public_key_hex, bool(revoked)),
+            )
+
+    def get_identity(self, agent_id):
+        with self._lock, self._db.cursor() as cur:
+            cur.execute(
+                "SELECT agent_id, public_key_hex, revoked FROM identities WHERE agent_id=%s",
+                (agent_id,))
+            row = cur.fetchone()
+        if not row:
+            return None
+        return {"agent_id": row["agent_id"], "public_key_hex": row["public_key_hex"],
+                "revoked": bool(row["revoked"])}
+
+    def list_identities(self):
+        with self._lock, self._db.cursor() as cur:
+            cur.execute("SELECT agent_id, public_key_hex, revoked FROM identities")
+            rows = cur.fetchall()
+        return [{"agent_id": r["agent_id"], "public_key_hex": r["public_key_hex"],
+                 "revoked": bool(r["revoked"])} for r in rows]
+
+    def upsert_budget(self, agent_id, state):
+        with self._lock, self._db.cursor() as cur:
+            cur.execute(
+                "INSERT INTO budgets(agent_id, state) VALUES(%s,%s) "
+                "ON CONFLICT(agent_id) DO UPDATE SET state=EXCLUDED.state",
+                (agent_id, json.dumps(state)))
+
+    def get_budget(self, agent_id):
+        with self._lock, self._db.cursor() as cur:
+            cur.execute("SELECT state FROM budgets WHERE agent_id=%s", (agent_id,))
+            row = cur.fetchone()
+        return json.loads(row["state"]) if row else None
+
+    def append_audit(self, entry):
+        with self._lock, self._db.cursor() as cur:
+            cur.execute("INSERT INTO audit(seq, entry) VALUES(%s,%s) "
+                        "ON CONFLICT(seq) DO NOTHING",
+                        (entry["seq"], json.dumps(entry)))
+
+    def load_audit(self):
+        with self._lock, self._db.cursor() as cur:
+            cur.execute("SELECT entry FROM audit ORDER BY seq")
+            rows = cur.fetchall()
+        return [json.loads(r["entry"]) for r in rows]
+
+    def close(self) -> None:
+        with self._lock:
+            self._db.close()
+
+
+def make_store(db: Optional[str]) -> GovernanceStore:
+    """Choose a backend from a connection string.
+
+    None/empty -> InMemoryStore; a postgres URL -> PostgresStore; anything else
+    treated as a SQLite file path.
+    """
+    if not db:
+        return InMemoryStore()
+    if db.startswith("postgres://") or db.startswith("postgresql://"):
+        return PostgresStore(db)
+    return SqliteStore(db)
