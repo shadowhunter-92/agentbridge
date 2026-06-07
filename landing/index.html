@@ -48,6 +48,9 @@
   .nav-links a:hover{color:var(--bone)}
   .nav-cta{font-family:var(--mono);font-size:13px;border:1px solid var(--line);padding:9px 16px;border-radius:7px;color:var(--bone);transition:.25s}
   .nav-cta:hover{border-color:var(--lime);color:var(--lime)}
+  .nav-ctas{display:flex;gap:10px;align-items:center}
+  .nav-gh{border-color:rgba(200,242,78,.35);color:var(--lime)}
+  .nav-gh:hover{background:rgba(200,242,78,.06)}
   @media(max-width:720px){.nav-links{display:none}}
 
   /* ---- hero ---- */
@@ -197,7 +200,10 @@
       <a href="#eu">EU AI Act</a>
       <a href="#neutral">Why neutral</a>
     </div>
-    <a href="#join" class="nav-cta reveal d2">Join waitlist</a>
+    <div class="nav-ctas reveal d2">
+      <a href="https://github.com/shadowhunter-92/agentbridge" class="nav-cta nav-gh" target="_blank" rel="noopener">★ GitHub</a>
+      <a href="#join" class="nav-cta">Join waitlist</a>
+    </div>
   </nav>
 
   <!-- HERO -->
@@ -214,6 +220,7 @@
       </form>
       <div class="form-ok" id="ok1"><span>✓</span> You're on the list. We'll be in touch.</div>
       <p class="form-note reveal d4">No spam. We're building this with early users — <b>tell us what your agents do and we'll prioritize your use case.</b></p>
+      <p class="form-note reveal d5" style="margin-top:12px">Just want the code? It's open-source (Apache-2.0) with a 3-line quickstart — <a href="https://github.com/shadowhunter-92/agentbridge" target="_blank" rel="noopener" style="color:var(--lime)">view it on GitHub →</a></p>
 
       <div class="chips reveal d5">
         <span class="lbl">One mesh:</span>

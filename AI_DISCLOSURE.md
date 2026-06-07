@@ -9,8 +9,8 @@ candid about how it was built.
 - **Maintainer:** Haider Ali Khan (`shadowhunter-92`), who directs the architecture and
   product decisions, reviews and tests the code, and curates the result.
 - **AI assistance:** a substantial portion of the implementation was written with the help
-  of Anthropic's Claude, under that human direction and review. Commits reflect this with
-  `Co-Authored-By` trailers, so the history is honest rather than hidden.
+  of Anthropic's Claude, under that human direction and review. This is disclosed openly here
+  at the project level (some earlier commits also carry `Co-Authored-By` trailers).
 
 ## Authorship, originality, and license
 
