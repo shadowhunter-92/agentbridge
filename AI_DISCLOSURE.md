@@ -14,13 +14,17 @@ candid about how it was built.
 
 ## Authorship, originality, and license
 
-- The maintainer directs, reviews, edits, and accepts every change; the curated result is
-  maintained as the maintainer's work.
+- **Copyright is held by the maintainer, Haider Ali Khan** (see the `NOTICE` file). The
+  maintainer directs, reviews, edits, selects, and arranges every change; the curated result
+  is the maintainer's work and is licensed under the **Apache License 2.0** (see `LICENSE`),
+  which includes an explicit patent grant and clear contribution terms.
+- **The `Co-Authored-By: Claude` trailers in the commit history are attribution only.** They
+  transparently credit AI assistance during development; they do **not** transfer or assign
+  any copyright to Anthropic or to the model. Under Anthropic's terms, ownership of model
+  outputs rests with the user.
 - The code is **original** to this project — not copied from third-party codebases. Protocol
   adapters are validated against each protocol's real official SDK (see
   `docs/PROTOCOL_SUPPORT.md`), and the suite (124 tests) guards behaviour.
-- The project is released under the **Apache License 2.0** (see `LICENSE`). Apache 2.0
-  includes an explicit patent grant and clear contribution terms.
 
 ## Not legal advice
 
