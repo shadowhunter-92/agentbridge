@@ -12,8 +12,8 @@ Store-backed so spend survives restarts.
 import threading
 import time
 import uuid
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from collections import deque
+from typing import Deque, Dict, List, Optional, Tuple
 
 from .store import GovernanceStore, InMemoryStore
 
@@ -26,14 +26,20 @@ class Budget:
         self.rate_limit = rate_limit
         self.window_seconds = window_seconds
         self.spent = spent
-        self._calls: List[float] = list(calls or [])
+        # Sorted-by-insertion timestamps of recent calls within the rate window.
+        # A deque lets us drop expired calls from the left in amortized O(1),
+        # instead of rebuilding the whole list on every call (was O(n) per call
+        # -> O(n^2) under load; see tools/benchmark.py).
+        self._calls: Deque[float] = deque(calls or [])
         self._reserved: Dict[str, float] = {}
         self._lock = threading.RLock()
 
     # --- introspection ---
     def _prune(self, now: float) -> None:
         cutoff = now - self.window_seconds
-        self._calls = [t for t in self._calls if t > cutoff]
+        calls = self._calls
+        while calls and calls[0] <= cutoff:
+            calls.popleft()
 
     @property
     def reserved(self) -> float:

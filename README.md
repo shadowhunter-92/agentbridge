@@ -44,11 +44,42 @@ python -m src.serve.mcp_gateway
 ```
 
 ## Architecture
+
+```mermaid
+flowchart LR
+    subgraph clients [Agents / clients - any protocol]
+        C1[MCP client]
+        C2[A2A / ACP agent]
+        C3[OpenAI / Gemini / AGNTCY]
+    end
+    subgraph bridge [AgentBridge]
+        direction TB
+        G[Governance gateway<br/>identity · budget · approval · audit]
+        M[Canonical mesh<br/>any-to-any translation]
+        G --> M
+    end
+    subgraph targets [Target agents / tools - any protocol]
+        T1[live MCP tool]
+        T2[live A2A / ACP agent]
+    end
+    C1 & C2 & C3 -->|signed call| G
+    M -->|translated + governed| T1 & T2
+    OP[Operator] -->|admin API| G
+```
+
+Every call enters the **governance gateway** (verify identity → reserve budget → check
+approval), is translated through the **canonical mesh** (any protocol → any protocol), is
+delivered to the target agent, then committed and written to a tamper-evident audit log.
+
 - `src/protocols/` — canonical hub + per-protocol adapters (the mesh)
 - `src/governance/` — identity, audit, budgets, approvals, policy, gateway, persistence (the moat)
 - `src/proxy/` — real transport clients + in-line proxy
 - `src/api/control_plane.py` — the shipped HTTP API (mesh + governed routing, authenticated)
 - `src/serve/mcp_gateway.py` — drop-in MCP server packaging
+
+**Deployment topology:** run it as a drop-in **MCP server** (per-developer), as a central
+**control-plane API** (team), or inline as a **proxy** between agents. See `docs/DEPLOYMENT.md`.
+Performance overhead is measured in `docs/BENCHMARKS.md`.
 
 ## Security model
 - **Operator endpoints** require an admin key (`X-Admin-Key`).
@@ -68,7 +99,9 @@ a `postgres://` URL → Postgres (multi-instance; `pip install "psycopg[binary]"
 - `docs/PROTOCOL_SUPPORT.md` — the protocol support matrix + conformance approach
 - `docs/LIVE_AGENT_TESTING.md` — how the bridge is tested against real, running agents
 - `docs/PROTOBUF_A2A.md` — notes on A2A's JSON-RPC vs protobuf wire formats
+- `docs/BENCHMARKS.md` — measured in-process overhead (reproduce with `tools/benchmark.py`)
 - `CONTRIBUTING.md` — setup, ground rules, and the add-a-protocol recipe
+- `AI_DISCLOSURE.md` — transparency on AI-assisted development
 
 ## License
 Apache 2.0
