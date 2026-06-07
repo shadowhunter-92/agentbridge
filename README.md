@@ -64,9 +64,11 @@ a `postgres://` URL → Postgres (multi-instance; `pip install "psycopg[binary]"
 ## Docs
 - `docs/DEPLOYMENT.md` — how to run it, configure it, and the honest production checklist
 - `docs/API_REFERENCE.md` — the control-plane HTTP endpoints
+- `docs/ROADMAP.md` — what's done, known limitations, and what's deferred (honest)
 - `docs/PROTOCOL_SUPPORT.md` — the protocol support matrix + conformance approach
 - `docs/LIVE_AGENT_TESTING.md` — how the bridge is tested against real, running agents
 - `docs/PROTOBUF_A2A.md` — notes on A2A's JSON-RPC vs protobuf wire formats
+- `CONTRIBUTING.md` — setup, ground rules, and the add-a-protocol recipe
 
 ## License
 Apache 2.0
