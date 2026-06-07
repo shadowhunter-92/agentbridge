@@ -25,17 +25,37 @@ built into the call path.
 - **Drop-in MCP server:** point Claude Desktop / an IDE / a gateway at it to reach other protocols.
 
 ## Quick start
+
 ```bash
 python -m venv .venv && .venv/Scripts/pip install -r requirements.txt   # (Windows; use bin/ on *nix)
+```
 
+**Governance is optional.** If you just want one agent/protocol to talk to another, use the
+mesh directly — no keys, no budgets, no setup:
+
+```python
+from src.protocols import default_registry as reg
+from src.protocols.canonical import CanonicalCall
+
+call = reg.get("openai").from_canonical_call(CanonicalCall("add", {"a": 2, "b": 3}))
+reg.translate_call(call, "openai", "mcp")     # -> a real MCP tools/call. That's it.
+```
+
+```bash
+.venv/Scripts/python examples/quickstart.py   # translate + bridge to a LIVE tool, zero governance
+```
+
+Add identity, budgets, and a tamper-evident audit trail **only when you want them**:
+
+```bash
 # Run the meta-bridge control plane (mesh + governance)
 uvicorn src.api.control_plane:app          # docs at http://localhost:8000/docs
-#   set AGENTBRIDGE_ADMIN_KEY for operator endpoints; AGENTBRIDGE_DB=/path.db for durable governance
+#   set AGENTBRIDGE_ADMIN_KEY for operator endpoints; AGENTBRIDGE_DB=/path.db (or a postgres:// URL)
 
 # Or run it as a drop-in MCP server (stdio)
 python -m src.serve.mcp_gateway
 
-# See the live demos (real agents on both ends)
+# Live demos (real agents on both ends)
 .venv/Scripts/python examples/live_nprotocol_proxy.py   # OpenAI/ACP -> live MCP, MCP -> live ACP
 .venv/Scripts/python examples/live_governed_proxy.py    # identity + budget + audit in action
 
