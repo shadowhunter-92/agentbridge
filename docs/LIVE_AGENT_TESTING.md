@@ -13,7 +13,7 @@ agents using the official SDKs, and that its translations conform to the real sc
 | Live A2A agent handshake (real uvicorn HTTP server) | ✅ PASS |
 | Real A2A AgentCard discovery + `message/send` | ✅ PASS (agent replied "echo: hello from the bridge") |
 | Bridge A2A→MCP on the real message, validated vs official `mcp.types` | ✅ PASS |
-| Full test suite (incl. real-SDK conformance) | ✅ 128 passing |
+| Full test suite (incl. real-SDK conformance) | ✅ 138 passing |
 
 ## How to reproduce
 ```bash
@@ -21,7 +21,7 @@ cd "agent-bridge"
 python -m venv .venv && .venv/Scripts/pip install -r requirements.txt
 .venv/Scripts/python examples/live_mcp_handshake.py     # real MCP agent end-to-end
 .venv/Scripts/python examples/live_a2a_handshake.py     # real A2A agent end-to-end
-.venv/Scripts/python -m pytest tests/ -q                # 75 passed
+.venv/Scripts/python -m pytest tests/ -q                # 138 passed
 ```
 
 ## What each example does

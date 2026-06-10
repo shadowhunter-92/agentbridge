@@ -7,6 +7,12 @@ from .audit import AuditLog, AuditEntry
 from .budget import Budget, BudgetManager
 from .approvals import ApprovalQueue, ApprovalRequest
 from .policy import PolicyEngine, Decision
+from .policy_rules import (
+    PolicySet, PolicyContext, RuleResult, Rule,
+    MaxCostPerCall, RequireApprovalAboveCost, DenyCapabilities, AllowOnlyCapabilities,
+    BusinessHoursOnly, DenyProtocolRoute,
+)
+from .rbac import role_can, require, AccessDenied, ROLE_PERMISSIONS, PERMISSIONS
 from .gateway import GovernanceGateway, GovernanceError
 
 __all__ = [
@@ -17,5 +23,9 @@ __all__ = [
     "Budget", "BudgetManager",
     "ApprovalQueue", "ApprovalRequest",
     "PolicyEngine", "Decision",
+    "PolicySet", "PolicyContext", "RuleResult", "Rule",
+    "MaxCostPerCall", "RequireApprovalAboveCost", "DenyCapabilities", "AllowOnlyCapabilities",
+    "BusinessHoursOnly", "DenyProtocolRoute",
+    "role_can", "require", "AccessDenied", "ROLE_PERMISSIONS", "PERMISSIONS",
     "GovernanceGateway", "GovernanceError",
 ]

@@ -97,3 +97,38 @@ class AuditLog:
                 return False
             prev = entry.entry_hash
         return True
+
+    # --- signed checkpoints (compliance / third-party verifiable) ---------------------
+    def head_hash(self) -> str:
+        """The current chain head hash (GENESIS if empty)."""
+        with self._lock:
+            return self._entries[-1].entry_hash if self._entries else self.GENESIS
+
+    @staticmethod
+    def _checkpoint_payload(seq: int, head_hash: str) -> bytes:
+        return f"agentbridge-audit-checkpoint:{seq}:{head_hash}".encode()
+
+    def checkpoint(self, sign, public_key_hex: str) -> Dict[str, Any]:
+        """Sign the current audit head so a third party can later prove the log was not
+        truncated or rewound past this point. `sign(bytes) -> bytes` is an Ed25519 signer
+        (e.g. AgentIdentity.sign for an operator key)."""
+        with self._lock:
+            seq = len(self._entries)
+            head = self._entries[-1].entry_hash if self._entries else self.GENESIS
+        sig = sign(self._checkpoint_payload(seq, head))
+        return {"seq": seq, "head_hash": head, "algo": "ed25519",
+                "public_key_hex": public_key_hex, "signature_hex": sig.hex(),
+                "created_at": _now()}
+
+    @staticmethod
+    def verify_checkpoint(checkpoint: Dict[str, Any]) -> bool:
+        """Verify a signed checkpoint's Ed25519 signature over (seq, head_hash)."""
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        from cryptography.exceptions import InvalidSignature
+        try:
+            pub = Ed25519PublicKey.from_public_bytes(bytes.fromhex(checkpoint["public_key_hex"]))
+            payload = AuditLog._checkpoint_payload(checkpoint["seq"], checkpoint["head_hash"])
+            pub.verify(bytes.fromhex(checkpoint["signature_hex"]), payload)
+            return True
+        except (InvalidSignature, KeyError, ValueError):
+            return False

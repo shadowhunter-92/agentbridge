@@ -38,21 +38,29 @@ judge whether it fits your use case before relying on it.
 - **Postgres backend is new** — validate against a throwaway DB (`AGENTBRIDGE_TEST_PG`)
   before production reliance.
 
-## The enterprise tier — built on first enterprise ask (NOT before)
+## The enterprise tier
 
-The commercial/enterprise features below are real and on the roadmap, but they are
-deliberately **not built yet**, because the right trigger is a buyer saying "I won't deploy
-without X" — not speculation. Building an SSO/RBAC/SOC2 stack before a paying design partner
-is the classic feature-creep trap. Each is scoped and ready to start the moment a real
-enterprise conversation requires it:
+Built (real, tested code — see `docs/ENTERPRISE.md` + `tests/test_enterprise_governance.py`):
 
-- **SSO / SAML / OIDC** for operator login (Okta, Azure AD) — replaces the static admin key.
-- **RBAC** for who can manage which agents' identities/budgets/approvals.
-- **Immutable audit export** to SIEMs (Splunk, Datadog, S3) with signed checkpoints + retention.
-- **Managed cloud** (hosted, SLA-backed) so customers don't run the Postgres/Redis themselves.
-- **SOC 2 Type II / HIPAA** for the hosted offering (unlocks finance/health buyers).
-- **Policy engine v2** — declarative rules (e.g. "human approval for any tool call > $5",
-  "no external calls outside business hours"). Primitives (allowlist, budgets, approvals) exist.
+- ✅ **Policy engine v2** — declarative rules (per-call cost cap, approval-above-cost,
+  capability allow/deny, business-hours-only, blocked protocol routes).
+- ✅ **RBAC** — operator roles (admin/operator/viewer) → permissions.
+- ✅ **OIDC / JWT operator auth (SSO)** — verify IdP tokens (Okta/Azure AD/Auth0/Keycloak),
+  role claim → RBAC role; replaces the shared admin key. (`pyjwt`, lazy import.)
+- ✅ **Signed audit checkpoints** — third-party-verifiable proof the log wasn't truncated;
+  JSONL export feeds SIEMs (Splunk/Datadog/S3).
+
+Not code — handled honestly (see `docs/ENTERPRISE.md`):
+
+- ⛔ **Managed cloud (SLA hosting)** — operations/business, not a library feature. Self-host
+  pieces are all here (Docker, Postgres, rate limiting, TLS-at-proxy).
+- ⛔ **SOC 2 Type II / HIPAA** — independent audits over months, not a code claim. The controls
+  above are the technical evidence such an audit examines.
+
+Still genuinely demand-gated:
+
+- **SIEM push connectors** (turnkey Splunk/Datadog/S3 shippers) and **JWKS auto-fetch** for
+  OIDC (today: configure the IdP key) — small additions, build on first real deployment.
 
 ## Deferred on purpose (and why)
 

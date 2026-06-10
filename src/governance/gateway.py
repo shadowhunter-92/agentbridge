@@ -67,6 +67,7 @@ class GovernanceGateway:
         decision = self.policy.authorize(
             agent_id=agent_id, capability=capability, cost=cost,
             signed_data=signed_data, signature=signature,
+            src_protocol=src_proto, dst_protocol=dst_proto,
         )
 
         if not decision.allowed:
