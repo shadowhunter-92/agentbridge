@@ -23,6 +23,9 @@ built into the call path.
   human-in-the-loop approvals for sensitive capabilities, and a hash-chained tamper-evident audit
   trail — all **enforced in the call path** and **durable** (SQLite; Postgres-swappable).
 - **Drop-in MCP server:** point Claude Desktop / an IDE / a gateway at it to reach other protocols.
+- **Framework integrations:** one helper lets LangChain / CrewAI / AutoGen / LlamaIndex agents
+  reach a tool/agent on *any* protocol — they all emit OpenAI-shaped tool calls (see
+  `docs/INTEGRATIONS.md`).
 
 ## Quick start
 
@@ -60,7 +63,7 @@ python -m src.serve.mcp_gateway
 .venv/Scripts/python examples/live_governed_proxy.py    # identity + budget + audit in action
 
 # Tests
-.venv/Scripts/python -m pytest tests/ -q                # 124 passing (+4 Postgres tests skip w/o a DB)
+.venv/Scripts/python -m pytest tests/ -q                # 128 passing (+4 Postgres tests skip w/o a DB)
 ```
 
 ## Architecture
@@ -115,6 +118,7 @@ a `postgres://` URL → Postgres (multi-instance; `pip install "psycopg[binary]"
 ## Docs
 - `docs/DEPLOYMENT.md` — how to run it, configure it, and the honest production checklist
 - `docs/API_REFERENCE.md` — the control-plane HTTP endpoints
+- `docs/INTEGRATIONS.md` — wire LangChain / CrewAI / AutoGen / LlamaIndex to any protocol
 - `docs/ROADMAP.md` — what's done, known limitations, and what's deferred (honest)
 - `docs/PROTOCOL_SUPPORT.md` — the protocol support matrix + conformance approach
 - `docs/LIVE_AGENT_TESTING.md` — how the bridge is tested against real, running agents

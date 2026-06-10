@@ -38,6 +38,22 @@ judge whether it fits your use case before relying on it.
 - **Postgres backend is new** — validate against a throwaway DB (`AGENTBRIDGE_TEST_PG`)
   before production reliance.
 
+## The enterprise tier — built on first enterprise ask (NOT before)
+
+The commercial/enterprise features below are real and on the roadmap, but they are
+deliberately **not built yet**, because the right trigger is a buyer saying "I won't deploy
+without X" — not speculation. Building an SSO/RBAC/SOC2 stack before a paying design partner
+is the classic feature-creep trap. Each is scoped and ready to start the moment a real
+enterprise conversation requires it:
+
+- **SSO / SAML / OIDC** for operator login (Okta, Azure AD) — replaces the static admin key.
+- **RBAC** for who can manage which agents' identities/budgets/approvals.
+- **Immutable audit export** to SIEMs (Splunk, Datadog, S3) with signed checkpoints + retention.
+- **Managed cloud** (hosted, SLA-backed) so customers don't run the Postgres/Redis themselves.
+- **SOC 2 Type II / HIPAA** for the hosted offering (unlocks finance/health buyers).
+- **Policy engine v2** — declarative rules (e.g. "human approval for any tool call > $5",
+  "no external calls outside business hours"). Primitives (allowlist, budgets, approvals) exist.
+
 ## Deferred on purpose (and why)
 
 - **ANP (Agent Network Protocol).** Not a tool-call/message protocol like the other six —

@@ -8,7 +8,7 @@ and feedback or PRs are very welcome.
 ```bash
 python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt    # Windows; use bin/ on macOS/Linux
-.venv/Scripts/python -m pytest tests/ -q          # 124 passing (+4 Postgres tests skip w/o a DB)
+.venv/Scripts/python -m pytest tests/ -q          # 128 passing (+4 Postgres tests skip w/o a DB)
 .venv/Scripts/python examples/demo_story.py       # the whole product in one screen
 ```
 
