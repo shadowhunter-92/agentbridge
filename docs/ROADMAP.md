@@ -20,7 +20,7 @@ judge whether it fits your use case before relying on it.
   interface, chosen via `AGENTBRIDGE_DB`.
 - **Control plane** — authenticated HTTP API + **per-IP rate limiting** on `/control/*`.
 - **Drop-in MCP server** packaging.
-- **124 passing tests** + a one-screen live demo.
+- **143 passing tests** + a one-screen live demo.
 
 ## Known limitations (today)
 
@@ -95,12 +95,11 @@ replicas. Until then: run it close to the agents, monitor it, and fail over by r
 
 In rough priority, built when a real use-case or user pulls for it:
 1. Observability (OpenTelemetry traces + metrics) once running real traffic.
-2. OAuth/OIDC operator SSO for enterprise deployments.
-3. Shared runtime state (Redis / Postgres advisory locks) for true horizontal scaling + HA.
-4. Async / buffered audit writes (queue + flush) if durable-store write latency becomes a
+2. Shared runtime state (Redis / Postgres advisory locks) for true horizontal scaling + HA.
+3. Async / buffered audit writes (queue + flush) if durable-store write latency becomes a
    bottleneck under high call volume.
-5. A lightweight web dashboard for the control plane (live audit feed, budgets, pending
+4. A lightweight web dashboard for the control plane (live audit feed, budgets, pending
    approvals) — the "aha" surface for non-CLI stakeholders.
-6. One-command `docker-compose` quickstart with mock agents (sub-60s time-to-first-demo).
-7. Richer protocol semantics (streaming, resources) where a concrete integration needs it.
-8. Audit-grade compliance features (signed checkpoints, retention, auditor export).
+5. One-command `docker-compose` quickstart with mock agents (sub-60s time-to-first-demo).
+6. Richer protocol semantics (streaming, resources) where a concrete integration needs it.
+7. Retention policies / legal hold for the audit log (the remaining compliance gap).
