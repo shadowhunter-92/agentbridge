@@ -7,11 +7,17 @@ Exposes the two things that matter:
     to live agents.
 
 Security (fixed from the deep review):
-  - OPERATOR endpoints (manage identities/budgets/approvals, read audit) require the admin key
-    via `X-Admin-Key` (env `AGENTBRIDGE_ADMIN_KEY`; auto-generated + logged if unset).
+  - OPERATOR endpoints (manage identities/budgets/approvals/policy, read audit) require
+    EITHER the admin key via `X-Admin-Key` (role: admin) OR — if OIDC is configured — an
+    `Authorization: Bearer <jwt>` from your IdP, whose role claim maps to RBAC
+    (admin / operator / viewer; see src/governance/rbac.py).
   - AGENT endpoints (`/control/route`, `/control/authorize`) require a SIGNED request:
     headers `X-Agent-Id`, `X-Nonce`, `X-Signature` (Ed25519 over agent_id+nonce+body).
   - Persistence: set `AGENTBRIDGE_DB=/path/to.db` for durable SQLite; default is in-memory.
+
+OIDC (optional SSO): set AGENTBRIDGE_OIDC_ISSUER + AGENTBRIDGE_OIDC_AUDIENCE and ONE of
+AGENTBRIDGE_OIDC_PUBLIC_KEY_PEM / AGENTBRIDGE_OIDC_PUBLIC_KEY_FILE (the IdP signing key);
+optional AGENTBRIDGE_OIDC_ROLE_CLAIM (default "role").
 
 Run:  uvicorn src.api.control_plane:app    (docs at /docs)
 """
@@ -21,16 +27,20 @@ import os
 import secrets
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Header, Request
+from fastapi import Depends, FastAPI, HTTPException, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .ratelimit import RateLimiter
+from .auth_oidc import OidcConfig, OidcVerifier, OidcError
 from ..protocols import default_registry
 from ..governance import (
     AgentIdentity, IdentityRegistry, BudgetManager, Budget, ApprovalQueue,
     PolicyEngine, AuditLog, GovernanceGateway, GovernanceError,
     RequestAuthenticator, make_store,
+    PolicySet, MaxCostPerCall, RequireApprovalAboveCost, DenyCapabilities,
+    AllowOnlyCapabilities, BusinessHoursOnly, DenyProtocolRoute,
+    require as rbac_require, AccessDenied,
 )
 
 logger = logging.getLogger("control_plane")
@@ -49,11 +59,29 @@ registry = default_registry
 identities = IdentityRegistry(store=store)
 budgets = BudgetManager(store=store)
 approvals = ApprovalQueue()
-policy = PolicyEngine(identities, budgets, approvals=approvals)
+policy_rules = PolicySet()          # declarative rules, managed via /control/policy/rules
+policy = PolicyEngine(identities, budgets, approvals=approvals, policy_set=policy_rules)
 audit = AuditLog(store=store)
 gateway = GovernanceGateway(identities=identities, budgets=budgets, approvals=approvals,
                             policy=policy, audit=audit, registry=registry)
 authenticator = RequestAuthenticator(identities)
+
+# --- optional OIDC operator SSO (env-configured) ---------------------------------------
+oidc_verifier: Optional[OidcVerifier] = None
+_oidc_issuer = os.getenv("AGENTBRIDGE_OIDC_ISSUER")
+if _oidc_issuer:
+    _pem = os.getenv("AGENTBRIDGE_OIDC_PUBLIC_KEY_PEM")
+    _pem_file = os.getenv("AGENTBRIDGE_OIDC_PUBLIC_KEY_FILE")
+    if not _pem and _pem_file:
+        with open(_pem_file, "r", encoding="utf-8") as _f:
+            _pem = _f.read()
+    oidc_verifier = OidcVerifier(OidcConfig(
+        issuer=_oidc_issuer,
+        audience=os.getenv("AGENTBRIDGE_OIDC_AUDIENCE", "agentbridge"),
+        public_key_pem=_pem,
+        role_claim=os.getenv("AGENTBRIDGE_OIDC_ROLE_CLAIM", "role"),
+    ))
+    logger.info("OIDC operator SSO enabled (issuer=%s)", _oidc_issuer)
 
 # --- rate limiting: throttle /control/* per client IP (blunts admin-key brute force) ---
 RATE_LIMIT_PER_MIN = int(os.getenv("AGENTBRIDGE_RATE_LIMIT", "240"))
@@ -74,9 +102,28 @@ async def _rate_limit(request: Request, call_next):
 
 # --- guards ---------------------------------------------------------------------------
 
-def require_admin(x_admin_key: Optional[str] = Header(None)):
-    if not x_admin_key or not secrets.compare_digest(x_admin_key, ADMIN_KEY):
-        raise HTTPException(401, "admin key required (X-Admin-Key)")
+def operator_guard(permission: str):
+    """Operator auth + RBAC. Accepts the admin key (role: admin) or, when OIDC is
+    configured, an IdP bearer token whose role claim maps to an RBAC role. The
+    resolved role must hold `permission`."""
+    async def guard(request: Request) -> str:
+        x_admin = request.headers.get("X-Admin-Key")
+        if x_admin and secrets.compare_digest(x_admin, ADMIN_KEY):
+            role = "admin"
+        elif oidc_verifier is not None and request.headers.get("Authorization"):
+            try:
+                _claims, role = oidc_verifier.authenticate(request.headers["Authorization"])
+            except OidcError as e:
+                raise HTTPException(401, f"operator auth failed: {e}")
+        else:
+            hint = "X-Admin-Key" + (" or Authorization: Bearer <jwt>" if oidc_verifier else "")
+            raise HTTPException(401, f"operator auth required ({hint})")
+        try:
+            rbac_require(role, permission)
+        except AccessDenied as e:
+            raise HTTPException(403, str(e))
+        return role
+    return guard
 
 
 async def authenticate_agent(request: Request) -> str:
@@ -141,8 +188,8 @@ def translate_result(body: TranslateBody):
 # --- operator plane (admin-key) -------------------------------------------------------
 
 @app.post("/control/identities")
-def register_identity(body: IdentityBody, x_admin_key: Optional[str] = Header(None)):
-    require_admin(x_admin_key)
+def register_identity(body: IdentityBody,
+                      _role: str = Depends(operator_guard("identities:write"))):
     if body.public_key_hex:
         ident = identities.register_public_key(body.agent_id, body.public_key_hex)
         return {"agent_id": body.agent_id, "did": ident.did}
@@ -155,16 +202,15 @@ def register_identity(body: IdentityBody, x_admin_key: Optional[str] = Header(No
 
 
 @app.post("/control/identities/{agent_id}/revoke")
-def revoke_identity(agent_id: str, x_admin_key: Optional[str] = Header(None)):
-    require_admin(x_admin_key)
+def revoke_identity(agent_id: str,
+                    _role: str = Depends(operator_guard("identities:write"))):
     if not identities.revoke(agent_id):
         raise HTTPException(404, "unknown identity")
     return {"agent_id": agent_id, "revoked": True}
 
 
 @app.get("/control/identities")
-def list_identities(x_admin_key: Optional[str] = Header(None)):
-    require_admin(x_admin_key)
+def list_identities(_role: str = Depends(operator_guard("identities:read"))):
     return {"identities": [
         {"agent_id": i["agent_id"], "did": "did:key:ed25519:" + i["public_key_hex"],
          "revoked": i.get("revoked", False)}
@@ -173,8 +219,8 @@ def list_identities(x_admin_key: Optional[str] = Header(None)):
 
 
 @app.put("/control/budgets/{agent_id}")
-def set_budget(agent_id: str, body: BudgetBody, x_admin_key: Optional[str] = Header(None)):
-    require_admin(x_admin_key)
+def set_budget(agent_id: str, body: BudgetBody,
+               _role: str = Depends(operator_guard("budgets:write"))):
     budgets.set_budget(agent_id, Budget(spend_limit=body.spend_limit,
                                         rate_limit=body.rate_limit,
                                         window_seconds=body.window_seconds))
@@ -182,45 +228,40 @@ def set_budget(agent_id: str, body: BudgetBody, x_admin_key: Optional[str] = Hea
 
 
 @app.get("/control/budgets/{agent_id}")
-def get_budget(agent_id: str, x_admin_key: Optional[str] = Header(None)):
-    require_admin(x_admin_key)
+def get_budget(agent_id: str, _role: str = Depends(operator_guard("budgets:read"))):
     b = budgets.get(agent_id)
     return {"agent_id": agent_id, "spent": b.spent, "remaining": b.remaining(),
             "spend_limit": b.spend_limit, "rate_limit": b.rate_limit}
 
 
 @app.post("/control/capabilities/sensitive")
-def mark_sensitive(capability: str, x_admin_key: Optional[str] = Header(None)):
-    require_admin(x_admin_key)
+def mark_sensitive(capability: str,
+                   _role: str = Depends(operator_guard("policy:write"))):
     approvals.mark_sensitive(capability)
     return {"capability": capability, "requires_approval": True}
 
 
 @app.get("/control/approvals")
-def list_pending(x_admin_key: Optional[str] = Header(None)):
-    require_admin(x_admin_key)
+def list_pending(_role: str = Depends(operator_guard("approvals:read"))):
     return {"pending": [vars(r) for r in approvals.pending()]}
 
 
 @app.post("/control/approvals/{request_id}/approve")
-def approve(request_id: str, x_admin_key: Optional[str] = Header(None)):
-    require_admin(x_admin_key)
+def approve(request_id: str, _role: str = Depends(operator_guard("approvals:write"))):
     if not approvals.approve(request_id):
         raise HTTPException(404, "no such pending request")
     return {"request_id": request_id, "status": "approved"}
 
 
 @app.post("/control/approvals/{request_id}/deny")
-def deny(request_id: str, x_admin_key: Optional[str] = Header(None)):
-    require_admin(x_admin_key)
+def deny(request_id: str, _role: str = Depends(operator_guard("approvals:write"))):
     if not approvals.deny(request_id):
         raise HTTPException(404, "no such pending request")
     return {"request_id": request_id, "status": "denied"}
 
 
 @app.get("/control/audit")
-def get_audit(x_admin_key: Optional[str] = Header(None)):
-    require_admin(x_admin_key)
+def get_audit(_role: str = Depends(operator_guard("audit:read"))):
     return {
         "integrity_ok": audit.verify_integrity(),
         "entries": [
@@ -234,9 +275,45 @@ def get_audit(x_admin_key: Optional[str] = Header(None)):
 
 
 @app.get("/control/audit/export")
-def export_audit(x_admin_key: Optional[str] = Header(None)):
-    require_admin(x_admin_key)
+def export_audit(_role: str = Depends(operator_guard("audit:export"))):
     return {"jsonl": audit.export_jsonl()}
+
+
+# --- policy rules (declarative policy engine v2, over HTTP) ----------------------------
+
+_RULE_FACTORIES = {
+    "max_cost": lambda p: MaxCostPerCall(float(p["max_cost"])),
+    "approval_above_cost": lambda p: RequireApprovalAboveCost(float(p["threshold"])),
+    "deny_capabilities": lambda p: DenyCapabilities(list(p["capabilities"])),
+    "allow_only_capabilities": lambda p: AllowOnlyCapabilities(list(p["capabilities"])),
+    "business_hours": lambda p: BusinessHoursOnly(int(p.get("start_hour", 9)),
+                                                  int(p.get("end_hour", 17)),
+                                                  p.get("days")),
+    "deny_route": lambda p: DenyProtocolRoute(p["src"], p["dst"]),
+}
+
+
+class RuleBody(BaseModel):
+    type: str = Field(description=f"one of: {sorted(_RULE_FACTORIES)}")
+    params: Dict[str, Any] = Field(default_factory=dict)
+
+
+@app.post("/control/policy/rules")
+def add_policy_rule(body: RuleBody, _role: str = Depends(operator_guard("policy:write"))):
+    factory = _RULE_FACTORIES.get(body.type)
+    if not factory:
+        raise HTTPException(400, f"unknown rule type '{body.type}'; known: {sorted(_RULE_FACTORIES)}")
+    try:
+        rule = factory(body.params)
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(400, f"bad params for '{body.type}': {e}")
+    policy_rules.add(rule)
+    return {"added": body.type, "rules_active": len(policy_rules.rules)}
+
+
+@app.get("/control/policy/rules")
+def list_policy_rules(_role: str = Depends(operator_guard("policy:read"))):
+    return {"rules": [type(r).__name__ for r in policy_rules.rules]}
 
 
 # --- agent plane (signed requests) ----------------------------------------------------

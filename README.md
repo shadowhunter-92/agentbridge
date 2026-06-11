@@ -66,7 +66,7 @@ python -m src.serve.mcp_gateway
 .venv/Scripts/python examples/live_governed_proxy.py    # identity + budget + audit in action
 
 # Tests
-.venv/Scripts/python -m pytest tests/ -q                # 138 passing (+4 Postgres tests skip w/o a DB)
+.venv/Scripts/python -m pytest tests/ -q                # 143 passing (+4 Postgres tests skip w/o a DB)
 ```
 
 ## Architecture
@@ -108,7 +108,8 @@ delivered to the target agent, then committed and written to a tamper-evident au
 Performance overhead is measured in `docs/BENCHMARKS.md`.
 
 ## Security model
-- **Operator endpoints** require an admin key (`X-Admin-Key`).
+- **Operator endpoints** require an admin key (`X-Admin-Key`) or — with OIDC configured —
+  an IdP bearer token; every endpoint is **RBAC-enforced** (admin/operator/viewer).
 - **Agent endpoints** require Ed25519 **signed requests** (`X-Agent-Id`/`X-Nonce`/`X-Signature`)
   with nonce replay protection. Identities can be revoked.
 - **Per-IP rate limiting** on `/control/*` (blunts admin-key brute force; `AGENTBRIDGE_RATE_LIMIT`).

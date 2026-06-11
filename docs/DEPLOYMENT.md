@@ -39,9 +39,13 @@ docker run -p 8000:8000 \
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `PORT` / `HOST` | `8000` / `0.0.0.0` | Bind address |
-| `AGENTBRIDGE_ADMIN_KEY` | auto-generated (logged) | Operator key for `X-Admin-Key`. **Set this in production.** |
+| `AGENTBRIDGE_ADMIN_KEY` | auto-generated (logged) | Operator key for `X-Admin-Key` (role: admin). **Set this in production.** |
 | `AGENTBRIDGE_DB` | unset (in-memory) | Persistence target — see §4 |
 | `AGENTBRIDGE_RATE_LIMIT` | `240` | Max requests/min/IP to `/control/*` (blunts admin-key brute force) |
+| `AGENTBRIDGE_OIDC_ISSUER` | unset (OIDC off) | Enable OIDC operator SSO: your IdP issuer URL |
+| `AGENTBRIDGE_OIDC_AUDIENCE` | `agentbridge` | Expected `aud` claim |
+| `AGENTBRIDGE_OIDC_PUBLIC_KEY_PEM` / `_FILE` | unset | IdP signing public key (inline PEM or file path) |
+| `AGENTBRIDGE_OIDC_ROLE_CLAIM` | `role` | Token claim mapped to the RBAC role (admin/operator/viewer) |
 
 ## 4. Persistence backends
 
@@ -74,7 +78,8 @@ Chosen automatically from `AGENTBRIDGE_DB` via `make_store()`:
 - [x] Tamper-evident, exportable audit log
 - [ ] **TLS** — terminate at a reverse proxy (nginx/Caddy) or a load balancer; do not
       expose the control plane plaintext on a public network.
-- [ ] **OAuth/OIDC** for operator SSO (Okta/Azure AD) — roadmap.
+- [x] **OIDC operator SSO + RBAC** (Okta/Azure AD/Auth0) — set the `AGENTBRIDGE_OIDC_*`
+      env vars; role claim maps to admin/operator/viewer.
 - [ ] **Metrics/tracing** (OpenTelemetry) — roadmap.
 - [ ] A formal security review before handling regulated production traffic.
 

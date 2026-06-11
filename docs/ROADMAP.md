@@ -33,7 +33,6 @@ judge whether it fits your use case before relying on it.
   locks). Single-instance deployments are unaffected.
 - **No TLS at the app layer.** Terminate TLS at a reverse proxy or load balancer; don't
   expose the control plane plaintext on a public network (see `docs/DEPLOYMENT.md`).
-- **No OAuth/OIDC for operators yet** — operator auth is an admin key today.
 - **No metrics/tracing yet** — no OpenTelemetry/Prometheus export.
 - **Postgres backend is new** — validate against a throwaway DB (`AGENTBRIDGE_TEST_PG`)
   before production reliance.

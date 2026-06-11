@@ -20,7 +20,7 @@ PERMISSIONS: Set[str] = {
     "budgets:read", "budgets:write",
     "approvals:read", "approvals:write",
     "audit:read", "audit:export",
-    "policy:write",
+    "policy:read", "policy:write",
 }
 
 ROLE_PERMISSIONS: Dict[str, Set[str]] = {
@@ -30,9 +30,11 @@ ROLE_PERMISSIONS: Dict[str, Set[str]] = {
         "budgets:read", "budgets:write",
         "approvals:read", "approvals:write",
         "audit:read", "audit:export",
+        "policy:read",
     },
     "viewer": {
         "identities:read", "budgets:read", "approvals:read", "audit:read",
+        "policy:read",
     },
 }
 

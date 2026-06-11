@@ -4,10 +4,18 @@ Base: the FastAPI app in `src/api/control_plane.py`. Interactive docs at `/docs`
 
 Three planes:
 - **Public** — mesh translation, no auth.
-- **Operator** — manage identities/budgets/approvals/audit; requires `X-Admin-Key`.
+- **Operator** — manage identities/budgets/approvals/policy/audit. Auth is EITHER
+  `X-Admin-Key` (role: **admin**) OR — when OIDC is configured — an
+  `Authorization: Bearer <jwt>` from your IdP whose role claim maps to RBAC
+  (**admin** / **operator** / **viewer**). Each endpoint requires a permission;
+  a role without it gets **403**.
 - **Agent** — governed routing; requires an Ed25519 **signed request**.
 
 All `/control/*` paths are rate-limited per client IP (`AGENTBRIDGE_RATE_LIMIT`/min).
+
+OIDC env: `AGENTBRIDGE_OIDC_ISSUER`, `AGENTBRIDGE_OIDC_AUDIENCE`, and one of
+`AGENTBRIDGE_OIDC_PUBLIC_KEY_PEM` / `AGENTBRIDGE_OIDC_PUBLIC_KEY_FILE`
+(+ optional `AGENTBRIDGE_OIDC_ROLE_CLAIM`, default `role`).
 
 ---
 
@@ -22,20 +30,38 @@ All `/control/*` paths are rate-limited per client IP (`AGENTBRIDGE_RATE_LIMIT`/
 
 Malformed wires (non-object, or empty/unroutable) return **400** with a clear reason.
 
-## Operator — requires header `X-Admin-Key`
+## Operator — admin key or OIDC bearer token (RBAC-enforced)
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/control/identities` | Register an agent identity (DID). With `public_key_hex` registers a client key; without it, the server generates one and returns the private key **once**. |
-| POST | `/control/identities/{agent_id}/revoke` | Revoke an identity |
-| GET | `/control/identities` | List identities (DIDs) |
-| PUT | `/control/budgets/{agent_id}` | Set spend/rate budget |
-| GET | `/control/budgets/{agent_id}` | Read budget + spend |
-| POST | `/control/capabilities/sensitive` | Mark a capability as requiring approval |
-| GET | `/control/approvals` | List pending approval requests |
-| POST | `/control/approvals/{id}/approve` · `/deny` | Resolve an approval |
-| GET | `/control/audit` | Audit entries + integrity check |
-| GET | `/control/audit/export` | Audit log as JSONL (for SIEM/auditors) |
+| Method | Path | Permission | Purpose |
+|--------|------|------------|---------|
+| POST | `/control/identities` | `identities:write` | Register an agent identity (DID). With `public_key_hex` registers a client key; without it, the server generates one and returns the private key **once**. |
+| POST | `/control/identities/{agent_id}/revoke` | `identities:write` | Revoke an identity |
+| GET | `/control/identities` | `identities:read` | List identities (DIDs) |
+| PUT | `/control/budgets/{agent_id}` | `budgets:write` | Set spend/rate budget |
+| GET | `/control/budgets/{agent_id}` | `budgets:read` | Read budget + spend |
+| POST | `/control/capabilities/sensitive` | `policy:write` | Mark a capability as requiring approval |
+| GET | `/control/approvals` | `approvals:read` | List pending approval requests |
+| POST | `/control/approvals/{id}/approve` · `/deny` | `approvals:write` | Resolve an approval |
+| GET | `/control/audit` | `audit:read` | Audit entries + integrity check |
+| GET | `/control/audit/export` | `audit:export` | Audit log as JSONL (for SIEM/auditors) |
+| POST | `/control/policy/rules` | `policy:write` | Add a declarative policy rule (see below) |
+| GET | `/control/policy/rules` | `policy:read` | List active policy rules |
+
+Roles: **admin** = everything; **operator** = all of the above except `policy:write`;
+**viewer** = the `:read` permissions only.
+
+### Policy rules (`POST /control/policy/rules`)
+
+Body: `{"type": "<rule>", "params": {...}}`. Types:
+
+| type | params | effect |
+|------|--------|--------|
+| `max_cost` | `{"max_cost": 10}` | deny any single call costing more |
+| `approval_above_cost` | `{"threshold": 5}` | require human approval above this cost |
+| `deny_capabilities` | `{"capabilities": ["wire_transfer"]}` | never allow these |
+| `allow_only_capabilities` | `{"capabilities": ["add","echo"]}` | allow nothing else |
+| `business_hours` | `{"start_hour":9,"end_hour":17,"days":[0,1,2,3,4]}` | UTC window only |
+| `deny_route` | `{"src":"a2a","dst":"mcp"}` | block a protocol route |
 
 ## Agent — requires a signed request
 

@@ -2,8 +2,15 @@
 
 Beyond the core mesh + identity/budget/audit, AgentBridge ships the governance controls
 enterprises ask for. All of the below is real, tested code (see
-`tests/test_enterprise_governance.py`). Two items in the "enterprise tier" are **not** code —
-managed hosting and SOC 2 — and are called out honestly at the bottom.
+`tests/test_enterprise_governance.py` for the modules and
+`tests/test_control_plane_rbac.py` for the HTTP wiring). Two items in the "enterprise
+tier" are **not** code — managed hosting and SOC 2 — and are called out honestly at the
+bottom.
+
+**All of it is live over the control plane HTTP API**: operator endpoints accept the admin
+key (role: admin) or an OIDC bearer token (role claim → RBAC), each endpoint enforces a
+permission, and policy rules are manageable via `POST /control/policy/rules` — see
+`docs/API_REFERENCE.md`.
 
 ---
 
