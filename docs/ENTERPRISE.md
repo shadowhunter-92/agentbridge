@@ -98,20 +98,33 @@ Datadog / S3 on a schedule, and store periodic signed checkpoints alongside it.
 
 ## Concurrency & scaling (read before you deploy)
 
-**Run the control plane as a single worker today.** The audit hash-chain and the budget
-reservation ledger are maintained **in process** (with a per-process lock). That is correct
-and safe for a single worker, but **multiple workers/replicas behind a load balancer would**:
+**Multiple workers are safe — as long as they share a durable store.** The audit hash-chain
+append and the budget reserve/commit/release are **atomic, store-side operations**, not
+in-memory read-modify-write:
 
-- **fork the audit chain** — two workers read the same `prev_hash` and append concurrently, so
-  `verify_integrity()` fails (the tamper-evidence breaks); and
-- **double-spend budgets** — two workers both pass `can_afford()` on the same in-memory state and
-  both reserve, overrunning the cap.
+- **Audit chain** — `store.append_audit_chained()` determines the next `(seq, prev_hash)` from
+  the durable head *inside* an atomic section (SQLite `BEGIN IMMEDIATE`; Postgres
+  transaction-scoped `pg_advisory_xact_lock`), then inserts. Concurrent workers serialize, so the
+  chain can't fork and `verify_chain()` stays valid. `AuditLog.verify_durable()` checks the full
+  persisted chain.
+- **Budgets** — `store.mutate_budget()` reads the budget's persisted state (including outstanding
+  reservations), runs the reserve/commit/release mutation, and writes it back, all under the same
+  per-agent lock. Two workers can't both pass the cap; reservations are visible across workers.
 
-The control plane logs a loud warning about this at startup. **Shared-state HA** (an atomic
-DB-side chain head + a `reservations` table with row-level locking, e.g. `SELECT … FOR UPDATE`)
-is the fix and is on the roadmap (`docs/ROADMAP.md`) — built when a deployment actually needs
-multi-node. Until then: one worker, vertically scaled, is the supported topology. (This is an
-honest known limitation, not a hidden one — credit to external code review for sharpening it.)
+This is proven, not asserted: `tests/test_concurrency.py` spins up **separate store connections
+in separate threads** (a faithful stand-in for separate OS processes) hammering the same SQLite
+file, and asserts the chain is gap-free + verifiable and the budget never overspends. A negative
+control in the same file confirms per-process **in-memory** state *would* fork — so the test
+catches a regression rather than passing vacuously. The **same guarantees are verified on real
+Postgres** (the `pg_advisory_xact_lock` path) in `tests/test_postgres_store.py` against
+`postgres:16` — 6 tests, including 2 multi-connection concurrency tests.
+
+**The one rule:** set `AGENTBRIDGE_DB` to a shared backend before running multiple workers — a
+SQLite file path (single node, multiple workers) or a `postgres://` URL (multi-node). The default
+`InMemoryStore` is per-process and is for single-worker/dev only. The remaining in-process piece
+is the human-approval queue (`ApprovalQueue`); until it's store-backed, pin approval traffic to
+one instance. (Credit to external code review for surfacing the original in-memory race; it's now
+fixed and regression-tested.)
 
 ## Not code — handled honestly
 

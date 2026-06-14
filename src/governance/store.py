@@ -43,12 +43,28 @@ class GovernanceStore(ABC):
     @abstractmethod
     def load_audit(self) -> List[Dict[str, Any]]: ...
 
+    # --- atomic, cross-process-safe operations (fix multi-worker fork/double-spend) ---
+    @abstractmethod
+    def append_audit_chained(self, build_entry) -> Dict[str, Any]:
+        """Atomically determine the next (seq, prev_hash) from the DURABLE head, call
+        build_entry(seq, prev_hash) -> entry dict, persist it, and return it. Serialized
+        across processes so the hash chain cannot fork under multiple workers."""
+
+    @abstractmethod
+    def mutate_budget(self, agent_id: str, mutator) -> Any:
+        """Atomically read a budget's persisted state, call mutator(state) (which may mutate
+        state in place and return a result), persist the new state, and return the result.
+        Serialized across processes so concurrent reserve/commit cannot double-spend."""
+
 
 class InMemoryStore(GovernanceStore):
+    GENESIS = "0" * 64
+
     def __init__(self):
         self._identities: Dict[str, Dict[str, Any]] = {}
         self._budgets: Dict[str, Dict[str, Any]] = {}
         self._audit: List[Dict[str, Any]] = []
+        self._lock = threading.RLock()
 
     def upsert_identity(self, agent_id, public_key_hex, revoked=False):
         self._identities[agent_id] = {"agent_id": agent_id,
@@ -68,19 +84,44 @@ class InMemoryStore(GovernanceStore):
         return self._budgets.get(agent_id)
 
     def append_audit(self, entry):
-        self._audit.append(dict(entry))
+        with self._lock:
+            self._audit.append(dict(entry))
 
     def load_audit(self):
-        return [dict(e) for e in self._audit]
+        with self._lock:
+            return [dict(e) for e in self._audit]
+
+    def append_audit_chained(self, build_entry):
+        with self._lock:
+            last = self._audit[-1] if self._audit else None
+            seq = (last["seq"] + 1) if last else 0
+            prev_hash = last["entry_hash"] if last else self.GENESIS
+            entry = build_entry(seq, prev_hash)
+            self._audit.append(dict(entry))
+            return entry
+
+    def mutate_budget(self, agent_id, mutator):
+        with self._lock:
+            rec = self._budgets.get(agent_id)
+            state = {k: v for k, v in rec.items() if k != "agent_id"} if rec else {}
+            result = mutator(state)
+            self._budgets[agent_id] = {"agent_id": agent_id, **state}
+            return result
 
 
 class SqliteStore(GovernanceStore):
-    """Durable store. Thread-safe via a lock + check_same_thread=False."""
+    """Durable store, safe across processes. isolation_level=None lets us run explicit
+    BEGIN IMMEDIATE transactions so the chained-append and budget-mutate are serialized
+    across multiple workers (SQLite file lock); busy_timeout makes contenders wait."""
+
+    GENESIS = "0" * 64
 
     def __init__(self, path: str = "agentbridge_governance.db"):
         self._lock = threading.RLock()
-        self._db = sqlite3.connect(path, check_same_thread=False)
+        self._db = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self._db.row_factory = sqlite3.Row
+        self._db.execute("PRAGMA busy_timeout=10000")
+        self._db.execute("PRAGMA journal_mode=WAL")
         self._init_schema()
 
     def _init_schema(self):
@@ -156,6 +197,44 @@ class SqliteStore(GovernanceStore):
             rows = self._db.execute("SELECT entry FROM audit ORDER BY seq").fetchall()
         return [json.loads(r["entry"]) for r in rows]
 
+    def append_audit_chained(self, build_entry):
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")          # write lock -> serialize across procs
+            try:
+                row = self._db.execute(
+                    "SELECT seq, entry FROM audit ORDER BY seq DESC LIMIT 1").fetchone()
+                if row:
+                    last = json.loads(row["entry"])
+                    seq, prev_hash = last["seq"] + 1, last["entry_hash"]
+                else:
+                    seq, prev_hash = 0, self.GENESIS
+                entry = build_entry(seq, prev_hash)
+                self._db.execute("INSERT INTO audit(seq, entry) VALUES(?,?)",
+                                 (entry["seq"], json.dumps(entry)))
+                self._db.execute("COMMIT")
+                return entry
+            except Exception:
+                self._db.execute("ROLLBACK")
+                raise
+
+    def mutate_budget(self, agent_id, mutator):
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._db.execute("SELECT state FROM budgets WHERE agent_id=?",
+                                       (agent_id,)).fetchone()
+                state = json.loads(row["state"]) if row else {}
+                result = mutator(state)
+                self._db.execute(
+                    "INSERT INTO budgets(agent_id, state) VALUES(?,?) "
+                    "ON CONFLICT(agent_id) DO UPDATE SET state=excluded.state",
+                    (agent_id, json.dumps(state)))
+                self._db.execute("COMMIT")
+                return result
+            except Exception:
+                self._db.execute("ROLLBACK")
+                raise
+
     def close(self) -> None:
         with self._lock:
             self._db.close()
@@ -169,10 +248,14 @@ class PostgresStore(GovernanceStore):
     planes. `psycopg` (v3) is imported lazily, so it's only required when you actually
     choose a postgres URL — the default SQLite/in-memory paths need no extra deps.
 
-    NOTE: validate against a live Postgres before relying on it in production
-    (integration test: tests/test_postgres_store.py, skipped unless AGENTBRIDGE_TEST_PG
-    points at a throwaway database).
+    Verified against real postgres:16 — identity/budget/audit roundtrips AND the multi-worker
+    advisory-lock concurrency path (audit chain doesn't fork, budgets don't double-spend across
+    separate connections). Integration tests: tests/test_postgres_store.py (6 tests, skipped
+    unless AGENTBRIDGE_TEST_PG points at a throwaway database). Still validate against your own
+    managed Postgres before production reliance.
     """
+
+    GENESIS = "0" * 64
 
     def __init__(self, dsn: str):
         try:
@@ -258,6 +341,38 @@ class PostgresStore(GovernanceStore):
             cur.execute("SELECT entry FROM audit ORDER BY seq")
             rows = cur.fetchall()
         return [json.loads(r["entry"]) for r in rows]
+
+    # Cluster-wide serialization via transaction-scoped advisory locks (distinct keys so
+    # audit appends and budget mutations don't block each other unnecessarily).
+    _AUDIT_LOCK_KEY = 911001
+
+    def append_audit_chained(self, build_entry):
+        with self._lock, self._db.transaction(), self._db.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (self._AUDIT_LOCK_KEY,))
+            cur.execute("SELECT seq, entry FROM audit ORDER BY seq DESC LIMIT 1")
+            row = cur.fetchone()
+            if row:
+                last = json.loads(row["entry"])
+                seq, prev_hash = last["seq"] + 1, last["entry_hash"]
+            else:
+                seq, prev_hash = 0, self.GENESIS
+            entry = build_entry(seq, prev_hash)
+            cur.execute("INSERT INTO audit(seq, entry) VALUES(%s,%s)",
+                        (entry["seq"], json.dumps(entry)))
+            return entry
+
+    def mutate_budget(self, agent_id, mutator):
+        with self._lock, self._db.transaction(), self._db.cursor() as cur:
+            # per-agent advisory lock so different agents don't serialize against each other
+            cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"budget:{agent_id}",))
+            cur.execute("SELECT state FROM budgets WHERE agent_id=%s", (agent_id,))
+            row = cur.fetchone()
+            state = json.loads(row["state"]) if row else {}
+            result = mutator(state)
+            cur.execute("INSERT INTO budgets(agent_id, state) VALUES(%s,%s) "
+                        "ON CONFLICT(agent_id) DO UPDATE SET state=EXCLUDED.state",
+                        (agent_id, json.dumps(state)))
+            return result
 
     def close(self) -> None:
         with self._lock:

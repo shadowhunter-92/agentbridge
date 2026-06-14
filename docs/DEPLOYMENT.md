@@ -57,9 +57,29 @@ Chosen automatically from `AGENTBRIDGE_DB` via `make_store()`:
 | `/path/to/governance.db` | SQLite | Single node, durable across restarts. |
 | `postgresql://user:pass@host/db` | Postgres | Multi-instance / horizontally-scaled control planes. Needs `pip install "psycopg[binary]"`. |
 
-> The Postgres backend mirrors the SQLite one behind the same interface. Validate it
-> against a throwaway Postgres before relying on it: set `AGENTBRIDGE_TEST_PG` and run
-> `pytest tests/test_postgres_store.py`.
+> The Postgres backend mirrors the SQLite one behind the same interface and is **verified
+> against real `postgres:16`** — including the multi-worker advisory-lock concurrency path
+> (`tests/test_postgres_store.py`, 6 tests). Still validate against *your* managed Postgres
+> before relying on it: set `AGENTBRIDGE_TEST_PG` and run `pytest tests/test_postgres_store.py`.
+
+### Workers & scaling
+
+The audit-chain append and budget reserve/commit are **atomic store-side operations**, so you
+can run multiple workers/replicas **as long as they share a durable store**:
+
+```bash
+# Multiple workers, single node — share one SQLite file:
+AGENTBRIDGE_DB=/var/lib/agentbridge/governance.db uvicorn src.api.control_plane:app --workers 4
+
+# Multiple replicas behind a load balancer — share one Postgres:
+AGENTBRIDGE_DB=postgresql://user:pass@host/db uvicorn src.api.control_plane:app --workers 4
+```
+
+The chain can't fork and budgets can't double-spend across workers (proven by
+`tests/test_concurrency.py`). **Do not** run `--workers > 1` on the default in-memory store —
+each worker would keep its own state. One piece of runtime state is still in-process, the human
+**approval queue**; if you use approvals, pin that traffic to one instance until it's
+store-backed. See `docs/ENTERPRISE.md` → *Concurrency & scaling*.
 
 ## 5. Security model (what's enforced today)
 

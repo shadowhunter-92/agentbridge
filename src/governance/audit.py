@@ -58,24 +58,23 @@ class AuditLog:
     def record(self, *, actor: str, action: str, source_protocol: str,
                target_protocol: str, capability: str, decision: str,
                reason: str = "", cost: float = 0.0) -> AuditEntry:
-        with self._lock:
-            prev_hash = self._entries[-1].entry_hash if self._entries else self.GENESIS
+        # The seq + prev_hash come from the DURABLE head inside the store's atomic section,
+        # NOT from this process's in-memory view — so concurrent workers cannot fork the
+        # chain (each gets a distinct, correctly-linked seq). See store.append_audit_chained.
+        def build(seq: int, prev_hash: str) -> Dict[str, Any]:
             entry = AuditEntry(
-                seq=len(self._entries),
-                timestamp=_now(),
-                actor=actor,
-                action=action,
-                source_protocol=source_protocol,
-                target_protocol=target_protocol,
-                capability=capability,
-                decision=decision,
-                reason=reason,
-                cost=cost,
+                seq=seq, timestamp=_now(), actor=actor, action=action,
+                source_protocol=source_protocol, target_protocol=target_protocol,
+                capability=capability, decision=decision, reason=reason, cost=cost,
                 prev_hash=prev_hash,
             )
             entry.entry_hash = entry.compute_hash()
-            self._entries.append(entry)
-            self.store.append_audit(asdict(entry))
+            return asdict(entry)
+
+        with self._lock:
+            rec = self.store.append_audit_chained(build)
+            entry = AuditEntry(**rec)
+            self._entries.append(entry)        # local cache; the store is the source of truth
             return entry
 
     def entries(self) -> List[AuditEntry]:
@@ -86,16 +85,25 @@ class AuditLog:
         return "\n".join(json.dumps(asdict(e), sort_keys=True) for e in self._entries)
 
     def verify_integrity(self) -> bool:
-        """True iff the chain is intact (no entry altered, removed, or reordered)."""
-        prev = self.GENESIS
-        for i, entry in enumerate(self._entries):
-            if entry.seq != i:
+        """True iff this process's in-memory view of the chain is intact."""
+        return self.verify_chain([asdict(e) for e in self._entries])
+
+    def verify_durable(self) -> bool:
+        """Load the full chain from the store and verify it — the true cross-worker check."""
+        return self.verify_chain(self.store.load_audit())
+
+    @staticmethod
+    def verify_chain(records: List[Dict[str, Any]]) -> bool:
+        """Verify a list of audit-entry dicts: sequential seqs from 0, intact hash links, and
+        each entry_hash matches a recompute (detects fork, reorder, edit, or deletion)."""
+        prev = AuditLog.GENESIS
+        for i, rec in enumerate(sorted(records, key=lambda r: r["seq"])):
+            if rec["seq"] != i or rec["prev_hash"] != prev:
                 return False
-            if entry.prev_hash != prev:
+            fields = {k: rec[k] for k in AuditEntry.__dataclass_fields__ if k in rec}
+            if AuditEntry(**fields).compute_hash() != rec["entry_hash"]:
                 return False
-            if entry.entry_hash != entry.compute_hash():
-                return False
-            prev = entry.entry_hash
+            prev = rec["entry_hash"]
         return True
 
     # --- signed checkpoints (compliance / third-party verifiable) ---------------------

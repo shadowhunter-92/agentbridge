@@ -100,6 +100,21 @@ class Budget:
                    calls=s.get("calls", []))
 
 
+# --- pure helpers operating on a persisted budget-state dict --------------------------
+# The durable state dict carries spend_limit, rate_limit, window_seconds, spent,
+# calls[] and reserved{token: cost}. reserve/commit/release mutate it in place; running
+# them INSIDE store.mutate_budget()'s atomic section is what makes them cross-worker safe
+# (the old in-memory _reserved/_calls forked across processes -> double-spend).
+
+def _prune(state: Dict, now: float) -> None:
+    cutoff = now - state["window_seconds"]
+    state["calls"] = [t for t in state.get("calls", []) if t > cutoff]
+
+
+def _reserved_sum(state: Dict) -> float:
+    return sum(state.get("reserved", {}).values())
+
+
 class BudgetManager:
     def __init__(self, store: Optional[GovernanceStore] = None, default_factory=None):
         self.store = store or InMemoryStore()
@@ -114,10 +129,13 @@ class BudgetManager:
 
     def get(self, agent_id: str) -> Budget:
         with self._lock:
-            if agent_id in self._budgets:
-                return self._budgets[agent_id]
             rec = self.store.get_budget(agent_id)
-            budget = Budget.from_state(rec) if rec else self._default_factory()
+            if rec:
+                budget = Budget.from_state(rec)
+            elif agent_id in self._budgets:
+                budget = self._budgets[agent_id]
+            else:
+                budget = self._default_factory()
             self._budgets[agent_id] = budget
             return budget
 
@@ -125,3 +143,78 @@ class BudgetManager:
         with self._lock:
             if agent_id in self._budgets:
                 self.store.upsert_budget(agent_id, self._budgets[agent_id].state())
+
+    def _seed(self, agent_id: str, state: Dict) -> Dict:
+        """Fill an empty/partial persisted state with this agent's defaults."""
+        if not state:
+            with self._lock:
+                base = self._budgets.get(agent_id)
+            state.update((base.state() if base else self._default_factory().state()))
+        state.setdefault("spent", 0.0)
+        state.setdefault("calls", [])
+        state.setdefault("reserved", {})
+        return state
+
+    # --- store-backed atomic operations (cross-worker safe) ---------------------------
+    def can_afford(self, agent_id: str, cost: float,
+                   now: Optional[float] = None) -> Tuple[bool, str]:
+        now = now if now is not None else time.time()
+
+        def mutator(state: Dict) -> Tuple[bool, str]:
+            self._seed(agent_id, state)
+            _prune(state, now)
+            reserved = _reserved_sum(state)
+            if state["spent"] + reserved + cost > state["spend_limit"]:
+                return False, (f"spend cap exceeded ({state['spent']}+{reserved}+{cost} "
+                               f"> {state['spend_limit']})")
+            if len(state["calls"]) + len(state["reserved"]) >= state["rate_limit"]:
+                return False, f"rate cap exceeded (>= {state['rate_limit']} in window)"
+            return True, "ok"
+
+        return self.store.mutate_budget(agent_id, mutator)
+
+    def reserve(self, agent_id: str, cost: float,
+                now: Optional[float] = None) -> Tuple[Optional[str], str]:
+        now = now if now is not None else time.time()
+
+        def mutator(state: Dict) -> Tuple[Optional[str], str]:
+            self._seed(agent_id, state)
+            _prune(state, now)
+            reserved = _reserved_sum(state)
+            if state["spent"] + reserved + cost > state["spend_limit"]:
+                return None, (f"spend cap exceeded ({state['spent']}+{reserved}+{cost} "
+                              f"> {state['spend_limit']})")
+            if len(state["calls"]) + len(state["reserved"]) >= state["rate_limit"]:
+                return None, f"rate cap exceeded (>= {state['rate_limit']} in window)"
+            token = uuid.uuid4().hex
+            state["reserved"][token] = cost
+            return token, "reserved"
+
+        result = self.store.mutate_budget(agent_id, mutator)
+        self._budgets.pop(agent_id, None)   # invalidate stale cache
+        return result
+
+    def commit(self, agent_id: str, token: str, now: Optional[float] = None) -> bool:
+        now = now if now is not None else time.time()
+
+        def mutator(state: Dict) -> bool:
+            self._seed(agent_id, state)
+            if token not in state["reserved"]:
+                return False
+            cost = state["reserved"].pop(token)
+            state["spent"] += cost
+            state["calls"].append(now)
+            return True
+
+        result = self.store.mutate_budget(agent_id, mutator)
+        self._budgets.pop(agent_id, None)
+        return result
+
+    def release(self, agent_id: str, token: str) -> bool:
+        def mutator(state: Dict) -> bool:
+            self._seed(agent_id, state)
+            return state["reserved"].pop(token, None) is not None
+
+        result = self.store.mutate_budget(agent_id, mutator)
+        self._budgets.pop(agent_id, None)
+        return result

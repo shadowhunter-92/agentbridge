@@ -9,7 +9,8 @@ built into the call path.
 *The whole product in 12 seconds: an unknown agent blocked, six protocols reaching one live MCP tool through the mesh, budget tracked, tamper-evident audit chain verified. Reproduce with `python examples/demo_story.py`.*
 
 > Status: working prototype. 6 protocols live + conformance-tested against real SDKs, a
-> governance plane, an HTTP control plane, and framework integrations. **146 tests passing.**
+> governance plane, an HTTP control plane, and framework integrations. **150 tests passing
+> (156 with a Postgres DB).**
 > Business demand still being validated — this is an early, honest work-in-progress.
 
 > **Name note:** this project (`github.com/shadowhunter-92/agentbridge`) is a Python
@@ -74,7 +75,7 @@ python -m src.serve.mcp_gateway
 .venv/Scripts/python examples/live_governed_proxy.py    # identity + budget + audit in action
 
 # Tests
-.venv/Scripts/python -m pytest tests/ -q                # 146 passing (+4 Postgres tests skip w/o a DB)
+.venv/Scripts/python -m pytest tests/ -q                # 150 passing; 156 with a Postgres DB (6 PG tests skip without one)
 ```
 
 ## Talk to agents yourself (any protocol)
@@ -183,9 +184,15 @@ Performance overhead is measured in `docs/BENCHMARKS.md`.
 - **Per-IP rate limiting** on `/control/*` (blunts admin-key brute force; `AGENTBRIDGE_RATE_LIMIT`).
 - Audit is hash-chained and tamper-evident; export via `/control/audit/export`.
 
-## Persistence
+## Persistence & multi-worker
 Chosen from `AGENTBRIDGE_DB`: unset → in-memory; a file path → SQLite (single node);
 a `postgres://` URL → Postgres (multi-instance; `pip install "psycopg[binary]"`).
+
+The audit-chain append and budget reserve/commit are **atomic store-side operations** (SQLite
+`BEGIN IMMEDIATE` / Postgres advisory locks), so **multiple workers/replicas are safe when they
+share a durable store** — the chain can't fork and budgets can't double-spend
+(`tests/test_concurrency.py` proves it across separate connections + threads). Use the in-memory
+store for single-worker/dev only. See `docs/ENTERPRISE.md` → *Concurrency & scaling*.
 
 ## Framework integrations (LangChain / CrewAI / AutoGen / LlamaIndex)
 

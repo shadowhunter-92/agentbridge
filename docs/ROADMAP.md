@@ -20,26 +20,32 @@ judge whether it fits your use case before relying on it.
   interface, chosen via `AGENTBRIDGE_DB`.
 - **Control plane** — authenticated HTTP API + **per-IP rate limiting** on `/control/*`.
 - **Drop-in MCP server** packaging.
-- **143 passing tests** + a one-screen live demo.
+- **Multi-worker safe with a shared store (audit chain + budgets).** The audit hash-chain
+  append and budget reserve/commit/release run as **atomic, store-side operations**
+  (`store.append_audit_chained` / `store.mutate_budget`) — SQLite `BEGIN IMMEDIATE` or Postgres
+  transaction-scoped advisory locks. Multiple workers/replicas sharing one SQLite file or a
+  Postgres DB cannot fork the chain or double-spend. Proven by `tests/test_concurrency.py`
+  (separate store connections + threads simulate separate processes). See `docs/ENTERPRISE.md`.
+- **150 passing tests; 156 with a Postgres DB** (6 Postgres integration tests — incl. real
+  multi-worker concurrency — skip without `AGENTBRIDGE_TEST_PG`) + a one-screen live demo.
 
 ## Known limitations (today)
 
 - **Tool-call focused canonical model.** The mesh maps capability + arguments + text well.
   It does **not** yet carry every protocol-specific feature (e.g. MCP resources/prompts/
   sampling, A2A streaming/push-notifications/status updates, ACP multi-turn sessions).
-- **Runtime state is in-memory in the gateway — single-worker only (important).** The audit
-  hash-chain (`AuditLog._entries`) and budget reservations (`Budget._reserved`) live in process
-  behind a per-process lock. This is correct for ONE worker, but multiple workers/replicas would
-  **fork the audit chain** (concurrent appends read the same `prev_hash` → `verify_integrity()`
-  fails) and **double-spend budgets** (concurrent `can_afford()` both pass). The control plane
-  warns loudly at startup. The fix — an atomic DB-side chain head + a `reservations` table with
-  `SELECT … FOR UPDATE` row locking — is **planned, built when a deployment needs multi-node.**
-  Single-worker (vertically scaled) is the supported topology today. See `docs/ENTERPRISE.md`.
+- **Multi-worker needs a shared durable store (not in-memory).** The cross-worker safety above
+  holds **only** when workers share a SqliteStore file or PostgresStore (`AGENTBRIDGE_DB`). The
+  default `InMemoryStore` is per-process and is for single-worker/dev only — running multiple
+  workers on the in-memory store would still fork state. Set `AGENTBRIDGE_DB` to a SQLite path
+  (single node) or a `postgres://` URL (multi-node) before scaling horizontally.
 - **No TLS at the app layer.** Terminate TLS at a reverse proxy or load balancer; don't
   expose the control plane plaintext on a public network (see `docs/DEPLOYMENT.md`).
 - **No metrics/tracing yet** — no OpenTelemetry/Prometheus export.
-- **Postgres backend is new** — validate against a throwaway DB (`AGENTBRIDGE_TEST_PG`)
-  before production reliance.
+- **Postgres backend** — verified against real `postgres:16` (identity/budget/audit roundtrips
+  **and** the multi-worker advisory-lock concurrency path; `tests/test_postgres_store.py`, 6
+  tests). Still validate against *your* managed Postgres before production reliance
+  (set `AGENTBRIDGE_TEST_PG`).
 
 ## The enterprise tier
 
@@ -90,16 +96,20 @@ found and fixed via that benchmark.
 
 ## Single point of failure / high availability
 
-As an inline component, AgentBridge is on the call path. Today it runs best as a single
-instance (or as a per-developer drop-in MCP server). True multi-instance HA behind a load
-balancer needs shared *runtime* state (below) so budgets/approvals don't diverge across
-replicas. Until then: run it close to the agents, monitor it, and fail over by restart.
+As an inline component, AgentBridge is on the call path. Runtime state (audit chain, budgets)
+is now safe across multiple instances **when they share a Postgres DB** (atomic advisory-locked
+operations — see above), so you can run replicas behind a load balancer without diverging
+budgets/audit. What's left for full HA is operational, not code: a managed/replicated Postgres,
+health checks, and a load balancer. Approvals (`ApprovalQueue`) are still in-process and not yet
+store-backed — route approval traffic to one instance or pin it until that's persisted (tracked
+below). For a single drop-in MCP server, run it close to the agents and fail over by restart.
 
 ## Planned next (demand-gated)
 
 In rough priority, built when a real use-case or user pulls for it:
 1. Observability (OpenTelemetry traces + metrics) once running real traffic.
-2. Shared runtime state (Redis / Postgres advisory locks) for true horizontal scaling + HA.
+2. Store-back the `ApprovalQueue` (same `mutate`-style atomic pattern as budgets) so the
+   *last* piece of in-process runtime state becomes multi-worker safe.
 3. Async / buffered audit writes (queue + flush) if durable-store write latency becomes a
    bottleneck under high call volume.
 4. A lightweight web dashboard for the control plane (live audit feed, budgets, pending

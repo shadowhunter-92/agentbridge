@@ -70,8 +70,8 @@ class PolicyEngine:
                 if not granted:
                     return Decision(False, r.reason, needs_approval=True)
 
-        # 5) budget (capacity check; reservation happens in the gateway)
-        ok, why = self.budgets.get(agent_id).can_afford(cost)
+        # 5) budget (capacity pre-check; the atomic reservation happens in the gateway)
+        ok, why = self.budgets.can_afford(agent_id, cost)
         if not ok:
             return Decision(False, why)
 

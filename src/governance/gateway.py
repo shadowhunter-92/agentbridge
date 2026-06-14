@@ -81,9 +81,10 @@ class GovernanceGateway:
             )
             raise GovernanceError(decision, entry, approval_id=approval_id)
 
-        # Atomically reserve budget before doing any work.
-        budget = self.budgets.get(agent_id)
-        token, why = budget.reserve(cost)
+        # Atomically reserve budget before doing any work. The reservation is recorded in
+        # the durable store inside an atomic section, so concurrent workers can't both pass
+        # the cap (the fix for the multi-worker double-spend).
+        token, why = self.budgets.reserve(agent_id, cost)
         if token is None:
             entry = self.audit.record(
                 actor=agent_id, action="route_call",
@@ -96,7 +97,7 @@ class GovernanceGateway:
             dst_wire = self.registry.translate_call(src_wire, src_proto, dst_proto)
             result = await invoke(dst_wire)
         except Exception as e:
-            budget.release(token)
+            self.budgets.release(agent_id, token)
             self.audit.record(
                 actor=agent_id, action="route_call",
                 source_protocol=src_proto, target_protocol=dst_proto,
@@ -104,8 +105,7 @@ class GovernanceGateway:
             )
             raise
 
-        budget.commit(token)
-        self.budgets.persist(agent_id)
+        self.budgets.commit(agent_id, token)
         if self.approvals and self.approvals.requires_approval(capability):
             self.approvals.consume(agent_id, capability)
         self.audit.record(

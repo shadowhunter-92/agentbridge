@@ -37,7 +37,7 @@ from ..protocols import default_registry
 from ..governance import (
     AgentIdentity, IdentityRegistry, BudgetManager, Budget, ApprovalQueue,
     PolicyEngine, AuditLog, GovernanceGateway, GovernanceError,
-    RequestAuthenticator, make_store,
+    RequestAuthenticator, make_store, InMemoryStore,
     PolicySet, MaxCostPerCall, RequireApprovalAboveCost, DenyCapabilities,
     AllowOnlyCapabilities, BusinessHoursOnly, DenyProtocolRoute,
     require as rbac_require, AccessDenied,
@@ -66,17 +66,24 @@ gateway = GovernanceGateway(identities=identities, budgets=budgets, approvals=ap
                             policy=policy, audit=audit, registry=registry)
 authenticator = RequestAuthenticator(identities)
 
-# --- concurrency safety: governance state is in-process (single-worker only) ----------
-# The audit hash-chain and budget reservations are maintained IN MEMORY (with a per-process
-# lock). Running multiple workers/replicas would fork the audit chain (verify_integrity()
-# fails) and double-spend budgets — so the control plane must run as a SINGLE worker until
-# shared-state HA lands (atomic DB-side chain + reservations; see docs/ROADMAP.md). This
-# warns loudly rather than failing, so dev/single-node use is unaffected.
-logger.warning(
-    "Governance state (audit chain + budget reservations) is in-process. Run a SINGLE "
-    "worker. Multiple workers/replicas will fork the audit chain and double-spend budgets "
-    "until shared-state HA lands (docs/ROADMAP.md)."
-)
+# --- concurrency safety: depends on the configured store ------------------------------
+# Audit-chain append and budget reserve/commit are atomic store-side operations
+# (store.append_audit_chained / store.mutate_budget), so multiple workers are SAFE when they
+# share a durable backend (SQLite file or Postgres). The default in-memory store is per-process,
+# so it is single-worker only. The approval queue is still in-process either way.
+# See docs/ENTERPRISE.md "Concurrency & scaling".
+if isinstance(store, InMemoryStore):
+    logger.warning(
+        "Governance store is IN-MEMORY (per-process). Run a SINGLE worker, or set "
+        "AGENTBRIDGE_DB to a SQLite path / postgres:// URL before scaling to multiple workers "
+        "(otherwise the audit chain forks and budgets double-spend). See docs/ENTERPRISE.md."
+    )
+else:
+    logger.info(
+        "Governance store is durable (%s); audit chain + budgets are multi-worker safe. "
+        "Note: the approval queue is still in-process — pin approval traffic to one instance.",
+        type(store).__name__,
+    )
 
 # --- optional OIDC operator SSO (env-configured) ---------------------------------------
 oidc_verifier: Optional[OidcVerifier] = None
