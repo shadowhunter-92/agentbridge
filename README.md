@@ -224,6 +224,13 @@ Real, tested controls enterprises ask for — all live over the control-plane HT
 Full usage + code: `docs/ENTERPRISE.md`. (Honestly *not* shipped as code: managed hosting and
 SOC 2 — those are operations and an audit process, not a library feature.)
 
+![Guardrails demo](guardrails.gif)
+
+*Governance in the call path: a policy **blocks** a forbidden capability, an over-budget call, and
+a needs-approval call — then a hash-chained, integrity-verified audit trail of every allow/deny.
+This is what EU AI Act Article 12 (automatic event logging for high-risk AI, from Aug 2026) looks
+like at runtime. Reproduce with `python examples/policy_guardrails_demo.py`.*
+
 ## Editions & pricing (direction)
 
 Open-core: the mesh + basic governance are free and self-hostable (Apache 2.0). Monetization is
