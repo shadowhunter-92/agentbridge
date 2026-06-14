@@ -96,6 +96,23 @@ Datadog / S3 on a schedule, and store periodic signed checkpoints alongside it.
 
 ---
 
+## Concurrency & scaling (read before you deploy)
+
+**Run the control plane as a single worker today.** The audit hash-chain and the budget
+reservation ledger are maintained **in process** (with a per-process lock). That is correct
+and safe for a single worker, but **multiple workers/replicas behind a load balancer would**:
+
+- **fork the audit chain** — two workers read the same `prev_hash` and append concurrently, so
+  `verify_integrity()` fails (the tamper-evidence breaks); and
+- **double-spend budgets** — two workers both pass `can_afford()` on the same in-memory state and
+  both reserve, overrunning the cap.
+
+The control plane logs a loud warning about this at startup. **Shared-state HA** (an atomic
+DB-side chain head + a `reservations` table with row-level locking, e.g. `SELECT … FOR UPDATE`)
+is the fix and is on the roadmap (`docs/ROADMAP.md`) — built when a deployment actually needs
+multi-node. Until then: one worker, vertically scaled, is the supported topology. (This is an
+honest known limitation, not a hidden one — credit to external code review for sharpening it.)
+
 ## Not code — handled honestly
 
 Two parts of the "enterprise tier" cannot be shipped as code in this repo:

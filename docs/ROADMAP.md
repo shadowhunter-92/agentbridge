@@ -27,10 +27,14 @@ judge whether it fits your use case before relying on it.
 - **Tool-call focused canonical model.** The mesh maps capability + arguments + text well.
   It does **not** yet carry every protocol-specific feature (e.g. MCP resources/prompts/
   sampling, A2A streaming/push-notifications/status updates, ACP multi-turn sessions).
-- **Runtime state is in-memory in the gateway.** Postgres shares *persistence* across
-  instances, but the `BudgetManager`/`ApprovalQueue` hold *live* state in-process — true
-  multi-instance horizontal scaling needs shared runtime state (Redis/Postgres advisory
-  locks). Single-instance deployments are unaffected.
+- **Runtime state is in-memory in the gateway — single-worker only (important).** The audit
+  hash-chain (`AuditLog._entries`) and budget reservations (`Budget._reserved`) live in process
+  behind a per-process lock. This is correct for ONE worker, but multiple workers/replicas would
+  **fork the audit chain** (concurrent appends read the same `prev_hash` → `verify_integrity()`
+  fails) and **double-spend budgets** (concurrent `can_afford()` both pass). The control plane
+  warns loudly at startup. The fix — an atomic DB-side chain head + a `reservations` table with
+  `SELECT … FOR UPDATE` row locking — is **planned, built when a deployment needs multi-node.**
+  Single-worker (vertically scaled) is the supported topology today. See `docs/ENTERPRISE.md`.
 - **No TLS at the app layer.** Terminate TLS at a reverse proxy or load balancer; don't
   expose the control plane plaintext on a public network (see `docs/DEPLOYMENT.md`).
 - **No metrics/tracing yet** — no OpenTelemetry/Prometheus export.

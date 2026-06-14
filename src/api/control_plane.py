@@ -66,6 +66,18 @@ gateway = GovernanceGateway(identities=identities, budgets=budgets, approvals=ap
                             policy=policy, audit=audit, registry=registry)
 authenticator = RequestAuthenticator(identities)
 
+# --- concurrency safety: governance state is in-process (single-worker only) ----------
+# The audit hash-chain and budget reservations are maintained IN MEMORY (with a per-process
+# lock). Running multiple workers/replicas would fork the audit chain (verify_integrity()
+# fails) and double-spend budgets — so the control plane must run as a SINGLE worker until
+# shared-state HA lands (atomic DB-side chain + reservations; see docs/ROADMAP.md). This
+# warns loudly rather than failing, so dev/single-node use is unaffected.
+logger.warning(
+    "Governance state (audit chain + budget reservations) is in-process. Run a SINGLE "
+    "worker. Multiple workers/replicas will fork the audit chain and double-spend budgets "
+    "until shared-state HA lands (docs/ROADMAP.md)."
+)
+
 # --- optional OIDC operator SSO (env-configured) ---------------------------------------
 oidc_verifier: Optional[OidcVerifier] = None
 _oidc_issuer = os.getenv("AGENTBRIDGE_OIDC_ISSUER")
@@ -126,11 +138,13 @@ def operator_guard(permission: str):
     return guard
 
 
-async def authenticate_agent(request: Request) -> str:
+async def authenticate_agent(request: Request, raw_body: Optional[bytes] = None) -> str:
+    """Verify the Ed25519 signed request. Pass `raw_body` if you've already read it
+    (so the body is read exactly once per request)."""
     agent_id = request.headers.get("X-Agent-Id", "")
     nonce = request.headers.get("X-Nonce", "")
     signature = request.headers.get("X-Signature", "")
-    body = await request.body()
+    body = raw_body if raw_body is not None else await request.body()
     ok, reason = authenticator.authenticate(agent_id, nonce, body, signature)
     if not ok:
         raise HTTPException(401, f"agent auth failed: {reason}")
@@ -343,9 +357,10 @@ async def _invoke_target(dst_proto: str, dst_wire: Dict[str, Any],
 
 @app.post("/control/route")
 async def governed_route(request: Request):
-    agent_id = await authenticate_agent(request)
     import json
-    body = json.loads(await request.body() or b"{}")
+    raw = await request.body()                       # read the body ONCE
+    agent_id = await authenticate_agent(request, raw)
+    body = json.loads(raw or b"{}")
     src, dst, wire = body.get("src"), body.get("dst"), body.get("wire")
     cost = float(body.get("cost", 1.0))
     target = body.get("target")
@@ -370,9 +385,10 @@ async def governed_route(request: Request):
 
 @app.post("/control/authorize")
 async def authorize(request: Request):
-    agent_id = await authenticate_agent(request)
     import json
-    body = json.loads(await request.body() or b"{}")
+    raw = await request.body()                       # read the body ONCE
+    agent_id = await authenticate_agent(request, raw)
+    body = json.loads(raw or b"{}")
     d = policy.authorize(agent_id=agent_id, capability=body.get("capability", ""),
                          cost=float(body.get("cost", 1.0)))
     return {"allowed": d.allowed, "reason": d.reason, "needs_approval": d.needs_approval}
