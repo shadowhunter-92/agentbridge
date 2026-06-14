@@ -73,6 +73,7 @@ python -m src.serve.mcp_gateway
 # Live demos (real agents on both ends)
 .venv/Scripts/python examples/live_nprotocol_proxy.py   # OpenAI/ACP -> live MCP, MCP -> live ACP
 .venv/Scripts/python examples/live_governed_proxy.py    # identity + budget + audit in action
+.venv/Scripts/python examples/policy_guardrails_demo.py # policy BLOCKS risky calls + provable audit trail
 
 # Tests
 .venv/Scripts/python -m pytest tests/ -q                # 150 passing; 156 with a Postgres DB (6 PG tests skip without one)
