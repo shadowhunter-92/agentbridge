@@ -126,10 +126,11 @@
 <div id="fit">
   <div id="stage">
     <div id="bar"></div>
+    <audio id="vo" src="voiceover.mp3" preload="auto"></audio>
     <div class="brandbar"><span class="logo"></span><b>AgentBridge</b><span>governance for AI agents</span></div>
 
     <!-- 1 HOOK -->
-    <section class="scene" data-dur="5500">
+    <section class="scene" data-dur="8500">
       <div class="kick up d1">The problem</div>
       <h1 class="up d2">Your AI agents are <span class="accent">acting.</span></h1>
       <h1 class="up d4" style="margin-top:10px">Can you prove what they did?</h1>
@@ -137,7 +138,7 @@
     </section>
 
     <!-- 2 WHAT IT IS -->
-    <section class="scene" data-dur="6800">
+    <section class="scene" data-dur="8500">
       <div class="wordmark up d1">AgentBridge</div>
       <p class="sub up d3" style="margin-top:8px">One neutral mesh every agent speaks through.</p>
       <div class="verbs up d4">translate · route · verify · govern</div>
@@ -148,7 +149,7 @@
     </section>
 
     <!-- 3 POLICY -->
-    <section class="scene" data-dur="6000">
+    <section class="scene" data-dur="13000">
       <div class="kick up d1">Governance in the call path</div>
       <div class="card up d2">
         <div class="hd"><span class="dot" style="background:var(--lime)"></span> Policy · <span class="mono">agent-007</span></div>
@@ -161,7 +162,7 @@
     </section>
 
     <!-- 4 ALLOWED / BLOCKED -->
-    <section class="scene" data-dur="8000">
+    <section class="scene" data-dur="9000">
       <div class="kick up d1">Enforced before the tool is ever touched</div>
       <div class="card up d2">
         <div class="bd" style="padding-top:24px">
@@ -174,7 +175,7 @@
     </section>
 
     <!-- 5 AUDIT PROOF -->
-    <section class="scene" data-dur="7000">
+    <section class="scene" data-dur="7500">
       <div class="kick up d1">The proof</div>
       <div class="chain">
         <div class="blk up d2"><span class="seq mono">#0</span><span class="dec a">allow</span><span class="cap">add</span><span class="hash">d196e0c5…</span></div>
@@ -219,11 +220,14 @@ function scaleStage(){
 addEventListener('resize',scaleStage); scaleStage();
 
 function clearAll(){ timers.forEach(clearTimeout); timers=[]; cancelAnimationFrame(raf);
+  const vo=document.getElementById('vo'); if(vo){ try{vo.pause();}catch(e){} }
   scenes.forEach(s=>s.classList.remove('live')); }
 
 function play(){
   clearAll();
   document.getElementById('hint').classList.add('hide');
+  const vo=document.getElementById('vo');
+  if(vo){ try{ vo.currentTime=0; vo.volume=1; vo.play(); }catch(e){} }
   let acc=0;
   scenes.forEach((sc)=>{
     const dur=+sc.dataset.dur;
