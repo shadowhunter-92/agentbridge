@@ -13,6 +13,38 @@ Both use the official SDKs (`mcp`, `a2a-sdk`). They are async.
 from typing import Any, Dict, List, Optional
 
 
+async def list_mcp_tools(command: str, args: List[str]) -> List[Dict[str, Any]]:
+    """Discovery: connect to a live MCP server (stdio) and list the tools it offers.
+
+    Returns: [{"name": ..., "description": ..., "input_schema": {...}}, ...]
+    """
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+
+    params = StdioServerParameters(command=command, args=args)
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            listed = await session.list_tools()
+    return [{"name": t.name,
+             "description": getattr(t, "description", "") or "",
+             "input_schema": getattr(t, "inputSchema", None)}
+            for t in listed.tools]
+
+
+async def fetch_a2a_card(base_url: str, timeout: float = 15.0) -> Dict[str, Any]:
+    """Discovery: fetch a live A2A agent's AgentCard (its name, skills, capabilities).
+
+    This is how you find out what a remote A2A agent can do before talking to it.
+    """
+    import httpx
+    from a2a.client import A2ACardResolver
+
+    async with httpx.AsyncClient(timeout=timeout) as hc:
+        card = await A2ACardResolver(hc, base_url).get_agent_card()
+    return card.model_dump(mode="json", exclude_none=True)
+
+
 async def call_mcp_tool(
     command: str,
     args: List[str],

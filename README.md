@@ -9,7 +9,7 @@ built into the call path.
 *The whole product in 12 seconds: an unknown agent blocked, six protocols reaching one live MCP tool through the mesh, budget tracked, tamper-evident audit chain verified. Reproduce with `python examples/demo_story.py`.*
 
 > Status: working prototype. 6 protocols live + conformance-tested against real SDKs, a
-> governance plane, an HTTP control plane, and framework integrations. **143 tests passing.**
+> governance plane, an HTTP control plane, and framework integrations. **146 tests passing.**
 > Business demand still being validated — this is an early, honest work-in-progress.
 
 > **Name note:** this project (`github.com/shadowhunter-92/agentbridge`) is a Python
@@ -74,7 +74,7 @@ python -m src.serve.mcp_gateway
 .venv/Scripts/python examples/live_governed_proxy.py    # identity + budget + audit in action
 
 # Tests
-.venv/Scripts/python -m pytest tests/ -q                # 143 passing (+4 Postgres tests skip w/o a DB)
+.venv/Scripts/python -m pytest tests/ -q                # 146 passing (+4 Postgres tests skip w/o a DB)
 ```
 
 ## Talk to agents yourself (any protocol)
@@ -101,7 +101,24 @@ asyncio.run(main())
 ```
 
 Swap `to="mcp"` for `a2a`, `acp`, `gemini`, or `agntcy` to reach an agent on that protocol.
-For agent discovery (A2A AgentCards) and live handshakes, see `examples/live_*_handshake.py`.
+
+**Human client (discover + talk, from the CLI).** Point it at any agent, see what it can do,
+and call it — across protocols:
+
+```bash
+# Discover what an agent offers (MCP tools / A2A AgentCard):
+python -m src.serve.agent_client discover --mcp "python examples/mcp_server_agent.py"
+python -m src.serve.agent_client discover --a2a http://localhost:9100
+
+# Call / talk to it:
+python -m src.serve.agent_client call --mcp "python examples/mcp_server_agent.py" --tool add --args '{"a":2,"b":3}'
+python -m src.serve.agent_client talk --a2a http://localhost:9100 --message "hello"
+```
+
+Reaching real third-party tools (GitHub, Slack, Notion, …) works the same way — you point the
+bridge at the tool's existing **MCP server**, no connector to build. See
+[`docs/CONNECTORS.md`](docs/CONNECTORS.md) and the worked GitHub example
+(`examples/github_mcp_bridge.py`).
 
 ## Protocol support matrix
 
@@ -218,6 +235,7 @@ Detail + the demand-gated roadmap: `docs/ROADMAP.md`.
 - `docs/DEPLOYMENT.md` — how to run it, configure it, and the honest production checklist
 - `docs/API_REFERENCE.md` — the control-plane HTTP endpoints
 - `docs/INTEGRATIONS.md` — wire LangChain / CrewAI / AutoGen / LlamaIndex to any protocol
+- `docs/CONNECTORS.md` — reach GitHub / Slack / Notion / … via their MCP servers (no connectors to build)
 - `docs/ENTERPRISE.md` — policy engine v2, RBAC, OIDC SSO, signed audit checkpoints
 - `docs/ROADMAP.md` — what's done, known limitations, and what's deferred (honest)
 - `docs/PROTOCOL_SUPPORT.md` — the protocol support matrix + conformance approach
