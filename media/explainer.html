@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AgentBridge — explainer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#070809; --ink2:#0d0f14; --line:#23262e;
+    --bone:#ECEAE3; --dim:#9aa0ab; --faint:#5f656f;
+    --lime:#C9F24E; --green:#7BE3A1; --amber:#E7B24C; --danger:#FF6B6B;
+    --glow: rgba(201,242,78,.16);
+    --ease:cubic-bezier(.22,1,.36,1);
+    --stageW:1920px; --stageH:1080px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#000;overflow:hidden;font-family:'Inter',system-ui,sans-serif;color:var(--bone)}
+  #fit{position:fixed;inset:0;overflow:hidden;background:#000}
+  /* fixed 1080p stage, scaled to fit any screen → consistent framing for recording */
+  #stage{
+    position:absolute;left:50%;top:50%;width:var(--stageW);height:var(--stageH);
+    background:
+      radial-gradient(120% 120% at 78% 12%, rgba(201,242,78,.10), transparent 46%),
+      radial-gradient(120% 120% at 12% 96%, rgba(80,120,255,.07), transparent 50%),
+      linear-gradient(160deg,#0c0e13 0%, #07080b 60%, #050608 100%);
+    overflow:hidden;transform-origin:center center;
+  }
+  /* subtle moving grid for depth */
+  #stage::before{
+    content:"";position:absolute;inset:-2px;
+    background-image:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),
+                     linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px);
+    background-size:64px 64px;mask-image:radial-gradient(120% 100% at 50% 40%,#000 55%,transparent 100%);
+    animation:drift 26s linear infinite;
+  }
+  @keyframes drift{from{background-position:0 0,0 0}to{background-position:64px 0,0 64px}}
+  /* vignette + grain */
+  #stage::after{content:"";position:absolute;inset:0;pointer-events:none;
+    box-shadow:inset 0 0 240px 60px rgba(0,0,0,.55);}
+
+  .brandbar{position:absolute;left:72px;top:64px;display:flex;align-items:center;gap:14px;z-index:30;opacity:.0;animation:fadeIn .8s var(--ease) .3s forwards}
+  .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(140deg,var(--lime),#8fc63d);position:relative;box-shadow:0 0 24px var(--glow)}
+  .logo::after{content:"";position:absolute;inset:8px;border:2.5px solid #0b0c0f;border-radius:3px}
+  .brandbar b{font-weight:800;letter-spacing:.2px;font-size:21px}
+  .brandbar span{color:var(--faint);font-size:13px;font-weight:600;margin-left:2px}
+
+  /* progress timeline */
+  #bar{position:absolute;left:0;top:0;height:3px;background:var(--lime);width:0;z-index:40;box-shadow:0 0 14px var(--glow)}
+
+  .scene{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;
+    padding:0 140px;text-align:center;opacity:0;visibility:hidden;transition:opacity .5s var(--ease)}
+  .scene.live{opacity:1;visibility:visible}
+  .kick{color:var(--faint);font-weight:700;letter-spacing:3px;text-transform:uppercase;font-size:16px;margin-bottom:26px}
+
+  /* generic reveal helpers */
+  .up{opacity:0;transform:translateY(26px)}
+  .live .up{animation:up .6s var(--ease) forwards}
+  .live .d1{animation-delay:.05s}.live .d2{animation-delay:.14s}.live .d3{animation-delay:.23s}
+  .live .d4{animation-delay:.32s}.live .d5{animation-delay:.41s}.live .d6{animation-delay:.50s}.live .d7{animation-delay:.59s}
+  @keyframes up{to{opacity:1;transform:none}}
+  @keyframes fadeIn{to{opacity:1}}
+
+  h1{font-size:96px;line-height:1.02;font-weight:800;letter-spacing:-2px}
+  .sub{font-size:34px;color:var(--dim);font-weight:500;line-height:1.35;max-width:1180px}
+  .accent{color:var(--lime)}
+  .mono{font-family:'JetBrains Mono',monospace}
+
+  /* scene 2 — wordmark + chips */
+  .wordmark{font-size:128px;font-weight:900;letter-spacing:-4px;background:linear-gradient(180deg,#fff,#cfd3cf);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .verbs{margin-top:18px;font-size:30px;font-weight:700;letter-spacing:6px;color:var(--lime);text-transform:uppercase}
+  .chips{margin-top:54px;display:flex;gap:16px;flex-wrap:wrap;justify-content:center;max-width:1200px}
+  .chip{padding:14px 26px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.02);
+    font-weight:600;font-size:22px;color:var(--bone);backdrop-filter:blur(4px)}
+  .chip b{color:var(--lime)}
+
+  /* card (policy / calls / audit) */
+  .card{width:1180px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(180deg,rgba(20,23,29,.92),rgba(12,14,18,.92));
+    box-shadow:0 40px 120px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.04);overflow:hidden}
+  .card .hd{display:flex;align-items:center;gap:12px;padding:22px 30px;border-bottom:1px solid var(--line);font-weight:700;font-size:22px}
+  .dot{width:12px;height:12px;border-radius:50%}
+  .card .bd{padding:14px 30px 26px}
+  .row{display:flex;align-items:center;gap:18px;padding:18px 8px;border-bottom:1px solid rgba(255,255,255,.05);font-size:26px}
+  .row:last-child{border-bottom:0}
+  .tag{font-weight:800;font-family:'JetBrains Mono',monospace;font-size:22px;padding:6px 12px;border-radius:8px}
+  .tag.ok{color:#0a0c08;background:var(--green)}
+  .tag.no{color:#1a0b0b;background:var(--danger)}
+  .tag.pol{color:var(--bone);background:#1c2129;border:1px solid var(--line)}
+  .row .what{color:var(--bone);font-weight:600}
+  .row .why{color:var(--dim);font-size:22px;margin-left:auto;font-family:'JetBrains Mono',monospace}
+  .icon{font-size:26px;width:30px;text-align:center}
+
+  /* audit chain */
+  .chain{display:flex;flex-direction:column;gap:0;width:980px}
+  .blk{display:flex;align-items:center;gap:20px;padding:18px 24px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.02);position:relative}
+  .blk + .blk{margin-top:30px}
+  .blk + .blk::before{content:"";position:absolute;top:-30px;left:46px;width:2px;height:30px;background:linear-gradient(var(--lime),transparent);opacity:.7}
+  .blk .seq{font-family:'JetBrains Mono',monospace;color:var(--faint);font-weight:700;width:46px}
+  .blk .dec{font-family:'JetBrains Mono',monospace;font-weight:800;width:90px}
+  .blk .dec.a{color:var(--green)}.blk .dec.d{color:var(--danger)}
+  .blk .cap{font-weight:600;color:var(--bone)}
+  .blk .hash{margin-left:auto;font-family:'JetBrains Mono',monospace;color:var(--faint);font-size:20px}
+  .verified{margin-top:34px;font-size:40px;font-weight:800;color:var(--lime);display:flex;align-items:center;gap:14px}
+  .verified .badge{width:46px;height:46px;border-radius:50%;background:var(--lime);color:#0a0c08;display:grid;place-items:center;font-size:28px;box-shadow:0 0 30px var(--glow)}
+
+  .note{margin-top:22px;color:var(--faint);font-size:22px;font-family:'JetBrains Mono',monospace}
+
+  /* CTA */
+  .cta-url{font-size:46px;font-weight:800;color:#fff;font-family:'JetBrains Mono',monospace;margin-top:14px;
+    padding:18px 34px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.02)}
+  .euband{margin-top:30px;color:var(--amber);font-weight:700;font-size:24px;letter-spacing:.5px}
+
+  /* controls (hidden during recording) */
+  #ui{position:fixed;right:18px;bottom:16px;z-index:99;display:flex;gap:10px;font-family:'JetBrains Mono',monospace}
+  #ui button{background:#11141a;color:var(--bone);border:1px solid var(--line);padding:9px 14px;border-radius:9px;font-weight:700;cursor:pointer;font-size:13px}
+  #ui button:hover{border-color:var(--lime);color:var(--lime)}
+  #hint{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;text-align:center}
+  #hint .play{width:96px;height:96px;border-radius:50%;background:var(--lime);color:#0a0c08;border:0;font-size:38px;cursor:pointer;box-shadow:0 0 50px var(--glow);display:grid;place-items:center;margin:0 auto 18px}
+  #hint p{color:var(--dim);font-size:15px;font-family:'JetBrains Mono',monospace}
+  .hide{display:none!important}
+</style>
+</head>
+<body>
+<div id="fit">
+  <div id="stage">
+    <div id="bar"></div>
+    <div class="brandbar"><span class="logo"></span><b>AgentBridge</b><span>governance for AI agents</span></div>
+
+    <!-- 1 HOOK -->
+    <section class="scene" data-dur="5500">
+      <div class="kick up d1">The problem</div>
+      <h1 class="up d2">Your AI agents are <span class="accent">acting.</span></h1>
+      <h1 class="up d4" style="margin-top:10px">Can you prove what they did?</h1>
+      <p class="sub up d6" style="margin-top:34px">They call tools, move data, spend money — with no record, and no way to stop a bad call.</p>
+    </section>
+
+    <!-- 2 WHAT IT IS -->
+    <section class="scene" data-dur="6800">
+      <div class="wordmark up d1">AgentBridge</div>
+      <p class="sub up d3" style="margin-top:8px">One neutral mesh every agent speaks through.</p>
+      <div class="verbs up d4">translate · route · verify · govern</div>
+      <div class="chips">
+        <div class="chip up d4">MCP</div><div class="chip up d5">A2A</div><div class="chip up d5">ACP</div>
+        <div class="chip up d6">OpenAI</div><div class="chip up d6">Gemini</div><div class="chip up d7">AGNTCY</div>
+      </div>
+    </section>
+
+    <!-- 3 POLICY -->
+    <section class="scene" data-dur="6000">
+      <div class="kick up d1">Governance in the call path</div>
+      <div class="card up d2">
+        <div class="hd"><span class="dot" style="background:var(--lime)"></span> Policy · <span class="mono">agent-007</span></div>
+        <div class="bd">
+          <div class="row up d3"><span class="tag no">DENY</span><span class="what">capabilities</span><span class="why">wire_transfer · delete_database</span></div>
+          <div class="row up d4"><span class="tag pol">MAX</span><span class="what">cost per call</span><span class="why">3.0</span></div>
+          <div class="row up d5"><span class="tag pol">APPROVAL</span><span class="what">required above</span><span class="why">2.0</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4 ALLOWED / BLOCKED -->
+    <section class="scene" data-dur="8000">
+      <div class="kick up d1">Enforced before the tool is ever touched</div>
+      <div class="card up d2">
+        <div class="bd" style="padding-top:24px">
+          <div class="row up d2"><span class="tag ok">ALLOWED</span><span class="what">safe call</span><span class="why" style="color:var(--green)">→ 5</span></div>
+          <div class="row up d3"><span class="tag no">BLOCKED</span><span class="what">wire_transfer</span><span class="why">denied by policy</span></div>
+          <div class="row up d4"><span class="tag no">BLOCKED</span><span class="what">cost 4.0</span><span class="why">exceeds cap 3.0</span></div>
+          <div class="row up d5"><span class="tag no">BLOCKED</span><span class="what">cost 2.5</span><span class="why">needs human approval</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5 AUDIT PROOF -->
+    <section class="scene" data-dur="7000">
+      <div class="kick up d1">The proof</div>
+      <div class="chain">
+        <div class="blk up d2"><span class="seq mono">#0</span><span class="dec a">allow</span><span class="cap">add</span><span class="hash">d196e0c5…</span></div>
+        <div class="blk up d3"><span class="seq mono">#1</span><span class="dec d">deny</span><span class="cap">wire_transfer</span><span class="hash">500586d1…</span></div>
+        <div class="blk up d4"><span class="seq mono">#2</span><span class="dec d">deny</span><span class="cap">add</span><span class="hash">51c8326e…</span></div>
+        <div class="blk up d5"><span class="seq mono">#3</span><span class="dec d">deny</span><span class="cap">add</span><span class="hash">0a15540a…</span></div>
+      </div>
+      <div class="verified up d6"><span class="badge">✓</span> Audit integrity verified</div>
+      <div class="note up d7">tamper-evident · hash-chained · ~0.4 ms overhead</div>
+    </section>
+
+    <!-- 6 CTA -->
+    <section class="scene" data-dur="7500">
+      <h1 class="up d1" style="font-size:78px">Govern your agents.<br><span class="accent">Prove what they did.</span></h1>
+      <div class="euband up d3">EU AI Act · Article 12 · automatic event logging for high-risk AI · from Aug 2026</div>
+      <div class="cta-url up d5">github.com/shadowhunter-92/agentbridge</div>
+      <p class="sub up d6" style="margin-top:24px;font-size:26px">Open source · Apache-2.0 · any protocol in, any protocol out</p>
+    </section>
+  </div>
+</div>
+
+<div id="hint">
+  <button class="play" id="playBtn" aria-label="Play">▶</button>
+  <p>press <b>F</b> for fullscreen · <b>R</b> to replay · then screen-record</p>
+</div>
+<div id="ui">
+  <button id="rec">▶ play</button>
+  <button id="full">⛶ fullscreen</button>
+  <button id="replay">⟲ replay</button>
+</div>
+
+<script>
+const stage=document.getElementById('stage'), fit=document.getElementById('fit'), bar=document.getElementById('bar');
+const scenes=[...document.querySelectorAll('.scene')];
+const total=scenes.reduce((s,el)=>s+ +el.dataset.dur,0);
+let timers=[], raf=null, t0=0;
+
+function scaleStage(){
+  const s=Math.min(window.innerWidth/1920,window.innerHeight/1080);
+  stage.style.transform=`translate(-50%,-50%) scale(${s})`;
+}
+addEventListener('resize',scaleStage); scaleStage();
+
+function clearAll(){ timers.forEach(clearTimeout); timers=[]; cancelAnimationFrame(raf);
+  scenes.forEach(s=>s.classList.remove('live')); }
+
+function play(){
+  clearAll();
+  document.getElementById('hint').classList.add('hide');
+  let acc=0;
+  scenes.forEach((sc)=>{
+    const dur=+sc.dataset.dur;
+    timers.push(setTimeout(()=>{
+      scenes.forEach(s=>s.classList.remove('live'));
+      sc.classList.add('live');
+      // force every reveal element to restart its animation cleanly each time
+      sc.querySelectorAll('.up').forEach(e=>{ e.style.animation='none'; void e.offsetWidth; e.style.animation=''; });
+    }, acc));
+    acc+=dur;
+  });
+  // hold last scene; loop after a pause
+  timers.push(setTimeout(()=>{ play(); }, total+2200));
+  // progress bar
+  t0=performance.now();
+  const tick=()=>{ const e=performance.now()-t0; bar.style.width=Math.min(100,(e/total)*100)+'%'; raf=requestAnimationFrame(tick); };
+  tick();
+}
+function replay(){ bar.style.width='0'; play(); }
+function full(){ (document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()).catch(()=>{}); }
+
+document.getElementById('playBtn').onclick=play;
+document.getElementById('rec').onclick=play;
+document.getElementById('replay').onclick=replay;
+document.getElementById('full').onclick=full;
+addEventListener('keydown',e=>{ const k=e.key.toLowerCase(); if(k==='f')full(); if(k==='r')replay(); if(k===' '){e.preventDefault();play();} });
+</script>
+</body>
+</html>
