@@ -231,6 +231,10 @@ a needs-approval call — then a hash-chained, integrity-verified audit trail of
 This is what EU AI Act Article 12 (automatic event logging for high-risk AI, from Aug 2026) looks
 like at runtime. Reproduce with `python examples/policy_guardrails_demo.py`.*
 
+▶ **Watch the 54-second explainer** (motion graphics + voiceover):
+[shadowhunter-92.github.io/agentbridge/media/explainer.html](https://shadowhunter-92.github.io/agentbridge/media/explainer.html)
+— source: [`media/explainer.html`](media/explainer.html).
+
 ## Editions & pricing (direction)
 
 Open-core: the mesh + basic governance are free and self-hostable (Apache 2.0). Monetization is
