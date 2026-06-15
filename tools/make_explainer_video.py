@@ -4,6 +4,20 @@ voiceover). A separate ffmpeg step cuts them on the narration beats and muxes th
 
 Run:  .venv/Scripts/python tools/make_explainer_video.py
 Out:  media/_scenes/scene0.png ... scene5.png
+
+Then assemble with ffmpeg. IMPORTANT: use the concat *filter* with -loop inputs, NOT the
+concat *demuxer* (the demuxer drops the first still image's duration -> black opening):
+
+  ffmpeg -y \
+    -loop 1 -t 8.5 -i scene0.png -loop 1 -t 8.5 -i scene1.png -loop 1 -t 13 -i scene2.png \
+    -loop 1 -t 9 -i scene3.png -loop 1 -t 7.5 -i scene4.png -loop 1 -t 7.5 -i scene5.png \
+    -i ../voiceover.mp3 \
+    -filter_complex "[0:v][1:v][2:v][3:v][4:v][5:v]concat=n=6:v=1:a=0,\
+fade=t=in:st=0:d=0.6,fade=t=out:st=53.4:d=0.6,format=yuv420p,fps=25[v]" \
+    -map "[v]" -map 6:a -c:v libx264 -pix_fmt yuv420p -c:a aac -b:a 160k \
+    -shortest -movflags +faststart agentbridge_explainer.mp4
+
+Scene durations (s): 8.5 / 8.5 / 13 / 9 / 7.5 / 7.5 = 54s, matching voiceover.mp3.
 """
 from __future__ import annotations
 import os
