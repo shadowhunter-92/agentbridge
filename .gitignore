@@ -25,6 +25,9 @@ secrets.*
 *.pem
 *credentials*
 
+# Build artifacts for the marketing video (rendered scene PNGs)
+media/_scenes/
+
 # Runtime state / local databases
 *.db
 *.sqlite
