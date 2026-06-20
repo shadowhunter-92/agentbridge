@@ -3,7 +3,7 @@
 # Core dependencies
 fastapi>=0.109.0
 uvicorn>=0.27.0
-pydantic>=2.5.0
+pydantic>=2.13.4
 
 # Testing
 pytest>=7.4.0
