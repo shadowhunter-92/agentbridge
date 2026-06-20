@@ -63,3 +63,7 @@ docs/GOVERNANCE.md
 docs/VALIDATION_SPRINT.md
 docs/BATTLE_PLAN_30_DAYS.md
 docs/COMPLIANCE_OUTREACH_KIT.md
+
+# transient local test output
+_final.txt
+_*.txt

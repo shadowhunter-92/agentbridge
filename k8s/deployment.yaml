@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentbridge
+  labels:
+    app: agentbridge
+spec:
+  replicas: 1  # Must be 1 for SQLite; use >1 only with Postgres (AGENTBRIDGE_DB=postgres://...)
+  selector:
+    matchLabels:
+      app: agentbridge
+  template:
+    metadata:
+      labels:
+        app: agentbridge
+    spec:
+      containers:
+        - name: agentbridge
+          image: shadowhunter/agentbridge:latest
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: AGENTBRIDGE_ADMIN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentbridge-secrets
+                  key: admin-key
+            - name: AGENTBRIDGE_DB
+              value: "/app/data/governance.db"
+            # Uncomment for Postgres (required for replicas > 1)
+            # - name: AGENTBRIDGE_DB
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: agentbridge-secrets
+            #       key: database-url
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: agentbridge-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentbridge
+  labels:
+    app: agentbridge
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+  selector:
+    app: agentbridge
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agentbridge-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agentbridge-secrets
+type: Opaque
+stringData:
+  admin-key: "change-me-in-production"
+  # database-url: "postgresql://user:pass@postgres:5432/agentbridge"

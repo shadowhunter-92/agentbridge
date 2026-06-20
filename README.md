@@ -1,5 +1,9 @@
 # AgentBridge — the Meta-Bridge
 
+[![CI](https://github.com/shadowhunter-92/agentbridge/actions/workflows/ci.yml/badge.svg)](https://github.com/shadowhunter-92/agentbridge/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
+
 **One neutral mesh every agent speaks through: translate, route, verify, govern.**
 Any protocol in, any protocol out — with identity, budgets, and a tamper-evident audit trail
 built into the call path.
@@ -63,12 +67,20 @@ reg.translate_call(call, "openai", "mcp")     # -> a real MCP tools/call. That's
 Add identity, budgets, and a tamper-evident audit trail **only when you want them**:
 
 ```bash
-# Run the meta-bridge control plane (mesh + governance)
-uvicorn src.api.control_plane:app          # docs at http://localhost:8000/docs
+# Run the meta-bridge control plane (mesh + governance) — CLI or uvicorn
+python -m src serve                        # = uvicorn src.api.control_plane:app
+#   docs at /docs · status dashboard at /dashboard · health at /health
 #   set AGENTBRIDGE_ADMIN_KEY for operator endpoints; AGENTBRIDGE_DB=/path.db (or a postgres:// URL)
 
+# Or with Docker (healthcheck on /health, persistent SQLite volume)
+docker compose up
+
 # Or run it as a drop-in MCP server (stdio)
-python -m src.serve.mcp_gateway
+python -m src mcp                          # = python -m src.serve.mcp_gateway
+
+# Other CLI commands
+python -m src --version
+python -m src translate --from openai --to mcp   # show a one-off any-to-any translation
 
 # Live demos (real agents on both ends)
 .venv/Scripts/python examples/live_nprotocol_proxy.py   # OpenAI/ACP -> live MCP, MCP -> live ACP

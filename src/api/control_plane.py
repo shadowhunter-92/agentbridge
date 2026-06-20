@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Header, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .ratelimit import RateLimiter
@@ -54,6 +55,11 @@ _db = os.getenv("AGENTBRIDGE_DB")
 store = make_store(_db)  # None->in-memory, postgres URL->Postgres, else SQLite path
 
 app = FastAPI(title="AgentBridge Meta-Bridge Control Plane", version="1.0.0")
+
+# --- optional static status dashboard, served at /dashboard (reads live /health + /control/protocols)
+_static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.isdir(_static_dir):
+    app.mount("/dashboard", StaticFiles(directory=_static_dir, html=True), name="dashboard")
 
 registry = default_registry
 identities = IdentityRegistry(store=store)

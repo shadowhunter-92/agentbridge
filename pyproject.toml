@@ -1,0 +1,94 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentbridge"
+version = "1.0.0"
+description = "The Meta-Bridge — a neutral, protocol-agnostic interoperability + governance layer for multi-agent systems."
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.11"
+authors = [
+    {name = "Haider Ali Khan"}
+]
+keywords = [
+    "agent",
+    "mcp",
+    "a2a",
+    "acp",
+    "openai",
+    "gemini",
+    "agntcy",
+    "protocol",
+    "bridge",
+    "governance",
+    "audit",
+    "multi-agent"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Systems Administration",
+]
+
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "pydantic>=2.5.0",
+    "cryptography>=42.0.0",
+    "pyjwt>=2.8.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "httpx>=0.26.0",
+    "mcp>=1.27.0",
+    "a2a-sdk>=0.3.0,<1.0.0",
+    "acp-sdk>=1.0.0",
+    "openai>=2.0.0",
+    "google-genai>=1.0.0",
+    "agntcy-acp>=1.5.0",
+]
+postgres = [
+    "psycopg[binary]",
+]
+dev = [
+    "agentbridge[test,postgres]",
+]
+
+[project.scripts]
+agentbridge = "cli:main"
+
+[project.urls]
+Homepage = "https://github.com/shadowhunter-92/agentbridge"
+Documentation = "https://github.com/shadowhunter-92/agentbridge#readme"
+Repository = "https://github.com/shadowhunter-92/agentbridge"
+Issues = "https://github.com/shadowhunter-92/agentbridge/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]

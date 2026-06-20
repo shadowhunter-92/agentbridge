@@ -1,0 +1,31 @@
+# This file ensures non-Python files are included in the source distribution
+# when building the PyPI package.
+
+include LICENSE
+include NOTICE
+include README.md
+include CHANGELOG.md
+include CONTRIBUTING.md
+include SECURITY.md
+include CODE_OF_CONDUCT.md
+include AI_DISCLOSURE.md
+include requirements.txt
+include Makefile
+include .env.example
+include .pre-commit-config.yaml
+
+# Media and docs
+include demo.gif
+include guardrails.gif
+recursive-include docs *.md *.png
+recursive-include media *.html
+recursive-include landing *.html
+
+# Examples
+recursive-include examples *.py
+
+# Scripts
+recursive-include scripts *.sh *.ps1
+
+# Static assets
+recursive-include src/api/static *.html

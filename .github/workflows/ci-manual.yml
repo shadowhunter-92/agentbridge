@@ -1,0 +1,59 @@
+name: CI (Manual Trigger)
+
+on:
+  workflow_dispatch:
+    inputs:
+      python_version:
+        description: 'Python version to test'
+        required: true
+        default: '3.12'
+        type: choice
+        options:
+          - '3.11'
+          - '3.12'
+      test_suite:
+        description: 'Test suite to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - 'all'
+          - 'fast'
+          - 'live'
+          - 'governance'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-cov
+      - name: Run tests
+        run: |
+          case "${{ inputs.test_suite }}" in
+            all)
+              pytest tests/ -q --tb=short --cov=src --cov-report=xml
+              ;;
+            fast)
+              pytest tests/ -q --tb=short -m "not live"
+              ;;
+            live)
+              pytest tests/test_protocols_conformance.py tests/test_nprotocol_live.py tests/test_inline_proxy.py -v --tb=short
+              ;;
+            governance)
+              pytest tests/test_governance.py tests/test_governance_v2.py tests/test_enterprise_governance.py tests/test_concurrency.py -v --tb=short
+              ;;
+          esac
+      - name: Upload coverage
+        if: inputs.test_suite == 'all'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false

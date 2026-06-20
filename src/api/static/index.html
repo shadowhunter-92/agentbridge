@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>AgentBridge — Control Plane</title>
+<style>
+  :root{ --ink:#0b0c0f; --card:#14171d; --line:#23262e; --bone:#ECEAE3; --dim:#9aa0ab; --lime:#C9F24E; --red:#FF6B6B; }
+  *{box-sizing:border-box} body{margin:0;background:var(--ink);color:var(--bone);font-family:system-ui,Segoe UI,sans-serif}
+  .wrap{max-width:880px;margin:0 auto;padding:48px 24px}
+  .brand{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+  .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(140deg,var(--lime),#8fc63d);position:relative}
+  .logo::after{content:"";position:absolute;inset:8px;border:2.5px solid var(--ink);border-radius:3px}
+  h1{font-size:26px;margin:0} .sub{color:var(--dim);margin:4px 0 28px;font-size:15px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:18px}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px}
+  .ok{background:var(--lime)} .bad{background:var(--red)}
+  .label{color:var(--dim);font-size:13px;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .chip{border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:14px;font-weight:600}
+  .chip b{color:var(--lime)}
+  a{color:var(--lime);text-decoration:none} a:hover{text-decoration:underline}
+  .links a{margin-right:18px;font-weight:600}
+  .mono{font-family:ui-monospace,Consolas,monospace}
+  .foot{color:#5f656f;font-size:13px;margin-top:24px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><span class="logo"></span><h1>AgentBridge</h1></div>
+  <div class="sub">Control plane — live status. Translate, route, verify, govern across agent protocols.</div>
+
+  <div class="card">
+    <div class="label">Service health</div>
+    <div class="row">
+      <div id="status" class="mono"><span class="dot bad"></span> checking…</div>
+      <button id="refresh" style="background:#11141a;color:var(--bone);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer">refresh</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">Protocols in the mesh</div>
+    <div id="protocols" class="chips"><span class="chip">loading…</span></div>
+  </div>
+
+  <div class="card links">
+    <div class="label">Explore</div>
+    <a href="/docs" target="_blank">Interactive API (Swagger) ↗</a>
+    <a href="https://github.com/shadowhunter-92/agentbridge" target="_blank">Source ↗</a>
+  </div>
+
+  <div class="foot">Reads real endpoints: <span class="mono">/health</span> and <span class="mono">/control/protocols</span>. No mock data.</div>
+</div>
+
+<script>
+async function load(){
+  const s = document.getElementById('status');
+  try {
+    const h = await (await fetch('/health')).json();
+    s.innerHTML = `<span class="dot ok"></span> ${h.status} · ${(h.protocols||[]).length} protocols`;
+  } catch(e){ s.innerHTML = `<span class="dot bad"></span> unreachable`; }
+  try {
+    const p = await (await fetch('/control/protocols')).json();
+    document.getElementById('protocols').innerHTML =
+      (p.protocols||[]).map(x => `<span class="chip"><b>${x}</b></span>`).join('') || '<span class="chip">none</span>';
+  } catch(e){ document.getElementById('protocols').innerHTML = '<span class="chip">unavailable</span>'; }
+}
+document.getElementById('refresh').onclick = load;
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+# AgentBridge — Development Dockerfile
+# Use this for local development with hot reload.
+# For production, use the root Dockerfile.
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install dev dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy requirements first for layer caching
+COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Install dev extras
+RUN pip install pytest pytest-asyncio httpx
+
+# Copy source
+COPY . .
+
+# Install in editable mode
+RUN pip install -e ".[dev]"
+
+# Expose port
+EXPOSE 8000
+
+# Run with auto-reload for development
+CMD ["uvicorn", "src.api.control_plane:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

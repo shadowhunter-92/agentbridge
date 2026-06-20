@@ -1,0 +1,39 @@
+# Changelog
+
+All notable changes to AgentBridge will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added — production/repo hygiene
+- GitHub Actions **CI** workflow: runs the test suite on Python 3.11 and 3.12 (`.github/workflows/ci.yml`).
+- **`pyproject.toml`** packaging with optional extras (`[test]`, `[postgres]`, `[dev]`).
+- Root **`Dockerfile`** + **`docker-compose.yml`** (one-command run; healthcheck on `/health`).
+- Reference **Kubernetes** manifests (`k8s/`) — a starting point; validate against your own cluster.
+- **`agentbridge` CLI** (`python -m src` or `src.cli`): `serve`, `mcp`, `translate`, `demo`, `quickstart`, `--version`.
+- Static **status dashboard at `/dashboard`** — shows live `/health` and `/control/protocols` (no mock data).
+- README **badges** (CI, Python 3.11/3.12, license).
+- `Makefile`, `.pre-commit-config.yaml`, `.editorconfig`, `.env.example`, `MANIFEST.in`.
+- `docs/FAQ.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, GitHub issue/PR templates, Dependabot config.
+- `Dockerfile.dev` for development; one-line setup scripts (`scripts/install.sh|.ps1`, `scripts/run_demo.sh|.ps1`).
+- `examples/README.md` (examples guide); rendered `docs/architecture.png`; `docs/adr/` (architecture decision records).
+- `RELEASING.md` release checklist; `.github/FUNDING.yml` (GitHub Sponsors).
+- Additional GitHub Actions — `publish.yml` (PyPI on release), `docker-publish.yml` (Docker Hub on release), `ci-manual.yml` (manual): all **dormant** (release/manual-triggered, require secrets) so they can't produce a red badge before they're configured.
+- `tests/conftest.py` with reusable fixtures using the **real** governance API (replaces a hallucinated draft).
+
+> Deliberately NOT wired yet (needs an external account/secret to function): Codecov coverage upload + badge.
+
+## [1.0.0]
+
+### Added
+- 6-protocol any-to-any mesh: MCP, A2A, ACP, OpenAI, Gemini, AGNTCY — conformance-tested vs the real SDKs.
+- Canonical hub-and-spoke translation model (no N² pairwise mappings).
+- Governance plane: Ed25519 agent identities, per-agent budgets, human-in-the-loop approvals, tamper-evident hash-chained audit.
+- Policy engine v2: declarative rules (cost caps, capability allow/deny, business hours, route blocking).
+- RBAC for operators (admin/operator/viewer); OIDC/JWT operator SSO.
+- Control-plane HTTP API (FastAPI) with OpenAPI docs; drop-in MCP server packaging; in-line proxy.
+- Framework integration helpers (LangChain, CrewAI, AutoGen, LlamaIndex).
+- Multi-worker concurrency safety: atomic audit-chain + budget operations on a shared store (SQLite/Postgres).
+- 150 passing tests (156 with a Postgres DB).
