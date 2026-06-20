@@ -51,6 +51,7 @@ dependencies = [
 test = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
+    "pytest-timeout>=2.2.0",
     "httpx>=0.26.0",
     "mcp>=1.27.0",
     "a2a-sdk>=0.3.0,<1.0.0",
@@ -84,6 +85,10 @@ where = ["src"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Safety net: no single test may hang the suite (caught a real threaded deadlock). thread method
+# works cross-platform (incl. Windows). Long live-agent tests still finish well under this.
+timeout = 90
+timeout_method = "thread"
 
 [tool.ruff]
 line-length = 120

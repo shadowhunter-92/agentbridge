@@ -54,12 +54,17 @@ def _cleanup(path, stores):
             pass
 
 
-def _run(workers):
-    threads = [threading.Thread(target=w) for w in workers]
+def _run(workers, join_timeout=60):
+    # daemon=True so a stuck worker can never keep the process (or the test session) alive;
+    # join with a timeout and fail loudly instead of hanging forever if a thread deadlocks
+    # (e.g. a worker erroring before the barrier would otherwise block the others permanently).
+    threads = [threading.Thread(target=w, daemon=True) for w in workers]
     for t in threads:
         t.start()
     for t in threads:
-        t.join()
+        t.join(join_timeout)
+    stuck = [t for t in threads if t.is_alive()]
+    assert not stuck, f"{len(stuck)}/{len(threads)} worker thread(s) deadlocked (barrier/lock)"
 
 
 # --------------------------------------------------------------------------------------
@@ -73,7 +78,7 @@ def test_shared_audit_chain_does_not_fork_across_workers():
     slock = threading.Lock()
     try:
         n_workers, per_worker = 8, 25
-        barrier = threading.Barrier(n_workers)
+        barrier = threading.Barrier(n_workers)  # no per-barrier timeout — _run's join-timeout bounds true deadlocks
 
         def worker():
             store = SqliteStore(path)              # this worker's own connection
@@ -143,7 +148,7 @@ def test_shared_budget_never_overspends_across_workers():
         committed = []
         clock = [1000.0]
         clock_lock = threading.Lock()
-        barrier = threading.Barrier(n_workers)
+        barrier = threading.Barrier(n_workers)  # no per-barrier timeout — _run's join-timeout bounds true deadlocks
 
         def worker():
             mgr = BudgetManager(SqliteStore(path))   # this worker's own connection
