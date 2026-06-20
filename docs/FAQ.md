@@ -123,9 +123,9 @@ This is not currently a first-class deployment target, but it could work with ad
 
 ### Q: How many workers can I run?
 
-- **In-memory store:** Single worker only (audit chain would fork)
-- **SQLite:** Single worker (database file locking)
-- **Postgres:** Multiple workers (atomic operations, advisory locks)
+- **In-memory store:** Single worker only — per-process, so the audit chain would fork across processes
+- **SQLite:** Multiple workers — safe on a shared DB file via atomic `BEGIN IMMEDIATE` + WAL (`tests/test_concurrency.py` proves it)
+- **Postgres:** Multiple workers/replicas — atomic operations + advisory locks
 
 ### Q: Does it work behind a reverse proxy?
 

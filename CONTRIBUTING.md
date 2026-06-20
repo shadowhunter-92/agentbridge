@@ -8,7 +8,7 @@ and feedback or PRs are very welcome.
 ```bash
 python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt    # Windows; use bin/ on macOS/Linux
-.venv/Scripts/python -m pytest tests/ -q          # 150 passing; 156 with a Postgres DB (6 PG tests skip without one)
+.venv/Scripts/python -m pytest tests/ -q          # 153 passing; 159 with a Postgres DB (6 PG tests skip without one)
 
 # To run the 6 Postgres integration tests (incl. multi-worker concurrency), point them at a throwaway DB:
 #   docker run -d --name pg -e POSTGRES_PASSWORD=pw -e POSTGRES_DB=agentbridge_test -p 5544:5432 postgres:16

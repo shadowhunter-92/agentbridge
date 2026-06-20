@@ -46,7 +46,7 @@ Plus the original A2A live handshakes (`examples/live_mcp_handshake.py`, `live_a
   don't double-spend on a shared store.
 - `tests/test_postgres_store.py` — the same atomic ops on **real Postgres** (advisory-lock path),
   incl. 2 multi-connection concurrency tests; verified against `postgres:16`.
-- Full suite: **150 passing; 156 with a Postgres DB** (6 Postgres integration tests skip without
+- Full suite: **153 passing; 159 with a Postgres DB** (6 Postgres integration tests skip without
   `AGENTBRIDGE_TEST_PG`).
 
 ## ANP — why it's deferred (and where it belongs)

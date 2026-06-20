@@ -13,8 +13,8 @@ built into the call path.
 *The whole product in 12 seconds: an unknown agent blocked, six protocols reaching one live MCP tool through the mesh, budget tracked, tamper-evident audit chain verified. Reproduce with `python examples/demo_story.py`.*
 
 > Status: working prototype. 6 protocols live + conformance-tested against real SDKs, a
-> governance plane, an HTTP control plane, and framework integrations. **150 tests passing
-> (156 with a Postgres DB).**
+> governance plane, an HTTP control plane, and framework integrations. **153 tests passing
+> (159 with a Postgres DB).**
 > Business demand still being validated — this is an early, honest work-in-progress.
 
 > **Name note:** this project (`github.com/shadowhunter-92/agentbridge`) is a Python
@@ -88,7 +88,7 @@ python -m src translate --from openai --to mcp   # show a one-off any-to-any tra
 .venv/Scripts/python examples/policy_guardrails_demo.py # policy BLOCKS risky calls + provable audit trail
 
 # Tests
-.venv/Scripts/python -m pytest tests/ -q                # 150 passing; 156 with a Postgres DB (6 PG tests skip without one)
+.venv/Scripts/python -m pytest tests/ -q                # 153 passing; 159 with a Postgres DB (6 PG tests skip without one)
 ```
 
 ## Talk to agents yourself (any protocol)

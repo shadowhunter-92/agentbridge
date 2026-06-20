@@ -13,7 +13,7 @@ agents using the official SDKs, and that its translations conform to the real sc
 | Live A2A agent handshake (real uvicorn HTTP server) | ✅ PASS |
 | Real A2A AgentCard discovery + `message/send` | ✅ PASS (agent replied "echo: hello from the bridge") |
 | Bridge A2A→MCP on the real message, validated vs official `mcp.types` | ✅ PASS |
-| Full test suite (incl. real-SDK conformance + multi-worker concurrency) | ✅ 150 passing; 156 with a Postgres DB |
+| Full test suite (incl. real-SDK conformance + multi-worker concurrency) | ✅ 153 passing; 159 with a Postgres DB |
 | Postgres integration + concurrency (real `postgres:16`) | ✅ 6 passing (skip without `AGENTBRIDGE_TEST_PG`) |
 
 ## How to reproduce

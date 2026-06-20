@@ -24,7 +24,7 @@ candid about how it was built.
   outputs rests with the user.
 - The code is **original** to this project — not copied from third-party codebases. Protocol
   adapters are validated against each protocol's real official SDK (see
-  `docs/PROTOCOL_SUPPORT.md`), and the suite (124 tests) guards behaviour.
+  `docs/PROTOCOL_SUPPORT.md`), and the suite (159 tests) guards behaviour.
 
 ## Not legal advice
 

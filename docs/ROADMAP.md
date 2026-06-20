@@ -26,7 +26,7 @@ judge whether it fits your use case before relying on it.
   transaction-scoped advisory locks. Multiple workers/replicas sharing one SQLite file or a
   Postgres DB cannot fork the chain or double-spend. Proven by `tests/test_concurrency.py`
   (separate store connections + threads simulate separate processes). See `docs/ENTERPRISE.md`.
-- **150 passing tests; 156 with a Postgres DB** (6 Postgres integration tests — incl. real
+- **153 passing tests; 159 with a Postgres DB** (6 Postgres integration tests — incl. real
   multi-worker concurrency — skip without `AGENTBRIDGE_TEST_PG`) + a one-screen live demo.
 
 ## Known limitations (today)
