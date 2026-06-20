@@ -23,7 +23,7 @@ cryptography>=42.0.0
 
 # OIDC/JWT operator auth (the "SSO" path, src/api/auth_oidc.py). Imported lazily — only
 # needed if you enable OIDC instead of the admin key.
-pyjwt>=2.8.0
+pyjwt>=2.13.0
 
 # Durable governance uses stdlib sqlite3 by default (no dep). For the multi-instance
 # Postgres backend (make_store with a postgres:// URL), install psycopg:
