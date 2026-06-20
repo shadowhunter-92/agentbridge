@@ -52,6 +52,7 @@ test = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
     "pytest-timeout>=2.2.0",
+    "pytest-cov>=4.1.0",
     "httpx>=0.26.0",
     "mcp>=1.27.0",
     "a2a-sdk>=0.3.0,<1.0.0",

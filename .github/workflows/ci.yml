@@ -24,5 +24,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: Run tests
-        run: python -m pytest tests/ -q
+        run: python -m pytest tests/ -q --cov=src --cov-report=term
         # Postgres integration tests skip automatically unless AGENTBRIDGE_TEST_PG is set.
+        # Coverage prints to the CI log; the Codecov badge additionally needs a codecov.io account.

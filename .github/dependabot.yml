@@ -3,22 +3,39 @@ updates:
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
+      interval: "monthly"
+    open-pull-requests-limit: 5
     reviewers:
       - "shadowhunter-92"
     labels:
       - "dependencies"
-      - "good first issue"
     commit-message:
       prefix: "deps"
       include: "scope"
+    groups:
+      # One grouped PR per month for routine minor/patch bumps instead of one PR per package
+      # (the un-grouped weekly config opened 15 PRs at once — that's the noise we're killing).
+      python-deps:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # a2a-sdk 1.x changes the JSON-RPC types our conformance tests pin to 0.3.x — a major bump
+      # breaks the suite, so don't auto-open it. Revisit deliberately when we migrate the adapter.
+      - dependency-name: "a2a-sdk"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
+      interval: "monthly"
+    open-pull-requests-limit: 3
     labels:
       - "dependencies"
       - "ci"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
