@@ -19,7 +19,7 @@ google-genai>=1.0.0     # Gemini FunctionCall / FunctionResponse
 agntcy-acp>=1.5.0       # AGNTCY Agent Connect Protocol (RunCreateStateless, MessageTextBlock)
 
 # Governance plane (runtime): Ed25519 agent identity / signatures + signed audit checkpoints
-cryptography>=42.0.0
+cryptography>=49.0.0
 
 # OIDC/JWT operator auth (the "SSO" path, src/api/auth_oidc.py). Imported lazily — only
 # needed if you enable OIDC instead of the admin key.
