@@ -24,5 +24,5 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: Run tests
-        run: pytest tests/ -q
+        run: python -m pytest tests/ -q
         # Postgres integration tests skip automatically unless AGENTBRIDGE_TEST_PG is set.

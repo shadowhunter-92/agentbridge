@@ -6,7 +6,14 @@ pays for one it requests by name — so this file adds reusable setup without ch
 how the existing self-contained tests run.
 """
 
+import os
+import sys
+
 import pytest
+
+# Make `src` importable however pytest is invoked — bare `pytest` (as CI runs it) does not put
+# the repo root on sys.path the way `python -m pytest` does.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.governance import (
     make_store,
