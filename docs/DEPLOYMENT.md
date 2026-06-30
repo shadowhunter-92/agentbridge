@@ -45,7 +45,18 @@ docker run -p 8000:8000 \
 | `AGENTBRIDGE_OIDC_ISSUER` | unset (OIDC off) | Enable OIDC operator SSO: your IdP issuer URL |
 | `AGENTBRIDGE_OIDC_AUDIENCE` | `agentbridge` | Expected `aud` claim |
 | `AGENTBRIDGE_OIDC_PUBLIC_KEY_PEM` / `_FILE` | unset | IdP signing public key (inline PEM or file path) |
+| `AGENTBRIDGE_OIDC_JWKS_URL` | unset (auto-discover) | Explicit JWKS URL; otherwise discovered from `<issuer>/.well-known/openid-configuration` |
 | `AGENTBRIDGE_OIDC_ROLE_CLAIM` | `role` | Token claim mapped to the RBAC role (admin/operator/viewer) |
+| `AGENTBRIDGE_ENV` | unset | Set to `production` to require admin key + durable DB at boot and suppress `/docs` |
+| `AGENTBRIDGE_LOG_JSON` | unset | `1` → structured JSON logs (with `X-Request-ID`); else plain text |
+| `AGENTBRIDGE_SLOW_LOG_SECONDS` | `2.0` | Log a warning for requests slower than this |
+| `AGENTBRIDGE_SHUTDOWN_GRACE` | `10` | Seconds to drain in-flight requests on SIGTERM before close |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset (tracing off) | Ship OpenTelemetry spans to this OTLP/HTTP endpoint |
+
+> **Health probes for k8s:** liveness → `GET /health` (always 200), readiness → `GET /ready`
+> (503 while draining or if the store is unreachable). Metrics → `GET /metrics` (Prometheus).
+> Config is validated at boot — a misconfigured production env (no admin key / no durable DB)
+> aborts startup instead of failing on the first request.
 
 ## 4. Persistence backends
 

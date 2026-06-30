@@ -69,8 +69,9 @@ Add identity, budgets, and a tamper-evident audit trail **only when you want the
 ```bash
 # Run the meta-bridge control plane (mesh + governance) — CLI or uvicorn
 python -m src serve                        # = uvicorn src.api.control_plane:app
-#   docs at /docs · status dashboard at /dashboard · health at /health
+#   docs at /docs · dashboard at /dashboard · liveness /health · readiness /ready · Prometheus /metrics
 #   set AGENTBRIDGE_ADMIN_KEY for operator endpoints; AGENTBRIDGE_DB=/path.db (or a postgres:// URL)
+#   scale out: python -m src serve --workers 4   (needs a durable AGENTBRIDGE_DB)
 
 # Or with Docker (healthcheck on /health, persistent SQLite volume)
 docker compose up
@@ -246,6 +247,44 @@ like at runtime. Reproduce with `python examples/policy_guardrails_demo.py`.*
 ▶ **Watch the 54-second explainer** (motion graphics + voiceover):
 [shadowhunter-92.github.io/agentbridge/media/explainer.html](https://shadowhunter-92.github.io/agentbridge/media/explainer.html)
 — source: [`media/explainer.html`](media/explainer.html).
+
+## Production & operations
+
+The control plane is built to run unattended — everything here is on by default or one env var away.
+
+**Observability**
+- `GET /metrics` — Prometheus exposition: call/latency/translation histograms, audit-entry and
+  per-agent budget gauges, pending-approvals, HTTP request/duration, rate-limit and auth-failure counters.
+- **OpenTelemetry tracing** — set `OTEL_EXPORTER_OTLP_ENDPOINT` (or `AGENTBRIDGE_OTEL_ENABLED=1`) to ship
+  spans; the gateway traces every `route_call`. No-op when the OTel SDK isn't installed.
+- **Structured JSON logs** with a per-request `X-Request-ID` (echoed in the response) via
+  `AGENTBRIDGE_LOG_JSON=1`. Requests slower than `AGENTBRIDGE_SLOW_LOG_SECONDS` (default 2s) are flagged.
+
+**Health & lifecycle (Kubernetes-ready)**
+- `GET /health` — liveness (always 200, even mid-drain, so the pod isn't restarted during shutdown).
+- `GET /ready` — readiness (503 while draining or if the governance store is unreachable).
+- `GET /version` — build + Python + store type.
+- **Graceful shutdown** — SIGTERM flips readiness to 503 and drains in-flight requests up to
+  `AGENTBRIDGE_SHUTDOWN_GRACE` (default 10s). Scale out with `agentbridge serve --workers N` (needs a
+  durable `AGENTBRIDGE_DB`).
+
+**Audit retention & compliance**
+- `POST /control/audit/checkpoint` — Ed25519-sign the current audit head so a third party can later prove
+  the log wasn't truncated or rewound past that point.
+- `POST /control/audit/retention` — `{"action":"truncate","seq":N}` drops entries before `N`;
+  `{"action":"legal_hold","on":true}` freezes truncation. A truncated chain **stays verifiable** from its
+  earliest retained entry (pair it with the signed checkpoint to vouch for the truncation point).
+
+**Operator SSO (OIDC)** — point `AGENTBRIDGE_OIDC_ISSUER` at your IdP (Okta / Auth0 / Azure AD / Keycloak);
+signing keys are auto-discovered via JWKS (`<issuer>/.well-known/openid-configuration`), cached, and
+refreshed on key rotation. A role claim maps to RBAC (admin / operator / viewer).
+
+**Fail-fast config** — the environment is validated at boot: production requires a stable
+`AGENTBRIDGE_ADMIN_KEY` and a durable `AGENTBRIDGE_DB`; bad rate-limit / OIDC / numeric values abort startup
+instead of failing on the first request.
+
+> The latency cost of all governance (identity + budget + policy + hash-chained audit) is sub-millisecond
+> in-process — see [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md). Durable stores add one indexed insert per audited call.
 
 ## Editions & pricing (direction)
 
