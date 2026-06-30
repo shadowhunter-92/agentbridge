@@ -54,15 +54,17 @@ def _cleanup(path, stores):
             pass
 
 
-def _run(workers, join_timeout=60):
-    # daemon=True so a stuck worker can never keep the process (or the test session) alive;
-    # join with a timeout and fail loudly instead of hanging forever if a thread deadlocks
-    # (e.g. a worker erroring before the barrier would otherwise block the others permanently).
+def _run(workers, total_timeout=60):
+    # daemon=True so a stuck worker can never keep the process (or the test session) alive.
+    # Bound the WHOLE run with a single shared deadline — NOT a per-thread timeout, which would
+    # sum across threads and could blow past pytest-timeout — and fail loudly on a real deadlock.
+    import time
     threads = [threading.Thread(target=w, daemon=True) for w in workers]
     for t in threads:
         t.start()
+    deadline = time.monotonic() + total_timeout
     for t in threads:
-        t.join(join_timeout)
+        t.join(max(0.0, deadline - time.monotonic()))
     stuck = [t for t in threads if t.is_alive()]
     assert not stuck, f"{len(stuck)}/{len(threads)} worker thread(s) deadlocked (barrier/lock)"
 
@@ -78,7 +80,7 @@ def test_shared_audit_chain_does_not_fork_across_workers():
     slock = threading.Lock()
     try:
         n_workers, per_worker = 8, 25
-        barrier = threading.Barrier(n_workers)  # no per-barrier timeout — _run's join-timeout bounds true deadlocks
+        barrier = threading.Barrier(n_workers, timeout=30)  # self-heal: never wait forever for a slow/absent worker
 
         def worker():
             store = SqliteStore(path)              # this worker's own connection
@@ -148,7 +150,7 @@ def test_shared_budget_never_overspends_across_workers():
         committed = []
         clock = [1000.0]
         clock_lock = threading.Lock()
-        barrier = threading.Barrier(n_workers)  # no per-barrier timeout — _run's join-timeout bounds true deadlocks
+        barrier = threading.Barrier(n_workers, timeout=30)  # self-heal: never wait forever for a slow/absent worker
 
         def worker():
             mgr = BudgetManager(SqliteStore(path))   # this worker's own connection
