@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
+import platform
 import threading
 import time
 from contextlib import contextmanager
@@ -119,7 +120,11 @@ if _PROM_AVAILABLE:
     # NOTE: use a private registry so we never collide with other libs that auto-register
     # against the default. The /metrics endpoint serves from this registry only.
     _INFO = Info("agentbridge", "AgentBridge control-plane build info", registry=_REGISTRY)
-    _INFO.info({"version": "1.0.0", "python": "3.11+"})
+    try:
+        from .. import __version__ as _ab_version
+    except Exception:  # pragma: no cover - never let metrics init break import
+        _ab_version = "unknown"
+    _INFO.info({"version": _ab_version, "python": platform.python_version()})
 
     CALLS_TOTAL = Counter(
         "agentbridge_calls_total",

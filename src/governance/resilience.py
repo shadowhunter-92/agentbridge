@@ -21,8 +21,9 @@ from typing import Any, Callable, Iterable, Tuple, Type
 
 logger = logging.getLogger("agentbridge.resilience")
 
-# SQLite "database is locked" / "disk I/O error" (transient).
-_SQLITE_TRANSIENT = (sqlite3.OperationalError, sqlite3.DatabaseError)
+# SQLite "database is locked" / "disk I/O error" (transient). NOT sqlite3.DatabaseError —
+# that's the parent of IntegrityError/ProgrammingError, which are PERMANENT and must not retry.
+_SQLITE_TRANSIENT = (sqlite3.OperationalError,)
 
 # psycopg "OperationalError" — transient connection/lock issues. Imported lazily.
 def _psycopg_transient() -> Tuple[Type[Exception], ...]:

@@ -70,12 +70,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/health` + `/ready` + `/version` + `/metrics` endpoints, request-ID echo, full
   audit-retention HTTP round-trip.
 
-  Suite total: **157 passing, 7 skipped** (was 136; +21). Skips are the 6 Postgres
-  integration tests (need `AGENTBRIDGE_TEST_PG`) and 1 conformance test that needs redis.
+  Plus a JWKS end-to-end round-trip test (previously untested). Suite green in CI on
+  Python 3.11 + 3.12; the only skips are the Postgres integration tests (need `AGENTBRIDGE_TEST_PG`).
 
 ### Changed
 - `pyproject.toml`: added `prometheus-client>=0.20.0` as a runtime dependency; added
   `[otel]` optional extra (`opentelemetry-sdk`, OTLP exporter, FastAPI instrumentation).
+
+### Fixed (post-review hardening)
+- `requirements.txt` now lists `prometheus-client` (CI installs from it — the `/metrics` tests
+  were red because it was only in `pyproject.toml`).
+- CLI `serve`: graceful-shutdown timeout passed to uvicorn in **seconds** (was `×1000` → ~2.8h).
+- **Audit retention now keeps the chain verifiable**: `verify_chain(..., require_genesis=False)`
+  + auto-detection in `verify_integrity`/`verify_durable`, so a truncated log no longer reports as
+  "tampered". Removed a docstring claim about a "truncate pseudo-entry" that was never written.
+- `resilience.retry_transient` no longer catches `sqlite3.DatabaseError` (parent of
+  `IntegrityError`/`ProgrammingError`) — only `OperationalError`, so permanent errors fail fast.
+- Gateway stopped copying the whole audit list per call to count it (`AuditLog.count()`, O(1)).
+- HTTP metrics label by the route **template**, not the raw path (prevents Prometheus cardinality blow-up).
+- OIDC JWKS resolves the cryptography key object directly (PyJWT accepts it) instead of a brittle
+  JWK→PEM round-trip.
+- Normalized 8 source files back to mode 644 (the pass had flipped them to 755).
 
 ## [1.0.0]
 

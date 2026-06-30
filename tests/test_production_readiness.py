@@ -57,6 +57,12 @@ def test_approval_queue_persists_to_sqlite():
         aq2.consume("agent-x", "delete_db")
         assert aq2.is_granted("agent-x", "delete_db") is False
     finally:
+        # Close DB connections before unlinking — Windows locks open files.
+        for s in ("s1", "s2"):
+            try:
+                locals()[s].close()
+            except Exception:
+                pass
         os.unlink(path)
 
 
@@ -89,10 +95,15 @@ def test_audit_truncate_removes_old_entries():
         log.record(actor="a", action="route_call", source_protocol="mcp",
                    target_protocol="a2a", capability=f"cap_{i}", decision="allow", cost=1.0)
     assert len(log.entries()) == 5
+    assert log.verify_integrity() is True            # full chain verifies first
     removed = log.truncate_before(3)
     assert removed == 3
     assert len(log.entries()) == 2
     assert log.entries()[0].seq == 3
+    # Regression guard: a retention-truncated chain must STILL verify (it used to fail
+    # because verify_chain assumed the chain starts at seq 0 / GENESIS).
+    assert log.verify_integrity() is True
+    assert log.verify_durable() is True
 
 
 def test_audit_legal_hold_blocks_truncation():
@@ -251,12 +262,27 @@ def test_retry_gives_up_after_max_attempts():
 
 
 def test_retry_does_not_swallow_permanent_errors():
+    # A non-store exception is never retried.
     @retry_transient(max_attempts=4, base_delay=0.001, max_delay=0.01)
     def bad():
         raise ValueError("not transient")
 
     with pytest.raises(ValueError):
         bad()
+
+    # Regression guard: sqlite3.IntegrityError is a DatabaseError subclass but PERMANENT.
+    # The retrier must NOT retry it (the earlier code caught sqlite3.DatabaseError — too broad —
+    # which would burn 4 attempts on a constraint violation that can never succeed).
+    calls = {"n": 0}
+
+    @retry_transient(max_attempts=4, base_delay=0.001, max_delay=0.01)
+    def constraint_violation():
+        calls["n"] += 1
+        raise sqlite3.IntegrityError("UNIQUE constraint failed")
+
+    with pytest.raises(sqlite3.IntegrityError):
+        constraint_violation()
+    assert calls["n"] == 1  # exactly one attempt — not retried
 
 
 # --- Control-plane endpoints ---------------------------------------------------------
@@ -385,3 +411,39 @@ def test_audit_retention_endpoint_round_trip(tmp_path):
         assert r.status_code == 200
     finally:
         _restore_env()
+
+
+# --- OIDC JWKS resolution (previously untested) ---------------------------------------
+
+def test_oidc_jwks_resolves_key_and_verifies_token(monkeypatch):
+    """End-to-end JWKS path with a real RSA key: build a JWK, sign a JWT, and verify it
+    resolves via kid + decodes. Guards the rewritten key resolution (no PEM round-trip)."""
+    pytest.importorskip("cryptography")
+    jwt = pytest.importorskip("jwt")
+    import json as _json
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from jwt.algorithms import RSAAlgorithm
+    from src.api.auth_oidc import OidcVerifier, OidcConfig
+
+    priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pub_jwk = _json.loads(RSAAlgorithm.to_jwk(priv.public_key()))
+    pub_jwk["kid"] = "test-kid"
+
+    v = OidcVerifier(OidcConfig(issuer="https://idp.example", audience="agentbridge",
+                                jwks_url="https://idp.example/jwks"))
+    monkeypatch.setattr(v, "_fetch_jwks", lambda: {"keys": [pub_jwk]})
+
+    token = jwt.encode(
+        {"sub": "op-1", "aud": "agentbridge", "iss": "https://idp.example", "role": "admin"},
+        priv, algorithm="RS256", headers={"kid": "test-kid"},
+    )
+    claims, role = v.authenticate("Bearer " + token)
+    assert claims["sub"] == "op-1"
+    assert role == "admin"
+
+    # A token signed by a DIFFERENT key must be rejected.
+    other = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    bad = jwt.encode({"sub": "x", "aud": "agentbridge", "iss": "https://idp.example"},
+                     other, algorithm="RS256", headers={"kid": "test-kid"})
+    with pytest.raises(Exception):
+        v.authenticate("Bearer " + bad)

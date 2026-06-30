@@ -83,65 +83,39 @@ class OidcVerifier:
         except Exception as e:
             raise OidcError(f"failed to fetch JWKS from {url}: {e}") from e
 
-    def _key_for_kid(self, kid: Optional[str]) -> str:
-        """Return a PEM-encoded public key for the given `kid`. Fetches the JWKS on
-        cache miss or expiry. Raises OidcError if the key can't be resolved."""
+    def _key_for_kid(self, kid: Optional[str]) -> Any:
+        """Return a public key OBJECT for `kid`, fetching/caching the JWKS on miss or expiry.
+        PyJWT's decode() accepts the cryptography key object directly, so we cache the object
+        and skip the brittle JWK->PEM round-trip. Raises OidcError if it can't be resolved."""
+        cache_key = kid or "_default"
         with self._jwks_lock:
             now = time.monotonic()
-            if kid and kid in self._jwks_cache:
-                entry = self._jwks_cache[kid]
-                if now - entry["fetched_at"] < self.config.jwks_ttl_seconds:
-                    return entry["key_pem"]
+            entry = self._jwks_cache.get(cache_key)
+            if entry and now - entry["fetched_at"] < self.config.jwks_ttl_seconds:
+                return entry["key"]
 
-            # Either no kid, kid miss, or stale cache. Refresh.
             try:
-                from jwt import algorithms  # type: ignore[attr-defined]
                 from jwt import PyJWK  # type: ignore[attr-defined]
             except ImportError as e:
                 raise OidcError(
                     "JWKS support requires 'pyjwt[crypto]' (pip install 'pyjwt[crypto]')"
                 ) from e
 
-            try:
-                jwks = self._fetch_jwks()
-                # Update full-fetch timestamp.
-                self._jwks_full_fetch_at = now
-                for key in jwks.get("keys", []):
-                    k = key.get("kid") or "_default"
-                    try:
-                        # PyJWK converts a JWK dict to a PEM-encoded key string.
-                        pem = PyJWK(key).key.public_bytes(
-                            encoding=__import__("cryptography").hazmat.primitives.serialization.Encoding.PEM,
-                            format=__import__("cryptography").hazmat.primitives.serialization.PublicFormat.SubjectPublicKeyInfo,
-                        ).decode("ascii") if hasattr(PyJWK(key).key, "public_bytes") else None
-                        # Fallback: use algorithms.RSAPublicKey.to_pem when available.
-                        if pem is None:
-                            pem = algorithms.RSAPublicKey.to_pem(PyJWK(key).key) \
-                                  if hasattr(PyJWK(key).key, "to_pem") else None
-                        if pem is None and hasattr(PyJWK(key).key, "public_bytes"):
-                            from cryptography.hazmat.primitives.serialization import (
-                                Encoding, PublicFormat,
-                            )
-                            pem = PyJWK(key).key.public_bytes(
-                                Encoding.PEM, PublicFormat.SubjectPublicKeyInfo,
-                            ).decode("ascii")
-                        if pem is None:
-                            continue
-                        self._jwks_cache[k] = {"key_pem": pem, "fetched_at": now}
-                    except Exception:
-                        continue
-            except OidcError:
-                raise
-            except Exception as e:
-                raise OidcError(f"JWKS parse error: {e}") from e
+            jwks = self._fetch_jwks()  # raises OidcError on fetch/parse failure
+            self._jwks_full_fetch_at = now
+            for jwk in jwks.get("keys", []):
+                k = jwk.get("kid") or "_default"
+                try:
+                    self._jwks_cache[k] = {"key": PyJWK(jwk).key, "fetched_at": now}
+                except Exception:
+                    continue  # skip a malformed JWK; others may still resolve
 
-            if kid and kid in self._jwks_cache:
-                return self._jwks_cache[kid]["key_pem"]
-            if not kid and "_default" in self._jwks_cache:
-                return self._jwks_cache["_default"]["key_pem"]
+            entry = self._jwks_cache.get(cache_key)
+            if entry:
+                return entry["key"]
             raise OidcError(f"no signing key found for kid={kid!r} in JWKS")
 
-    def _resolve_signing_key(self, unverified_header: Dict[str, Any]) -> str:
+    def _resolve_signing_key(self, unverified_header: Dict[str, Any]) -> Any:
         if self.config.public_key_pem:
             return self.config.public_key_pem
         return self._key_for_kid(unverified_header.get("kid"))

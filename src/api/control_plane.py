@@ -201,6 +201,14 @@ RATE_LIMIT_PER_MIN = int(os.getenv("AGENTBRIDGE_RATE_LIMIT", "240"))
 rate_limiter = RateLimiter(RATE_LIMIT_PER_MIN, window_seconds=60)
 
 
+def _route_label(request: Request) -> str:
+    """Low-cardinality metric label: the matched route TEMPLATE (e.g. /control/identity/{id}),
+    NOT the raw path. Raw paths carry ids (/control/identity/agent-123) and would explode
+    Prometheus label cardinality -> unbounded memory. Unmatched routes collapse to one label."""
+    route = request.scope.get("route")
+    return getattr(route, "path", None) or "<unmatched>"
+
+
 @app.middleware("http")
 async def _observability_and_rate_limit(request: Request, call_next):
     """Single middleware that does: request_id, slow-log, HTTP metrics, rate-limit.
@@ -232,14 +240,15 @@ async def _observability_and_rate_limit(request: Request, call_next):
         response = await call_next(request)
     except Exception:
         # Unhandled exception — record and re-raise so uvicorn's logger sees the trace.
-        HTTP_REQUESTS.labels(method=request.method, path=request.url.path,
+        HTTP_REQUESTS.labels(method=request.method, path=_route_label(request),
                              status="500").inc()
         raise
 
     elapsed = time.monotonic() - t0
-    HTTP_REQUESTS.labels(method=request.method, path=request.url.path,
+    _plabel = _route_label(request)
+    HTTP_REQUESTS.labels(method=request.method, path=_plabel,
                          status=str(response.status_code)).inc()
-    HTTP_DURATION.labels(method=request.method, path=request.url.path).observe(elapsed)
+    HTTP_DURATION.labels(method=request.method, path=_plabel).observe(elapsed)
     response.headers["X-Request-ID"] = rid
     if elapsed > float(os.getenv("AGENTBRIDGE_SLOW_LOG_SECONDS", "2.0")):
         logger.warning("slow request %s %s took %.3fs", request.method,

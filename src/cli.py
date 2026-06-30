@@ -31,7 +31,7 @@ def _serve(args):
         workers=args.workers if not args.reload else 1,  # reload + workers is incompatible
         log_level=args.log_level,
         access_log=False,  # we have our own structured middleware; uvicorn access logs are noisy
-        timeout_graceful_shutdown=int(float(os.getenv("AGENTBRIDGE_SHUTDOWN_GRACE", "10")) * 1000),
+        timeout_graceful_shutdown=int(float(os.getenv("AGENTBRIDGE_SHUTDOWN_GRACE", "10"))),  # uvicorn wants SECONDS
     )
 
 

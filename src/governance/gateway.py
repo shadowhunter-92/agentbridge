@@ -85,7 +85,7 @@ class GovernanceGateway:
                     source_protocol=src_proto, target_protocol=dst_proto,
                     capability=capability, decision="deny", reason=decision.reason, cost=0.0,
                 )
-                update_audit_count(len(self.audit.entries()))
+                update_audit_count(self.audit.count())
                 record_call(src_proto, dst_proto, capability, "deny", time.monotonic() - t0)
                 raise GovernanceError(decision, entry, approval_id=approval_id)
 
@@ -99,7 +99,7 @@ class GovernanceGateway:
                     source_protocol=src_proto, target_protocol=dst_proto,
                     capability=capability, decision="deny", reason=why, cost=0.0,
                 )
-                update_audit_count(len(self.audit.entries()))
+                update_audit_count(self.audit.count())
                 record_call(src_proto, dst_proto, capability, "deny", time.monotonic() - t0)
                 raise GovernanceError(Decision(False, why), entry)
 
@@ -113,7 +113,7 @@ class GovernanceGateway:
                     source_protocol=src_proto, target_protocol=dst_proto,
                     capability=capability, decision="error", reason=str(e)[:200], cost=0.0,
                 )
-                update_audit_count(len(self.audit.entries()))
+                update_audit_count(self.audit.count())
                 record_call(src_proto, dst_proto, capability, "error", time.monotonic() - t0)
                 raise
 
@@ -127,7 +127,7 @@ class GovernanceGateway:
             )
 
             # Update gauges so Prometheus sees live state.
-            update_audit_count(len(self.audit.entries()))
+            update_audit_count(self.audit.count())
             try:
                 b = self.budgets.get(agent_id)
                 update_budget_gauge(agent_id, b.spent, b.remaining())
