@@ -197,6 +197,18 @@ Performance overhead is measured in `docs/BENCHMARKS.md`.
 - **Per-IP rate limiting** on `/control/*` (blunts admin-key brute force; `AGENTBRIDGE_RATE_LIMIT`).
 - Audit is hash-chained and tamper-evident; export via `/control/audit/export`.
 
+### Security reviews for the MCP ecosystem
+Beyond AgentBridge's own model above, we also do external security reviews for other
+MCP-server maintainers — static + design review against the OWASP Top-10 for Agentic
+Applications, MCP-specific red-team patterns, a full report with severity-rated findings.
+
+> "This is easily the most useful thing that has happened to the project since I started it."
+> — Arthur Jhonathas, maintainer of [mcp-gmail-manager](https://github.com/arthjhon/mcp-gmail-manager),
+> on the review that shipped as [v0.3.1](https://github.com/arthjhon/mcp-gmail-manager/blob/main/audits/v0.3.0-external-audit.md)
+> (0 Critical / 0 High / 2 Medium / 2 Low — all four fixed same-day).
+
+Want a review of your own MCP server? [Open an issue](https://github.com/shadowhunter-92/agentbridge/issues) to start the conversation.
+
 ## Persistence & multi-worker
 Chosen from `AGENTBRIDGE_DB`: unset → in-memory; a file path → SQLite (single node);
 a `postgres://` URL → Postgres (multi-instance; `pip install "psycopg[binary]"`).

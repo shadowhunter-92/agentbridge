@@ -36,6 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Tests
 - `tests/test_cli.py` — CLI smoke tests (`--version`, help, a live `openai → mcp` translation). Suite now **153 passing (159 with a Postgres DB)**.
 
+### Added — external validation
+- README now documents that we do external MCP-server security reviews (OWASP Top-10 for
+  Agentic Applications + MCP red-team patterns), with our first real, attributed case study:
+  a same-day-fixed 4-finding review of [mcp-gmail-manager](https://github.com/arthjhon/mcp-gmail-manager)
+  (0 Critical / 0 High / 2 Medium / 2 Low), publicly linked from that project's own SECURITY.md.
+
 ## [1.0.0]
 
 ### Added
