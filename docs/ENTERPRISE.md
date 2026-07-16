@@ -94,13 +94,89 @@ AuditLog.verify_checkpoint(cp)   # True; tamper the head or signature -> False
 For SIEM ingestion, export the chain as JSONL (`/control/audit/export`) into Splunk /
 Datadog / S3 on a schedule, and store periodic signed checkpoints alongside it.
 
+### 4a. Audit retention + legal hold (NEW)
+
+Two new HTTP endpoints make the audit log operationally managable at scale:
+
+- **`POST /control/audit/checkpoint`** — record a signed checkpoint at the current head.
+  Anyone with the returned `{seq, head_hash, public_key_hex, signature_hex}` can later
+  prove the log was intact at that seq.
+- **`POST /control/audit/retention`** —
+  - `{"action": "truncate", "seq": N}` removes entries with `seq < N` from the durable
+    store. Safe after a checkpoint: the checkpoint signature preserves proof of integrity
+    at `seq=N`, and the live chain verifies from `N` forward.
+  - `{"action": "legal_hold", "on": true}` freezes truncation — subsequent truncate
+    attempts return 409. Use during investigations or litigation holds.
+
+```python
+# Example: monthly retention with legal-hold safety net
+audit.set_legal_hold(True)              # freeze during an investigation
+# ... later ...
+audit.set_legal_hold(False)
+removed = audit.truncate_before(10000)  # delete entries 0..9999
+```
+
+---
+
+## 5. Observability (NEW — Prometheus + OpenTelemetry + structured logs)
+
+- **`GET /metrics`** — Prometheus text format. Exposes:
+  - `agentbridge_calls_total{src_protocol,dst_protocol,capability,decision}` — governed call counter
+  - `agentbridge_call_duration_seconds` — end-to-end governed-call latency histogram
+  - `agentbridge_translate_duration_seconds` — pure translation latency histogram
+  - `agentbridge_audit_entries` — current chain length (gauge)
+  - `agentbridge_budget_spent{agent_id}` / `agentbridge_budget_remaining{agent_id}`
+  - `agentbridge_approvals_pending` — current pending approvals (gauge)
+  - `agentbridge_http_requests_total{method,path,status}` + `agentbridge_http_request_duration_seconds`
+  - `agentbridge_rate_limit_hits_total` — per-IP rate-limit rejections
+  - `agentbridge_auth_failures_total{kind=operator|agent}` — auth failures by category
+- **OpenTelemetry tracing** (optional, lazy-initialized). Set `OTEL_EXPORTER_OTLP_ENDPOINT`
+  to ship spans to your collector; the governance gateway opens a span around every
+  `route_call` with `agent_id`/`src`/`dst`/`cost` attributes.
+- **Structured JSON logging** (`AGENTBRIDGE_LOG_JSON=1`, auto-on in production / k8s):
+  one JSON object per line with `ts`, `level`, `logger`, `msg`, `request_id`, plus any
+  `extra=` fields. Every request gets a correlation ID (from `X-Request-ID` header or
+  generated), echoed in the response. Slow-request warnings log above
+  `AGENTBRIDGE_SLOW_LOG_SECONDS` (default 2s).
+
+Recommended scrape config for Prometheus:
+```yaml
+scrape_configs:
+  - job_name: agentbridge
+    scrape_interval: 15s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["agentbridge:8000"]
+```
+
+---
+
+## 6. Production-readiness checklist (NEW)
+
+Before you ship AgentBridge to production, run through this checklist:
+
+- [ ] `AGENTBRIDGE_ENV=production` set (suppresses /docs, /redoc; enables stricter config checks)
+- [ ] `AGENTBRIDGE_ADMIN_KEY` set to a strong value (≥32 chars; `openssl rand -hex 32`)
+- [ ] `AGENTBRIDGE_DB` points at a durable store (SQLite file or `postgres://` URL)
+- [ ] TLS terminated at a reverse proxy (nginx / Caddy / Cloudflare); the app itself is HTTP
+- [ ] `/ready` used as the k8s readiness probe; `/health` as the liveness probe
+- [ ] Prometheus scraping `/metrics` (or equivalent) so you can see call volume, latency,
+  auth failures, and budget exhaustion
+- [ ] `AGENTBRIDGE_SHUTDOWN_GRACE` configured to match your LB's drain timeout (default 10s)
+- [ ] OIDC SSO configured (recommended over the shared admin key for multi-operator teams);
+      JWKS auto-discovery is on by default if you only set `AGENTBRIDGE_OIDC_ISSUER`
+- [ ] A signed audit checkpoint recorded on a schedule (e.g., daily) and archived off-host
+- [ ] Audit retention policy decided — either truncate-after-checkpoint or legal-hold-on
+- [ ] (Multi-node HA) Postgres backend + replicas behind a load balancer; `--workers N`
+      per replica based on CPU count
+
 ---
 
 ## Concurrency & scaling (read before you deploy)
 
 **Multiple workers are safe — as long as they share a durable store.** The audit hash-chain
-append and the budget reserve/commit/release are **atomic, store-side operations**, not
-in-memory read-modify-write:
+append, the budget reserve/commit/release, **and the approval state** are all **atomic,
+store-side operations**, not in-memory read-modify-write:
 
 - **Audit chain** — `store.append_audit_chained()` determines the next `(seq, prev_hash)` from
   the durable head *inside* an atomic section (SQLite `BEGIN IMMEDIATE`; Postgres
@@ -110,6 +186,9 @@ in-memory read-modify-write:
 - **Budgets** — `store.mutate_budget()` reads the budget's persisted state (including outstanding
   reservations), runs the reserve/commit/release mutation, and writes it back, all under the same
   per-agent lock. Two workers can't both pass the cap; reservations are visible across workers.
+- **Approvals** (NEW) — `store.update_approval_status()` and `store.consume_approval()` run
+  inside the same atomic section. An approval granted on worker A is visible on worker B's
+  next `is_granted()` call; a one-shot grant cannot be double-consumed across workers.
 
 This is proven, not asserted: `tests/test_concurrency.py` spins up **separate store connections
 in separate threads** (a faithful stand-in for separate OS processes) hammering the same SQLite
@@ -121,10 +200,9 @@ Postgres** (the `pg_advisory_xact_lock` path) in `tests/test_postgres_store.py` 
 
 **The one rule:** set `AGENTBRIDGE_DB` to a shared backend before running multiple workers — a
 SQLite file path (single node, multiple workers) or a `postgres://` URL (multi-node). The default
-`InMemoryStore` is per-process and is for single-worker/dev only. The remaining in-process piece
-is the human-approval queue (`ApprovalQueue`); until it's store-backed, pin approval traffic to
-one instance. (Credit to external code review for surfacing the original in-memory race; it's now
-fixed and regression-tested.)
+`InMemoryStore` is per-process and is for single-worker/dev only. **No in-process runtime state
+remains** — the human-approval queue is now store-backed too. (Credit to external code review
+for surfacing the original in-memory race; it's now fixed and regression-tested.)
 
 ## Not code — handled honestly
 

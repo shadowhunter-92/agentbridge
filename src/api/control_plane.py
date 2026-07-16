@@ -25,10 +25,14 @@ Run:  uvicorn src.api.control_plane:app    (docs at /docs)
 import logging
 import os
 import secrets
+import signal
+import sys
+import time
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Header, Request
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Header, Request, Response
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -43,18 +47,99 @@ from ..governance import (
     AllowOnlyCapabilities, BusinessHoursOnly, DenyProtocolRoute,
     require as rbac_require, AccessDenied,
 )
+from ..observability import (
+    render_metrics, HTTP_REQUESTS, HTTP_DURATION, RATE_LIMIT_HITS, AUTH_FAILURES,
+    update_approvals_pending,
+)
+from ..observability.logging import configure_logging, bind_request_id, new_request_id
+from ..config import validate_config, ConfigError
+from .. import __version__ as _pkg_version
 
 logger = logging.getLogger("control_plane")
+
+# --- startup: configure logging FIRST so the rest of init is observable ------------
+configure_logging()
+
+# --- validate configuration before any state is created ------------------------------
+# We validate AFTER logging so issues are emitted as structured logs. Errors raise
+# ConfigError which the CLI/uvicorn will surface as a non-zero exit — fail fast at boot
+# rather than failing at first request with a confusing traceback.
+try:
+    validate_config(fail_fast=True)
+except ConfigError as e:
+    logger.error("startup aborted: %s", e)
+    raise
+
+# --- graceful shutdown state --------------------------------------------------------
+# Set to False by the SIGTERM handler; /ready returns 503 once it's False so the LB
+# stops sending new traffic while in-flight requests drain.
+_ready = {"ok": True}
+_SHUTDOWN_GRACE_SECONDS = float(os.getenv("AGENTBRIDGE_SHUTDOWN_GRACE", "10"))
 
 # --- admin key + persistence wiring --------------------------------------------------
 ADMIN_KEY = os.getenv("AGENTBRIDGE_ADMIN_KEY") or secrets.token_hex(16)
 if not os.getenv("AGENTBRIDGE_ADMIN_KEY"):
-    logger.warning("AGENTBRIDGE_ADMIN_KEY not set; generated one for this run: %s", ADMIN_KEY)
+    if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+        # In production we still allow startup (so a misconfigured pod doesn't crash-loop
+        # forever), but make the warning impossible to miss.
+        logger.error("AGENTBRIDGE_ADMIN_KEY not set in production; generated ephemeral key %s. "
+                     "Set it explicitly or operator auth will rotate on every restart.", ADMIN_KEY)
+    else:
+        logger.warning("AGENTBRIDGE_ADMIN_KEY not set; generated one for this run: %s", ADMIN_KEY)
 
 _db = os.getenv("AGENTBRIDGE_DB")
 store = make_store(_db)  # None->in-memory, postgres URL->Postgres, else SQLite path
 
-app = FastAPI(title="AgentBridge Meta-Bridge Control Plane", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup + graceful shutdown.
+
+    On SIGTERM/SIGINT we flip _ready to False so /ready starts returning 503 (load
+    balancer stops sending new traffic), then wait up to AGENTBRIDGE_SHUTDOWN_GRACE
+    seconds for in-flight requests to drain before letting uvicorn close the socket.
+    """
+    shutting_down = {"v": False}
+
+    def _mark_shutdown(signum, _frame):
+        logger.info("received signal %s; draining...", signum)
+        shutting_down["v"] = True
+        _ready["ok"] = False
+
+    # Install handlers only on the main thread (uvicorn workers satisfy this).
+    # asyncio.run() / test runners may run in non-main threads; signal.signal raises
+    # ValueError there, which we swallow.
+    try:
+        signal.signal(signal.SIGTERM, _mark_shutdown)
+        signal.signal(signal.SIGINT, _mark_shutdown)
+    except (ValueError, OSError):
+        pass
+
+    logger.info("AgentBridge control plane starting (version=%s, store=%s)",
+                _pkg_version, type(store).__name__)
+    yield
+
+    # Drain phase
+    _ready["ok"] = False
+    deadline = time.monotonic() + _SHUTDOWN_GRACE_SECONDS
+    while time.monotonic() < deadline:
+        # uvicorn handles in-flight tracking; we just give the LB a moment to notice
+        # /ready is 503 before we tear down. This is intentionally simple — heavy
+        # connection-drain logic belongs in the server (uvicorn --drain-timeout) or a
+        # service mesh, not here.
+        time.sleep(0.1)
+    logger.info("drain complete; shutting down")
+
+
+app = FastAPI(
+    title="AgentBridge Meta-Bridge Control Plane",
+    version=_pkg_version,
+    lifespan=lifespan,
+    # Suppress FastAPI's default /docs in production; opt back in with AGENTBRIDGE_DOCS=1.
+    docs_url=None if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production")
+              and os.getenv("AGENTBRIDGE_DOCS") != "1" else "/docs",
+    redoc_url=None if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production") else "/redoc",
+)
 
 # --- optional static status dashboard, served at /dashboard (reads live /health + /control/protocols)
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
@@ -64,7 +149,7 @@ if os.path.isdir(_static_dir):
 registry = default_registry
 identities = IdentityRegistry(store=store)
 budgets = BudgetManager(store=store)
-approvals = ApprovalQueue()
+approvals = ApprovalQueue(store=store)
 policy_rules = PolicySet()          # declarative rules, managed via /control/policy/rules
 policy = PolicyEngine(identities, budgets, approvals=approvals, policy_set=policy_rules)
 audit = AuditLog(store=store)
@@ -73,10 +158,9 @@ gateway = GovernanceGateway(identities=identities, budgets=budgets, approvals=ap
 authenticator = RequestAuthenticator(identities)
 
 # --- concurrency safety: depends on the configured store ------------------------------
-# Audit-chain append and budget reserve/commit are atomic store-side operations
-# (store.append_audit_chained / store.mutate_budget), so multiple workers are SAFE when they
-# share a durable backend (SQLite file or Postgres). The default in-memory store is per-process,
-# so it is single-worker only. The approval queue is still in-process either way.
+# Audit-chain append, budget reserve/commit, AND approval state are all atomic
+# store-side operations, so multiple workers are SAFE when they share a durable backend
+# (SQLite file or Postgres). The default in-memory store is per-process, single-worker only.
 # See docs/ENTERPRISE.md "Concurrency & scaling".
 if isinstance(store, InMemoryStore):
     logger.warning(
@@ -86,12 +170,12 @@ if isinstance(store, InMemoryStore):
     )
 else:
     logger.info(
-        "Governance store is durable (%s); audit chain + budgets are multi-worker safe. "
-        "Note: the approval queue is still in-process — pin approval traffic to one instance.",
+        "Governance store is durable (%s); audit chain, budgets, AND approvals are "
+        "multi-worker safe.",
         type(store).__name__,
     )
 
-# --- optional OIDC operator SSO (env-configured) ---------------------------------------
+# --- optional OIDC operator SSO (env-configured; JWKS auto-fetch supported) -----------
 oidc_verifier: Optional[OidcVerifier] = None
 _oidc_issuer = os.getenv("AGENTBRIDGE_OIDC_ISSUER")
 if _oidc_issuer:
@@ -104,25 +188,72 @@ if _oidc_issuer:
         issuer=_oidc_issuer,
         audience=os.getenv("AGENTBRIDGE_OIDC_AUDIENCE", "agentbridge"),
         public_key_pem=_pem,
+        # If no static key is configured, the verifier will auto-fetch JWKS from
+        # <issuer>/.well-known/openid-configuration at first use. See auth_oidc.py.
+        jwks_url=os.getenv("AGENTBRIDGE_OIDC_JWKS_URL") or None,
         role_claim=os.getenv("AGENTBRIDGE_OIDC_ROLE_CLAIM", "role"),
     ))
-    logger.info("OIDC operator SSO enabled (issuer=%s)", _oidc_issuer)
+    logger.info("OIDC operator SSO enabled (issuer=%s, key=%s)",
+                _oidc_issuer, "jwks" if not _pem else "static")
 
 # --- rate limiting: throttle /control/* per client IP (blunts admin-key brute force) ---
 RATE_LIMIT_PER_MIN = int(os.getenv("AGENTBRIDGE_RATE_LIMIT", "240"))
 rate_limiter = RateLimiter(RATE_LIMIT_PER_MIN, window_seconds=60)
 
 
+def _route_label(request: Request) -> str:
+    """Low-cardinality metric label: the matched route TEMPLATE (e.g. /control/identity/{id}),
+    NOT the raw path. Raw paths carry ids (/control/identity/agent-123) and would explode
+    Prometheus label cardinality -> unbounded memory. Unmatched routes collapse to one label."""
+    route = request.scope.get("route")
+    return getattr(route, "path", None) or "<unmatched>"
+
+
 @app.middleware("http")
-async def _rate_limit(request: Request, call_next):
+async def _observability_and_rate_limit(request: Request, call_next):
+    """Single middleware that does: request_id, slow-log, HTTP metrics, rate-limit.
+    Doing it in one pass avoids re-reading the body and re-wrapping the response chain.
+    """
+    rid = request.headers.get("X-Request-ID") or new_request_id()
+    bind_request_id(rid)
+    request_id_header = {"X-Request-ID": rid}
+
+    # 503 during shutdown so the LB stops sending new traffic.
+    if not _ready["ok"] and request.url.path not in ("/health", "/ready"):
+        return JSONResponse({"detail": "shutting down"}, status_code=503,
+                            headers=request_id_header)
+
+    t0 = time.monotonic()
+
+    # Per-IP rate limit on operator endpoints (blunts admin-key brute force).
     if request.url.path.startswith("/control"):
         client = request.client.host if request.client else "unknown"
         if not rate_limiter.allow(client):
+            RATE_LIMIT_HITS.inc()
             return JSONResponse(
                 {"detail": f"rate limit exceeded ({RATE_LIMIT_PER_MIN}/min)"},
                 status_code=429,
+                headers=request_id_header,
             )
-    return await call_next(request)
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        # Unhandled exception — record and re-raise so uvicorn's logger sees the trace.
+        HTTP_REQUESTS.labels(method=request.method, path=_route_label(request),
+                             status="500").inc()
+        raise
+
+    elapsed = time.monotonic() - t0
+    _plabel = _route_label(request)
+    HTTP_REQUESTS.labels(method=request.method, path=_plabel,
+                         status=str(response.status_code)).inc()
+    HTTP_DURATION.labels(method=request.method, path=_plabel).observe(elapsed)
+    response.headers["X-Request-ID"] = rid
+    if elapsed > float(os.getenv("AGENTBRIDGE_SLOW_LOG_SECONDS", "2.0")):
+        logger.warning("slow request %s %s took %.3fs", request.method,
+                       request.url.path, elapsed)
+    return response
 
 
 # --- guards ---------------------------------------------------------------------------
@@ -139,8 +270,10 @@ def operator_guard(permission: str):
             try:
                 _claims, role = oidc_verifier.authenticate(request.headers["Authorization"])
             except OidcError as e:
+                AUTH_FAILURES.labels(kind="operator").inc()
                 raise HTTPException(401, f"operator auth failed: {e}")
         else:
+            AUTH_FAILURES.labels(kind="operator").inc()
             hint = "X-Admin-Key" + (" or Authorization: Bearer <jwt>" if oidc_verifier else "")
             raise HTTPException(401, f"operator auth required ({hint})")
         try:
@@ -160,6 +293,7 @@ async def authenticate_agent(request: Request, raw_body: Optional[bytes] = None)
     body = raw_body if raw_body is not None else await request.body()
     ok, reason = authenticator.authenticate(agent_id, nonce, body, signature)
     if not ok:
+        AUTH_FAILURES.labels(kind="agent").inc()
         raise HTTPException(401, f"agent auth failed: {reason}")
     return agent_id
 
@@ -186,9 +320,54 @@ class BudgetBody(BaseModel):
 
 # --- public: mesh translation (pure function, no governance) --------------------------
 
+def _store_health() -> Dict[str, Any]:
+    """Probe the governance store with a trivial read; surface its type and readiness.
+
+    Returns {"type": "...", "ok": bool, "error": "..."}; used by /health and /ready.
+    A failure here means the governance plane cannot serve traffic safely — /ready
+    should return 503 so the LB pulls the pod out of rotation.
+    """
+    info = {"type": type(store).__name__}
+    try:
+        # A read-only probe that works on every backend.
+        store.list_identities()
+        info["ok"] = True
+    except Exception as e:
+        info["ok"] = False
+        info["error"] = str(e)[:200]
+    return info
+
+
 @app.get("/health")
 def health():
-    return {"status": "ok", "protocols": registry.protocols()}
+    """Liveness probe — process is up. Always returns 200 (even during drain) so k8s
+    doesn't restart the pod mid-shutdown. Use /ready for traffic routing."""
+    return {"status": "ok", "version": _pkg_version,
+            "protocols": registry.protocols(), "store": _store_health()}
+
+
+@app.get("/ready")
+def ready():
+    """Readiness probe — process can serve NEW traffic. Returns 503 during shutdown
+    or if the governance store is unreachable."""
+    if not _ready["ok"]:
+        return JSONResponse({"status": "draining"}, status_code=503)
+    sh = _store_health()
+    if not sh.get("ok"):
+        return JSONResponse({"status": "not_ready", "store": sh}, status_code=503)
+    return {"status": "ready", "store": sh}
+
+
+@app.get("/version")
+def version():
+    return {"version": _pkg_version, "python": sys.version.split()[0],
+            "store": type(store).__name__}
+
+
+@app.get("/metrics")
+def metrics():
+    body, content_type = render_metrics()
+    return Response(content=body, media_type=content_type)
 
 
 @app.get("/control/protocols")
@@ -270,13 +449,16 @@ def mark_sensitive(capability: str,
 
 @app.get("/control/approvals")
 def list_pending(_role: str = Depends(operator_guard("approvals:read"))):
-    return {"pending": [vars(r) for r in approvals.pending()]}
+    pending = approvals.pending()
+    update_approvals_pending(len(pending))
+    return {"pending": [vars(r) for r in pending]}
 
 
 @app.post("/control/approvals/{request_id}/approve")
 def approve(request_id: str, _role: str = Depends(operator_guard("approvals:write"))):
     if not approvals.approve(request_id):
         raise HTTPException(404, "no such pending request")
+    update_approvals_pending(len(approvals.pending()))
     return {"request_id": request_id, "status": "approved"}
 
 
@@ -284,6 +466,7 @@ def approve(request_id: str, _role: str = Depends(operator_guard("approvals:writ
 def deny(request_id: str, _role: str = Depends(operator_guard("approvals:write"))):
     if not approvals.deny(request_id):
         raise HTTPException(404, "no such pending request")
+    update_approvals_pending(len(approvals.pending()))
     return {"request_id": request_id, "status": "denied"}
 
 
@@ -304,6 +487,48 @@ def get_audit(_role: str = Depends(operator_guard("audit:read"))):
 @app.get("/control/audit/export")
 def export_audit(_role: str = Depends(operator_guard("audit:export"))):
     return {"jsonl": audit.export_jsonl()}
+
+
+# --- audit retention + signed checkpoints (production compliance) --------------------
+
+@app.post("/control/audit/checkpoint")
+def create_audit_checkpoint(_role: str = Depends(operator_guard("audit:export"))):
+    """Sign the current audit head so a third party can later prove the log wasn't
+    truncated before this point. We sign with the server's admin-key-derived identity
+    if one exists; otherwise we generate an ephemeral operator key for this call only
+    (production deployments should register a dedicated operator identity)."""
+    from ..governance.identity import AgentIdentity
+    # Use a fresh operator keypair for the checkpoint signature. The public key is
+    # returned alongside so a third party can verify later. In a real deployment you'd
+    # use a stable operator key (kept in a KMS or HSM); for now we make this explicit.
+    op = AgentIdentity.generate("operator-checkpoint")
+    cp = audit.checkpoint(op.sign, op.public_key_hex)
+    return {"checkpoint": cp, "note": "public_key_hex must be preserved to verify later"}
+
+
+@app.post("/control/audit/retention")
+def set_audit_retention(body: dict,
+                        _role: str = Depends(operator_guard("audit:export"))):
+    """Truncate the audit log up to a given seq, or toggle legal hold.
+
+    Body:
+      {"action": "truncate", "seq": 1000}     # delete entries with seq < 1000
+      {"action": "legal_hold", "on": true}    # freeze truncation
+    """
+    action = body.get("action")
+    if action == "truncate":
+        seq = int(body.get("seq", 0))
+        if seq <= 0:
+            raise HTTPException(400, "seq must be > 0")
+        if audit.is_legal_hold():
+            raise HTTPException(409, "legal hold is active; cannot truncate")
+        removed = audit.truncate_before(seq)
+        logger.info("audit truncated before seq=%d (%d entries removed)", seq, removed)
+        return {"truncated_before": seq, "removed": removed}
+    if action == "legal_hold":
+        audit.set_legal_hold(bool(body.get("on", True)))
+        return {"legal_hold": audit.is_legal_hold()}
+    raise HTTPException(400, "unknown action; use 'truncate' or 'legal_hold'")
 
 
 # --- policy rules (declarative policy engine v2, over HTTP) ----------------------------

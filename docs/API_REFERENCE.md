@@ -23,7 +23,10 @@ OIDC env: `AGENTBRIDGE_OIDC_ISSUER`, `AGENTBRIDGE_OIDC_AUDIENCE`, and one of
 
 | Method | Path | Body | Returns |
 |--------|------|------|---------|
-| GET | `/health` | — | `{status, protocols}` |
+| GET | `/health` | — | `{status, version, protocols, store}` — liveness (always 200, even while draining) |
+| GET | `/ready` | — | `{status, store}` — readiness; **503** while draining or if the store is unreachable |
+| GET | `/version` | — | `{version, python, store}` |
+| GET | `/metrics` | — | Prometheus exposition (text) |
 | GET | `/control/protocols` | — | `{protocols: [...]}` |
 | POST | `/control/translate/call` | `{src, dst, wire}` | `{wire}` — request translated src→dst |
 | POST | `/control/translate/result` | `{src, dst, wire}` | `{wire}` — result translated src→dst |
@@ -44,6 +47,8 @@ Malformed wires (non-object, or empty/unroutable) return **400** with a clear re
 | POST | `/control/approvals/{id}/approve` · `/deny` | `approvals:write` | Resolve an approval |
 | GET | `/control/audit` | `audit:read` | Audit entries + integrity check |
 | GET | `/control/audit/export` | `audit:export` | Audit log as JSONL (for SIEM/auditors) |
+| POST | `/control/audit/checkpoint` | `audit:export` | Ed25519-sign the current audit head — a third party can later prove the log wasn't truncated/rewound past this point |
+| POST | `/control/audit/retention` | `audit:export` | `{action:"truncate", seq}` drops entries before `seq` (chain stays verifiable); `{action:"legal_hold", on}` freezes truncation (**409** while a hold is active) |
 | POST | `/control/policy/rules` | `policy:write` | Add a declarative policy rule (see below) |
 | GET | `/control/policy/rules` | `policy:read` | List active policy rules |
 

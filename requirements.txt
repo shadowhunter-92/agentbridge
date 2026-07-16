@@ -4,6 +4,7 @@
 fastapi>=0.109.0
 uvicorn>=0.27.0
 pydantic>=2.13.4
+prometheus-client>=0.20.0   # /metrics endpoint; code degrades to a safe stub if absent, but CI needs it
 
 # Testing
 pytest>=7.4.0

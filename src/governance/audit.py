@@ -4,6 +4,20 @@ Tamper-evident audit log.
 Every governed call appends an entry whose hash chains to the previous entry's hash
 (like a mini blockchain). Any later edit/deletion breaks the chain, which
 `verify_integrity()` detects. This is the "audit trail" enterprises pay for.
+
+Retention model (production-ready):
+  - The chain is hash-linked, so deleting an entry in the middle breaks verification.
+    We solve this with SIGNED CHECKPOINTS: a checkpoint signs (seq, head_hash) at a
+    point in time. After a checkpoint is recorded, entries BEFORE the checkpoint seq
+    can be truncated safely — anyone with the checkpoint signature can verify the
+    chain was intact at the checkpoint, and the remaining chain is verifiable from
+    the checkpoint head forward.
+  - `truncate_before(seq)`: removes entries with seq < N. Refuses if a legal hold
+    is active. The remaining chain stays internally verifiable — `verify_chain` /
+    `verify_durable` tolerate a chain that legitimately starts at seq>0; the signed
+    checkpoint is what proves the truncation point was authorized. Returns the count removed.
+  - `set_legal_hold(bool)`: when True, truncate_before refuses to remove anything.
+    Useful during investigations.
 """
 
 import hashlib
@@ -51,6 +65,7 @@ class AuditLog:
     def __init__(self, store: Optional[GovernanceStore] = None):
         self.store = store or InMemoryStore()
         self._lock = threading.RLock()
+        self._legal_hold = False
         self._entries: List[AuditEntry] = [
             AuditEntry(**rec) for rec in self.store.load_audit()
         ]
@@ -80,30 +95,56 @@ class AuditLog:
     def entries(self) -> List[AuditEntry]:
         return list(self._entries)
 
+    def count(self) -> int:
+        """Number of audit entries currently cached — O(1), no list copy (hot path)."""
+        with self._lock:
+            return len(self._entries)
+
     def export_jsonl(self) -> str:
         """Audit export for compliance (one JSON object per line)."""
         return "\n".join(json.dumps(asdict(e), sort_keys=True) for e in self._entries)
 
     def verify_integrity(self) -> bool:
-        """True iff this process's in-memory view of the chain is intact."""
-        return self.verify_chain([asdict(e) for e in self._entries])
+        """True iff this process's in-memory view of the chain is intact. Auto-detects a
+        retention-truncated chain (legitimately starting at seq>0) and verifies its internal
+        integrity — pair with a signed checkpoint to prove the truncation point."""
+        records = [asdict(e) for e in self._entries]
+        return self.verify_chain(records, require_genesis=self._starts_at_genesis(records))
 
     def verify_durable(self) -> bool:
-        """Load the full chain from the store and verify it — the true cross-worker check."""
-        return self.verify_chain(self.store.load_audit())
+        """Load the full chain from the store and verify it — the true cross-worker check.
+        Like verify_integrity, tolerates a retention-truncated chain."""
+        records = self.store.load_audit()
+        return self.verify_chain(records, require_genesis=self._starts_at_genesis(records))
 
     @staticmethod
-    def verify_chain(records: List[Dict[str, Any]]) -> bool:
-        """Verify a list of audit-entry dicts: sequential seqs from 0, intact hash links, and
-        each entry_hash matches a recompute (detects fork, reorder, edit, or deletion)."""
-        prev = AuditLog.GENESIS
-        for i, rec in enumerate(sorted(records, key=lambda r: r["seq"])):
-            if rec["seq"] != i or rec["prev_hash"] != prev:
+    def _starts_at_genesis(records: List[Dict[str, Any]]) -> bool:
+        return not records or min(r["seq"] for r in records) == 0
+
+    @staticmethod
+    def verify_chain(records: List[Dict[str, Any]], require_genesis: bool = True) -> bool:
+        """Verify audit-entry dicts: contiguous seqs, intact hash links, and each entry_hash
+        recomputes (detects fork, reorder, edit, or deletion).
+
+        require_genesis=True (default): the chain must be COMPLETE from seq 0 (prev=GENESIS).
+        require_genesis=False: verify INTERNAL integrity only, anchored at the earliest entry's
+        prev_hash — for a retention-truncated chain that legitimately starts at seq>0. (A signed
+        checkpoint, not this function, vouches that the truncation point itself was authorized.)"""
+        ordered = sorted(records, key=lambda r: r["seq"])
+        if not ordered:
+            return True
+        if require_genesis and (ordered[0]["seq"] != 0 or ordered[0]["prev_hash"] != AuditLog.GENESIS):
+            return False
+        prev_hash = ordered[0]["prev_hash"]      # GENESIS for a full chain; the pre-truncation head otherwise
+        prev_seq = ordered[0]["seq"] - 1
+        for rec in ordered:
+            if rec["seq"] != prev_seq + 1 or rec["prev_hash"] != prev_hash:
                 return False
             fields = {k: rec[k] for k in AuditEntry.__dataclass_fields__ if k in rec}
             if AuditEntry(**fields).compute_hash() != rec["entry_hash"]:
                 return False
-            prev = rec["entry_hash"]
+            prev_hash = rec["entry_hash"]
+            prev_seq = rec["seq"]
         return True
 
     # --- signed checkpoints (compliance / third-party verifiable) ---------------------
@@ -140,3 +181,34 @@ class AuditLog:
             return True
         except (InvalidSignature, KeyError, ValueError):
             return False
+
+    # --- retention / legal hold --------------------------------------------------
+    def set_legal_hold(self, on: bool) -> None:
+        """When True, truncate_before() refuses to delete anything. Use during
+        investigations or litigation holds. Toggle-able by an operator."""
+        with self._lock:
+            self._legal_hold = bool(on)
+
+    def is_legal_hold(self) -> bool:
+        return self._legal_hold
+
+    def truncate_before(self, seq: int) -> int:
+        """Delete entries with seq < `seq` from the durable store and the in-memory cache.
+
+        Returns the number of entries deleted. Refuses (returns 0) if a legal hold is
+        active. After truncation, the remaining chain is still internally consistent:
+        the first remaining entry's `prev_hash` references the (now-deleted) prior head,
+        which is exactly what signed checkpoints preserve — anyone holding a checkpoint
+        for seq=N can verify the chain was intact at N, and the live chain verifies from
+        N forward (with the understanding that pre-N history lives only in the checkpoint
+        signature, not in the live log).
+        """
+        if seq <= 0:
+            return 0
+        with self._lock:
+            if self._legal_hold:
+                return 0
+            removed = self.store.truncate_audit_before(seq)
+            if removed > 0:
+                self._entries = [e for e in self._entries if e.seq >= seq]
+            return removed
