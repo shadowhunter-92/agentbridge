@@ -202,6 +202,11 @@ Beyond AgentBridge's own model above, we also do external security reviews for o
 MCP-server maintainers — static + design review against the OWASP Top-10 for Agentic
 Applications, MCP-specific red-team patterns, a full report with severity-rated findings.
 
+The maintainer also contributes security tooling upstream: two detection templates merged into
+[ProjectDiscovery's nuclei-templates](https://github.com/projectdiscovery/nuclei-templates) — one
+for exposed Anthropic API keys, one for leaked Claude Code config (`.claude/settings.json`,
+`.mcp.json`). Security here is the practice, not the marketing.
+
 > "This is easily the most useful thing that has happened to the project since I started it."
 > — Arthur Jhonathas, maintainer of [mcp-gmail-manager](https://github.com/arthjhon/mcp-gmail-manager),
 > on the review that shipped as [v0.3.1](https://github.com/arthjhon/mcp-gmail-manager/blob/main/audits/v0.3.0-external-audit.md)
