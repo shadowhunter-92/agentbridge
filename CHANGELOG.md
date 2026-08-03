@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency floors bumped (pydantic ≥2.13.4, httpx ≥0.28.1) and GitHub Actions updated (checkout v7, setup-python v6) via grouped Dependabot PRs.
 - **Dependabot** reconfigured to **monthly + grouped** minor/patch updates (one PR instead of ~15 at once) and to **ignore `a2a-sdk` major bumps** (1.x breaks the 0.3.x conformance tests).
 - CI now prints a **coverage report** (`pytest-cov`).
+- **Capped `mcp` to `>=1.27.0,<2.0.0`** and set Dependabot to ignore its major bumps. `mcp` 2.0 removed `mcp.server.fastmcp` (used by `src/serve/mcp_gateway.py` and the example server), which broke CI on an unrelated push; the cap holds the working 1.x line until the FastMCP import path is migrated deliberately.
 
 ### Fixed
 - **No test can hang the suite.** Added `pytest-timeout` (90s, thread method) and hardened the threaded concurrency test (daemon workers + bounded `join`) — previously a worker stalling before the barrier could deadlock `t.join()` indefinitely.

@@ -13,7 +13,7 @@ pytest-cov>=4.1.0       # coverage report in CI logs
 httpx>=0.28.1
 # Official protocol SDKs used by the conformance + live tests to validate translation
 # against each protocol's REAL schema (dev/test only; not imported at runtime).
-mcp>=1.27.0
+mcp>=1.27.0,<2.0.0
 a2a-sdk>=0.3.0,<1.0.0   # 0.3.x ships the JSON-RPC pydantic types we target
 acp-sdk>=1.0.0          # ACP models (server class is bypassed; see docs/PROTOCOL_SUPPORT.md)
 openai>=2.0.0           # ChatCompletionMessageToolCall (function-calling format)

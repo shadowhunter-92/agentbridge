@@ -26,6 +26,11 @@ updates:
       # breaks the suite, so don't auto-open it. Revisit deliberately when we migrate the adapter.
       - dependency-name: "a2a-sdk"
         update-types: ["version-update:semver-major"]
+      # mcp 2.0 removed mcp.server.fastmcp (used by src/serve/mcp_gateway.py + the example
+      # server). Cap held at <2.0 in requirements/pyproject; don't auto-open the major until
+      # the FastMCP import path is migrated deliberately.
+      - dependency-name: "mcp"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
