@@ -16,7 +16,7 @@ httpx>=0.28.1
 mcp>=1.27.0,<2.0.0
 a2a-sdk>=0.3.0,<1.0.0   # 0.3.x ships the JSON-RPC pydantic types we target
 acp-sdk>=1.0.0          # ACP models (server class is bypassed; see docs/PROTOCOL_SUPPORT.md)
-openai>=2.0.0           # ChatCompletionMessageToolCall (function-calling format)
+openai>=2.51.0           # ChatCompletionMessageToolCall (function-calling format)
 google-genai>=1.0.0     # Gemini FunctionCall / FunctionResponse
 agntcy-acp>=1.5.0       # AGNTCY Agent Connect Protocol (RunCreateStateless, MessageTextBlock)
 
