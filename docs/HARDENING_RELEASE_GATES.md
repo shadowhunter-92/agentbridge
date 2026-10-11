@@ -69,3 +69,6 @@ The ledger atomically claims an (agent_id, operation_id, request fingerprint) be
 **Not yet exercised:** kill -9 at every transition, target acknowledgement loss, remote partial success, aggressive multi-node Postgres failover, hostile SSRF endpoints, external penetration testing, policy changes during execution, high load and real network partitions.
 
 The R1/R2 branch and its PR must stay draft until final CI checks and independent acceptance gates pass. No production release is asserted.
+
+### Direct gateway signature hardening
+Production direct gateway calls now reject missing or invalid Ed25519 signatures; the HTTP route forwards its authenticated raw request signature to the gateway. **Remaining caveat:** the direct SDK signer interface has not yet been independently reviewed for binding proof to the exact action, since callers can provide their own signed_data payload. Treat direct SDK usage as unsupported for production until that gap is closed and adversarial tests pass.
