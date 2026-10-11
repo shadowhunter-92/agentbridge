@@ -58,7 +58,7 @@ def effective_call_cost(value: Any, capability: str,
     """
     env = os.environ if env is None else env
     requested = validate_cost(value)
-    if env.get("AGENTBRIDGE_ENV", "").lower() != "production":
+    if env.get("AGENTBRIDGE_ENV", "").lower() not in ("prod", "production"):
         return requested
     schedule = _object(env.get("AGENTBRIDGE_COST_SCHEDULE_JSON"),
                        "AGENTBRIDGE_COST_SCHEDULE_JSON")
@@ -93,7 +93,7 @@ def resolve_target(target_id: Any, protocol: str, capability: str,
         raise SecurityConfigurationError("target requires a nonempty capability allowlist")
     if capability not in capabilities:
         raise SecurityConfigurationError("capability not authorized for target")
-    if env.get("AGENTBRIDGE_ENV", "").lower() == "production":
+    if env.get("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
         # Binding trust to destination *and* agent avoids any registered agent
         # inheriting permissions for every configured target.
         allowed_agents = record.get("allowed_agents")
@@ -120,7 +120,7 @@ def resolve_target(target_id: Any, protocol: str, capability: str,
     if (u.scheme not in ("http", "https") or not u.hostname
             or u.username is not None or u.password is not None or u.fragment):
         raise SecurityConfigurationError("target must be an absolute HTTP(S) URL without userinfo/fragment")
-    if env.get("AGENTBRIDGE_ENV", "").lower() == "production" and u.scheme != "https":
+    if env.get("AGENTBRIDGE_ENV", "").lower() in ("prod", "production") and u.scheme != "https":
         raise SecurityConfigurationError("production target must use HTTPS")
     invocation: dict[str, Any] = {"kind": kind, "base_url": address}
     if kind == "acp_http":
