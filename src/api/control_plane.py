@@ -619,13 +619,19 @@ async def governed_route(request: Request):
     except KeyError as exc:
         raise HTTPException(400, str(exc))
 
+    operation_id = body.get("operation_id")
+    if target is not None and os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+        if not isinstance(operation_id, str) or len(operation_id) < 16 or len(operation_id) > 128:
+            raise HTTPException(400, "production execution requires a unique operation_id (16-128 chars)")
+
     async def _invoke(dst_wire):
         return await _invoke_target(dst, dst_wire, target)
 
     try:
         result = await gateway.route_call(agent_id=agent_id, src_proto=src, dst_proto=dst,
                                           src_wire=wire, invoke=_invoke, cost=cost,
-                                          target_id=body.get("target_id"))
+                                          target_id=body.get("target_id"),
+                                          operation_id=operation_id)
         return {"decision": "allow", **result}
     except GovernanceError as e:
         detail = {"reason": str(e)}
