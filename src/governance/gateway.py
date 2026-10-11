@@ -170,18 +170,29 @@ class GovernanceGateway:
                     self.budgets.release(agent_id, token)
                     raise
 
+            # A remote timeout may occur AFTER the target committed its side effect.
+            # When using durable operation IDs, retain the budget reservation until
+            # an operator reconciles this unknown outcome. Otherwise a timeout could
+            # free capacity for another potentially consequential action.
+            invocation_started = False
             try:
                 dst_wire = self.registry.translate_call(src_wire, src_proto, dst_proto)
+                invocation_started = True
                 result = await invoke(dst_wire)
-            except Exception as e:
-                self.budgets.release(agent_id, token)
+            except BaseException as e:
+                uncertain = invocation_started and ledger is not None
+                if not uncertain:
+                    self.budgets.release(agent_id, token)
                 self.audit.record(
                     actor=agent_id, action="route_call",
                     source_protocol=src_proto, target_protocol=dst_proto,
-                    capability=capability, decision="error", reason=str(e)[:200], cost=0.0,
+                    capability=capability,
+                    decision="unknown" if uncertain else "error",
+                    reason=(str(e)[:200] or type(e).__name__), cost=0.0,
                 )
                 update_audit_count(self.audit.count())
-                record_call(src_proto, dst_proto, capability, "error", time.monotonic() - t0)
+                record_call(src_proto, dst_proto, capability,
+                            "unknown" if uncertain else "error", time.monotonic() - t0)
                 raise
 
             self.budgets.commit(agent_id, token)
