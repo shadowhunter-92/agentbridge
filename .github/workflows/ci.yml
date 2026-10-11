@@ -62,6 +62,8 @@ jobs:
           pip install -r requirements.txt "psycopg[binary]"
       - name: Run real PostgreSQL integration and concurrency tests
         run: python -m pytest tests/test_postgres_store.py tests/test_postgres_reconciliation.py tests/test_pg_worker_kill_recovery.py tests/test_postgres_durable_hold_boundary.py -q
+      - name: Measure bounded PostgreSQL governance latency (not a production SLO)
+        run: python tools/benchmark_postgres_governance.py --count 50 --workers 4
 
   package-review:
     runs-on: ubuntu-latest
