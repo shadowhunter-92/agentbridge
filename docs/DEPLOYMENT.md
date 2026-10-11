@@ -104,3 +104,8 @@ store-backed. See `docs/ENTERPRISE.md` → *Concurrency & scaling*.
 - [ ] A formal security review before handling regulated production traffic.
 
 See `docs/ROADMAP_AND_MONETIZATION.md` for what's gated on demand vs. built next.
+
+
+## Deployment NO-GO status (October 2026)
+
+This guide is **not a certification or permission to connect consequential live actions**. Run in isolated staging with synthetic/read-only tools only. Production requires explicitly configured target IDs, per-agent capability ACLs, a durable database, stable secrets, signed nonce requests, and a unique 16–128 character `operation_id`. Direct arbitrary target configurations are rejected. Unknown remote outcomes retain reserved exposure pending independently verified reconciliation. Durable legal holds, trusted external audit anchoring, actual PostgreSQL failover, network partitions, recovery drills and independent penetration review have NOT been completed. Use `docs/PRODUCTION_OPERATOR_DRILLS.md` and `docs/HARDENING_RELEASE_GATES.md` as the acceptance criteria.
