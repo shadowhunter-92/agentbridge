@@ -107,7 +107,7 @@ class Budget:
         with self._lock:
             return {"spend_limit": self.spend_limit, "rate_limit": self.rate_limit,
                     "window_seconds": self.window_seconds, "spent": self.spent,
-                    "calls": list(self._calls)}
+                    "calls": list(self._calls), "reserved": dict(self._reserved)}
 
     @classmethod
     def from_state(cls, s: Dict) -> "Budget":
