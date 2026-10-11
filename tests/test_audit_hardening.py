@@ -1,3 +1,4 @@
+import pytest
 """Regression tests for durable audit view and fail-closed production controls."""
 from pathlib import Path
 from fastapi.testclient import TestClient
@@ -51,5 +52,22 @@ def test_production_detects_deleted_audit_prefix(tmp_path, monkeypatch):
         monkeypatch.setenv("AGENTBRIDGE_ENV", "production")
         assert not log.verify_durable()
         assert not log.verify_integrity()
+    finally:
+        store.close()
+
+
+def test_production_direct_library_truncation_is_forbidden(tmp_path, monkeypatch):
+    from src.governance.audit import AuditLog
+    from src.governance.store import SqliteStore
+    store=SqliteStore(str(tmp_path / "audit-immutable.db"))
+    try:
+        log=AuditLog(store)
+        log.record(actor="test", action="write", source_protocol="mcp",
+                   target_protocol="a2a", capability="read", decision="allow")
+        monkeypatch.setenv("AGENTBRIDGE_ENV", "prod")
+        with pytest.raises(PermissionError, match="production audit deletion"):
+            log.truncate_before(1)
+        assert len(log.entries())==1
+        assert log.verify_durable()
     finally:
         store.close()
