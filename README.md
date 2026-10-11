@@ -1,3 +1,5 @@
+> **October 2026 engineering review:** Production readiness is not established. See [Internal Release Gates](docs/INTERNAL_RELEASE_GATES_2026.md) and [Protocol Compatibility](docs/PROTOCOL_COMPATIBILITY_2026.md). The official deployment and independent assessment gates are still open.
+
 # AgentBridge — the Meta-Bridge
 
 [![CI](https://github.com/shadowhunter-92/agentbridge/actions/workflows/ci.yml/badge.svg)](https://github.com/shadowhunter-92/agentbridge/actions/workflows/ci.yml)
