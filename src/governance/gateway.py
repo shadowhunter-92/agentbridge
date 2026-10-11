@@ -12,6 +12,8 @@ Atomic reserve/commit closes the TOCTOU race. Protocol-agnostic — the moat in 
 """
 
 import time
+import json
+import hashlib
 from typing import Any, Awaitable, Callable, Dict, Optional
 
 from ..protocols import default_registry
@@ -60,6 +62,7 @@ class GovernanceGateway:
         src_wire: Dict[str, Any],
         invoke: Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]],
         cost: float = 1.0,
+        target_id: Optional[str] = None,
         signed_data: Optional[bytes] = None,
         signature: Optional[bytes] = None,
     ) -> Dict[str, Any]:
@@ -69,17 +72,23 @@ class GovernanceGateway:
         }):
             canonical = self.registry.get(src_proto).to_canonical_call(src_wire)
             capability = canonical.capability
+            request_material = json.dumps({
+                "agent_id": agent_id, "src": src_proto, "dst": dst_proto,
+                "wire": src_wire, "cost": cost, "target_id": target_id,
+            }, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+            request_scope = hashlib.sha256(request_material).hexdigest()
 
             decision = self.policy.authorize(
                 agent_id=agent_id, capability=capability, cost=cost,
                 signed_data=signed_data, signature=signature,
                 src_protocol=src_proto, dst_protocol=dst_proto,
+                request_scope=request_scope,
             )
 
             if not decision.allowed:
                 approval_id = None
                 if decision.needs_approval and self.approvals:
-                    approval_id = self.approvals.request(agent_id, capability, cost).id
+                    approval_id = self.approvals.request(agent_id, capability, cost, request_scope).id
                 entry = self.audit.record(
                     actor=agent_id, action="route_call",
                     source_protocol=src_proto, target_protocol=dst_proto,
@@ -103,6 +112,16 @@ class GovernanceGateway:
                 record_call(src_proto, dst_proto, capability, "deny", time.monotonic() - t0)
                 raise GovernanceError(Decision(False, why), entry)
 
+            # Claim a one-shot grant BEFORE the target is invoked. The store operation
+            # is atomic: parallel calls cannot execute on the same approval.
+            if decision.approval_required:
+                if not self.approvals or not self.approvals.consume(agent_id, capability, request_scope):
+                    self.budgets.release(agent_id, token)
+                    entry = self.audit.record(actor=agent_id, action="route_call",
+                        source_protocol=src_proto, target_protocol=dst_proto,
+                        capability=capability, decision="deny", reason="approval grant already consumed", cost=0.0)
+                    raise GovernanceError(Decision(False, "approval grant already consumed"), entry)
+
             try:
                 dst_wire = self.registry.translate_call(src_wire, src_proto, dst_proto)
                 result = await invoke(dst_wire)
@@ -118,8 +137,6 @@ class GovernanceGateway:
                 raise
 
             self.budgets.commit(agent_id, token)
-            if self.approvals and self.approvals.requires_approval(capability):
-                self.approvals.consume(agent_id, capability)
             self.audit.record(
                 actor=agent_id, action="route_call",
                 source_protocol=src_proto, target_protocol=dst_proto,
