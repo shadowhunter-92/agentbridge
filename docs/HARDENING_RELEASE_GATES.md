@@ -119,3 +119,14 @@ Outstanding P0–P3/R1–R3 release gates: attack-surface review, policy bypass 
 - All engineering branch commits from PRs #27–#31 are ancestors of this release branch. Those duplicate review PRs have been closed **without merging**. Their source branches remain intact; default `main` has not changed.
 - Production direct gateway now denies calls without a durable operation ID and includes the ID in the approval/request fingerprint. Budget serialization retains held reservations.
 - Active review remains draft PR #32. Safe merge and production status are independently gated by security, real fault tests, current protocol conformance, trustworthy audit controls and external operator acceptance.
+
+## Additional internal audit and runtime controls — October 11, 2026
+
+- Production direct gateway calls require 16–128 character operation IDs and include each ID in the hash that scopes an approval; caller signatures are bound to the same ID.
+- Normalized `prod` and `production` mode checks to avoid accidentally bypassing production operator-cost, target ACL and durable shared nonce protections.
+- Added real PostgreSQL reconciliation-settlement tests in the CI PostgreSQL job, across independent database connections.
+- Restored the optional OpenTelemetry dependency extra; telemetry still requires configured infrastructure to export.
+- Production `AuditLog.verify_durable()` now requires genesis-rooted history; a self-consistent truncated suffix cannot silently pass as complete. Direct `AuditLog.truncate_before()` raises PermissionError in production (both aliases) until checkpoint-anchored retention with durable holds is implemented.
+- Added an isolated real loopback HTTP server test to simulate a remote side effect followed by lost TCP/HTTP acknowledgement, verifying the operation stays unknown and cannot be replayed automatically. This is a test of transport behavior **in CI**, not a multi-node production exercise or endorsement of remote exactly-once semantics.
+
+**Still not finished internally:** authenticated destination-specific evidence verification and reconciliation policy, durable legal holds and externally anchored checkpoint issuance/retention, outbound SSRF/DNS controls and actual network isolation, end-to-end current protocol conformance, real process-kill/network-partition Postgres recovery acceptance, reproducible production packaging/upgrade/migration and measured load SLOs. **Still external:** independent audit, operated staging/cloud configuration and witnessed drills, integration feedback, customer pilots and commercial adoption. Do not call the current code a production-ready release.
