@@ -30,3 +30,15 @@ No independent security report, real operated staging failure drill or paid pilo
 - These are source-level hardening changes, not a DNS rebinding solution: deployment must still constrain resolved IPs, redirect destinations, CONNECT tunneling, destination ports and post-DNS network access at the egress enforcement point.
 - Latest follow-on changes must have successful CI against their exact final head before claiming tested status. Keep PR #34 draft and main untouched.
 - Next acceptance work: external-state readback tied to operation identity, independent immutable audit anchoring, network-policy-backed egress with active adversarial DNS/redirect tests, and operated failover/restoration with signed evidence.
+
+## Follow-up: PostgreSQL performance measurement
+
+`tools/benchmark_postgres_governance.py` exercises multi-connection real
+PostgreSQL budget reservations, operation handling and audit logging under
+bounded concurrency, asserting that accounting and audit counts agree.
+The CI PostgreSQL service now invokes it with 50 operations and 4 workers.
+It emits p50/p95/p99 and throughput, but uses a simulated destination and
+a local disposable database. These numbers are **not** production SLOs,
+proof of horizontal HA scaling, or end-to-end customer-agent latency.
+Production sizing, sustained-load failure behavior and SLO acceptance
+remain open until a real operated deployment measures them.
