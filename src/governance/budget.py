@@ -111,9 +111,13 @@ class Budget:
 
     @classmethod
     def from_state(cls, s: Dict) -> "Budget":
-        return cls(spend_limit=s["spend_limit"], rate_limit=s["rate_limit"],
-                   window_seconds=s["window_seconds"], spent=s.get("spent", 0.0),
-                   calls=s.get("calls", []))
+        budget = cls(spend_limit=s["spend_limit"], rate_limit=s["rate_limit"],
+                     window_seconds=s["window_seconds"], spent=s.get("spent", 0.0),
+                     calls=s.get("calls", []))
+        # Reflect authoritative outstanding reservations in budget introspection.
+        # This matters for monitoring unknown-outcome exposure across workers.
+        budget._reserved = dict(s.get("reserved", {}))
+        return budget
 
 
 # --- pure helpers operating on a persisted budget-state dict --------------------------
