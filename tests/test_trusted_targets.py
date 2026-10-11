@@ -67,3 +67,20 @@ def test_invalid_capability_allowlist_fails_closed():
     with pytest.raises(SecurityConfigurationError):
         resolve_target("x", "mcp", "add", env={
             "AGENTBRIDGE_TARGETS_JSON": '{"x":{"protocol":"mcp","kind":"mcp_stdio","capabilities":[],"command":"python"}}'})
+
+
+@pytest.mark.parametrize("production_label", ["prod", "production"])
+def test_both_production_spellings_require_operator_cost_and_agent_acl(production_label):
+    env = {
+        "AGENTBRIDGE_ENV": production_label,
+        "AGENTBRIDGE_COST_SCHEDULE_JSON": '{"pay":7.0}',
+        "AGENTBRIDGE_TARGETS_JSON": json.dumps({
+            "finance":{"protocol":"acp","capabilities":["pay"],"kind":"acp_http",
+                        "base_url":"https://payments.example.test","allowed_agents":["approved"]}
+        }),
+    }
+    assert effective_call_cost(0, "pay", env=env) == 7.0
+    with pytest.raises(SecurityConfigurationError, match="agent not authorized"):
+        resolve_target("finance", "acp", "pay", env=env, agent_id="attacker")
+    assert resolve_target("finance", "acp", "pay", env=env,
+                          agent_id="approved")["base_url"] == "https://payments.example.test"
