@@ -58,3 +58,18 @@ jobs:
           pip install -r requirements.txt "psycopg[binary]"
       - name: Run real PostgreSQL integration and concurrency tests
         run: python -m pytest tests/test_postgres_store.py tests/test_postgres_reconciliation.py -q
+
+  package-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Build and validate Python artifacts
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          python -m twine check dist/*
+      - name: Build isolated release-review image
+        run: docker build -f Dockerfile.release -t agentbridge:release-review .
