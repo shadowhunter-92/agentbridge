@@ -31,3 +31,5 @@ pyjwt>=2.8.0
 # Postgres backend (make_store with a postgres:// URL), install psycopg:
 #   pip install "psycopg[binary]"
 # It is imported lazily, so it's only needed when you actually choose Postgres.
+# Production-readiness metrics
+prometheus-client>=0.20.0
