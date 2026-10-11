@@ -16,6 +16,7 @@ Pick a backend with `make_store(db)`:
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from abc import ABC, abstractmethod
@@ -280,12 +281,29 @@ class SqliteStore(GovernanceStore):
         return [json.loads(r["entry"]) for r in rows]
 
     def truncate_audit_before(self, seq):
+        # Never allow deletion through a direct store call in production.
+        # Check persistent holds under the same write lock as deletion, so
+        # independent workers cannot race a hold against the retention job.
+        if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+            raise PermissionError("production audit retention requires external anchoring")
         if seq <= 0:
             return 0
         with self._lock:
-            cur = self._db.execute("DELETE FROM audit WHERE seq < ?", (seq,))
-            self._db.commit()
-            return cur.rowcount or 0
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                exists = self._db.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='audit_holds'"
+                ).fetchone()
+                if exists and self._db.execute(
+                    "SELECT 1 FROM audit_holds WHERE enabled=1 LIMIT 1"
+                ).fetchone():
+                    raise PermissionError("durable legal hold blocks audit deletion")
+                cur = self._db.execute("DELETE FROM audit WHERE seq < ?", (seq,))
+                self._db.execute("COMMIT")
+                return cur.rowcount or 0
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
 
     def append_audit_chained(self, build_entry):
         @retry_transient(max_attempts=4, base_delay=0.01, max_delay=0.5)
@@ -526,9 +544,18 @@ class PostgresStore(GovernanceStore):
         return [json.loads(r["entry"]) for r in rows]
 
     def truncate_audit_before(self, seq):
+        if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+            raise PermissionError("production audit retention requires external anchoring")
         if seq <= 0:
             return 0
-        with self._lock, self._db.cursor() as cur:
+        with self._lock, self._db.transaction(), self._db.cursor() as cur:
+            # Shared with AuditTrustStore.set_hold to serialize hold changes.
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (911003,))
+            cur.execute("SELECT to_regclass('audit_holds') AS holds_table")
+            if cur.fetchone()["holds_table"] is not None:
+                cur.execute("SELECT 1 FROM audit_holds WHERE enabled=true LIMIT 1")
+                if cur.fetchone():
+                    raise PermissionError("durable legal hold blocks audit deletion")
             cur.execute("DELETE FROM audit WHERE seq < %s", (seq,))
             return cur.rowcount or 0
 
