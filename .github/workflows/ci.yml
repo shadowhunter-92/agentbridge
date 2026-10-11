@@ -59,7 +59,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt "psycopg[binary]"
       - name: Run real PostgreSQL integration and concurrency tests
-        run: python -m pytest tests/test_postgres_store.py tests/test_postgres_reconciliation.py -q
+        run: python -m pytest tests/test_postgres_store.py tests/test_postgres_reconciliation.py tests/test_pg_worker_kill_recovery.py -q
 
   package-review:
     runs-on: ubuntu-latest
