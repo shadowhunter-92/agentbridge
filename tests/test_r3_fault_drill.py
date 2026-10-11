@@ -37,7 +37,10 @@ def test_indeterminate_execution_retains_reservation(tmp_path, outcome):
         assert OperationLedger(store).get("agent", params["operation_id"])["state"] == "unknown"
         state = store.get_budget("agent")
         assert sum(state["reserved"].values()) == 1.0
-        with pytest.raises(OperationConflict):
+        # The retained reservation may deny the retry at the budget gate
+        # before the operation ledger reports its duplicate key.
+        from src.governance.gateway import GovernanceError
+        with pytest.raises((OperationConflict, GovernanceError)):
             asyncio.run(gateway.route_call(**params))
         assert side_effects == ["committed"]
     finally:
