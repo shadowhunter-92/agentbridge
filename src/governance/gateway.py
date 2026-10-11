@@ -14,6 +14,7 @@ Atomic reserve/commit closes the TOCTOU race. Protocol-agnostic — the moat in 
 import time
 import json
 import hashlib
+import os
 from typing import Any, Awaitable, Callable, Dict, Optional
 
 from ..protocols import default_registry
@@ -79,6 +80,17 @@ class GovernanceGateway:
                 "wire": src_wire, "cost": cost, "target_id": target_id,
             }, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
             request_scope = hashlib.sha256(request_material).hexdigest()
+
+            if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+                # An identity registered in SQL is not proof that an arbitrary
+                # in-process caller possesses its signing key.
+                if (signed_data is None or signature is None
+                        or not self.identities.verify_signature(agent_id, signed_data, signature)):
+                    entry = self.audit.record(actor=agent_id, action="route_call",
+                        source_protocol=src_proto, target_protocol=dst_proto,
+                        capability=capability, decision="deny",
+                        reason="signed agent proof required", cost=0.0)
+                    raise GovernanceError(Decision(False, "signed agent proof required"), entry)
 
             decision = self.policy.authorize(
                 agent_id=agent_id, capability=capability, cost=cost,
