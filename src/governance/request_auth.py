@@ -65,7 +65,7 @@ class RequestAuthenticator:
             return False, "malformed signature"
         if not self.identities.verify_signature(agent_id, canonical_payload(agent_id, nonce, body), sig):
             return False, "signature verification failed"
-        if os.getenv("AGENTBRIDGE_ENV", "").lower() == "production":
+        if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
             if not claim_nonce(self.identities.store, agent_id, nonce, self.nonce_ttl):
                 return False, "nonce replay detected or nonce timestamp invalid"
         elif not self.nonces.check_and_store(nonce):
