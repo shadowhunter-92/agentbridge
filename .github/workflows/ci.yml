@@ -27,6 +27,8 @@ jobs:
         run: python -m pytest tests/ -q --cov=src --cov-report=term
       - name: Synthetic local performance observation (not an SLO)
         run: python tools/benchmark_synthetic.py --count 1000 --workers 4
+      - name: Synthetic concurrent SQL governance smoke load (not production SLO)
+        run: python tools/benchmark_governance.py --count 50 --workers 4
         # Postgres integration tests skip automatically unless AGENTBRIDGE_TEST_PG is set.
         # Coverage prints to the CI log; the Codecov badge additionally needs a codecov.io account.
 
