@@ -206,3 +206,36 @@ def test_budget_state_roundtrip_preserves_reservations():
     assert restored.reserved == 2
     assert not restored.can_afford(4)[0]
     assert restored.release(token)
+
+
+def test_production_missing_operation_id_denied_even_with_signed_body(tmp_path, monkeypatch):
+    import json
+    from src.governance.gateway import GovernanceError
+    from src.governance.request_auth import canonical_payload
+    monkeypatch.setenv("AGENTBRIDGE_ENV", "production")
+    monkeypatch.setenv("AGENTBRIDGE_CAPABILITY_ALLOWLIST_JSON", '{"agent":["read"]}')
+    store = SqliteStore(str(tmp_path / "mandatory.db"))
+    try:
+        ids = IdentityRegistry(store)
+        ident = AgentIdentity.generate("agent")
+        ids.register(ident)
+        budget = BudgetManager(store)
+        budget.set_budget("agent", Budget(spend_limit=10))
+        gateway = GovernanceGateway(identities=ids, budgets=budget)
+        wire = gateway.registry.get("openai").from_canonical_call(
+            CanonicalCall("read", {"id": 1}))
+        signed_body = json.dumps({"src":"openai","dst":"mcp","wire":wire}).encode()
+        nonce = "proof-for-no-operation-id"
+        data = canonical_payload("agent", nonce, signed_body)
+        executed=[]
+        async def invoke(_):
+            executed.append(True)
+            return {"ok": True}
+        with pytest.raises(GovernanceError, match="durable operation_id required"):
+            asyncio.run(gateway.route_call(agent_id="agent", src_proto="openai",
+                         dst_proto="mcp", src_wire=wire, invoke=invoke,
+                         signed_body=signed_body, signed_data=data,
+                         signed_nonce=nonce, signature=ident.sign(data)))
+        assert not executed
+    finally:
+        store.close()
