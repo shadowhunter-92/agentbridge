@@ -81,10 +81,20 @@ class GovernanceGateway:
             request_material = json.dumps({
                 "agent_id": agent_id, "src": src_proto, "dst": dst_proto,
                 "wire": src_wire, "cost": cost, "target_id": target_id,
+                "operation_id": operation_id,
             }, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
             request_scope = hashlib.sha256(request_material).hexdigest()
 
             if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+                if (not isinstance(operation_id, str) or
+                        not 16 <= len(operation_id) <= 128):
+                    entry = self.audit.record(
+                        actor=agent_id, action="route_call", source_protocol=src_proto,
+                        target_protocol=dst_proto, capability=capability,
+                        decision="deny", reason="durable operation_id required in production",
+                        cost=0.0)
+                    raise GovernanceError(
+                        Decision(False, "durable operation_id required in production"), entry)
                 # An identity registered in SQL is not proof that an arbitrary
                 # in-process caller possesses its signing key.
                 proof_ok = False
