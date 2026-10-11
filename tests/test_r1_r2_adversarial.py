@@ -112,7 +112,8 @@ def test_production_gateway_requires_signed_agent_proof(tmp_path, monkeypatch):
             executions.append(1)
             return {"ok": True}
         base = dict(agent_id="agent", src_proto="openai", dst_proto="mcp",
-                    src_wire=wire, invoke=target, cost=1)
+                    src_wire=wire, invoke=target, cost=1,
+                    operation_id="signed-prod-operation-0001")
         from src.governance.gateway import GovernanceError
         with pytest.raises(GovernanceError, match="request-bound signed agent proof required"):
             asyncio.run(gateway.route_call(**base))
@@ -124,7 +125,8 @@ def test_production_gateway_requires_signed_agent_proof(tmp_path, monkeypatch):
         assert executions == []
         import json
         from src.governance.request_auth import canonical_payload
-        body = json.dumps({"src":"openai", "dst":"mcp", "wire":wire}).encode()
+        body = json.dumps({"src":"openai", "dst":"mcp", "wire":wire,
+                           "operation_id":"signed-prod-operation-0001"}).encode()
         nonce = "signed-library-proof"
         proof = canonical_payload("agent", nonce, body)
         result = asyncio.run(gateway.route_call(
@@ -133,6 +135,7 @@ def test_production_gateway_requires_signed_agent_proof(tmp_path, monkeypatch):
         assert result == {"ok": True}
         assert executions == [1]
         changed = json.dumps({"src":"openai", "dst":"mcp",
+                               "operation_id":"signed-prod-operation-0001",
                                "wire": {"tool": "delete"}}).encode()
         changed_proof = canonical_payload("agent", nonce, changed)
         with pytest.raises(GovernanceError, match="request-bound signed agent proof required"):
