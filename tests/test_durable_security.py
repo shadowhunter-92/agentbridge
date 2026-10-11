@@ -40,3 +40,23 @@ def test_cross_worker_revocation(tmp_path: Path):
     finally:
         a.close()
         b.close()
+
+
+def test_prod_alias_uses_shared_durable_replay_store(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("AGENTBRIDGE_ENV", "prod")
+    a = SqliteStore(str(tmp_path / "alias.db"))
+    b = SqliteStore(str(tmp_path / "alias.db"))
+    try:
+        identity = AgentIdentity.generate("agent-alias")
+        IdentityRegistry(a).register(identity)
+        nonce = f"{int(time.time())}:strong-unique-production-nonce"
+        body = b'{"action":"read"}'
+        sig = sign_request(identity, nonce, body)
+        assert RequestAuthenticator(IdentityRegistry(a)).authenticate(
+            "agent-alias", nonce, body, sig)[0]
+        ok, message = RequestAuthenticator(IdentityRegistry(b)).authenticate(
+            "agent-alias", nonce, body, sig)
+        assert not ok, message
+    finally:
+        a.close()
+        b.close()
