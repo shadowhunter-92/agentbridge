@@ -1,3 +1,5 @@
+**New seven-workstream evidence register:** [INTERNAL_RELEASE_GATES_2026.md](INTERNAL_RELEASE_GATES_2026.md). Current internal release-gate additions are on draft PR #34 and have not been merged to main. Full production acceptance is still NO-GO.
+
 # AgentBridge: hardening release gates (October 2026)
 
 > STATUS: Engineering integration under review. NOT production-certified; do not merge/deploy based only on passing unit tests.
