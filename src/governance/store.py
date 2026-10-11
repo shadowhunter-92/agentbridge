@@ -188,7 +188,12 @@ class SqliteStore(GovernanceStore):
         self._db = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA busy_timeout=10000")
-        self._db.execute("PRAGMA journal_mode=WAL")
+        # Independent worker startups may race while switching a fresh SQLite file
+        # to WAL mode. Retry transient SQLITE_BUSY instead of losing a worker.
+        @retry_transient(max_attempts=8, base_delay=0.025, max_delay=0.4)
+        def _enable_wal():
+            self._db.execute("PRAGMA journal_mode=WAL")
+        _enable_wal()
         self._init_schema()
 
     def _init_schema(self):
