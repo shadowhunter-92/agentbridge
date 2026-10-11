@@ -77,7 +77,7 @@ def test_both_production_spellings_require_operator_cost_and_agent_acl(productio
         "AGENTBRIDGE_EGRESS_PROXY_URL": "http://egress-proxy.example.com:3128",
         "AGENTBRIDGE_TARGETS_JSON": json.dumps({
             "finance":{"protocol":"acp","capabilities":["pay"],"kind":"acp_http",
-                        "base_url":"https://payments.example.test","allowed_agents":["approved"]}
+                        "base_url":"https://payments.example.com","allowed_agents":["approved"]}
         }),
     }
     assert effective_call_cost(0, "pay", env=env) == 7.0
