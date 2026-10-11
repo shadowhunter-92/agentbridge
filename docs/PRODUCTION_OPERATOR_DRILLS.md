@@ -49,3 +49,7 @@ Automated test `tests/test_r3_fault_drill.py` now injects a **simulated side eff
 **Release blocker:** an operator must be able to reconcile a durable unknown operation using verified remote-state evidence, update the operation and budget transactionally, and retain an auditable reconciliation record. Merely retaining the reservation indefinitely is a conservative temporary safeguard; it is not a complete recovery system. A failed translation should be distinguished from dispatched-but-unknown outcomes.
 
 **Do not execute the staging drills against production systems.** PR changes are in an isolated draft branch and require the complete CI and independent security gates.
+
+## R3 synthetic lost-acknowledgement test
+
+The R3 branch adds a simulated test that commits an inert side effect then raises a timeout. For an operation with a durable operation ID, the gateway now preserves the budget reservation, emits an unknown audit decision and does not automatically replay. This is synthetic fault injection, not a real network or kill -9 drill. Persistent reservation-to-operation reconciliation, staging network faults and outside reviews remain uncompleted release gates.
