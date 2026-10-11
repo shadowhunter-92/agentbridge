@@ -74,7 +74,7 @@ def test_both_production_spellings_require_operator_cost_and_agent_acl(productio
     env = {
         "AGENTBRIDGE_ENV": production_label,
         "AGENTBRIDGE_COST_SCHEDULE_JSON": '{"pay":7.0}',
-        "AGENTBRIDGE_EGRESS_PROXY_ENFORCED": "1",
+        "AGENTBRIDGE_EGRESS_PROXY_URL": "http://egress-proxy.example.com:3128",
         "AGENTBRIDGE_TARGETS_JSON": json.dumps({
             "finance":{"protocol":"acp","capabilities":["pay"],"kind":"acp_http",
                         "base_url":"https://payments.example.test","allowed_agents":["approved"]}
@@ -84,4 +84,4 @@ def test_both_production_spellings_require_operator_cost_and_agent_acl(productio
     with pytest.raises(SecurityConfigurationError, match="agent not authorized"):
         resolve_target("finance", "acp", "pay", env=env, agent_id="attacker")
     assert resolve_target("finance", "acp", "pay", env=env,
-                          agent_id="approved")["base_url"] == "https://payments.example.test"
+                          agent_id="approved")["proxy_url"] == "http://egress-proxy.example.com:3128"
