@@ -33,3 +33,23 @@ def test_production_disallows_ephemeral_audit_checkpoint_and_retention(monkeypat
     assert client.post("/control/audit/checkpoint", headers=h).status_code == 503
     assert client.post("/control/audit/retention", headers=h,
                        json={"action": "truncate", "seq": 1}).status_code == 503
+
+
+def test_production_detects_deleted_audit_prefix(tmp_path, monkeypatch):
+    from src.governance.audit import AuditLog
+    from src.governance.store import SqliteStore
+    store=SqliteStore(str(tmp_path / "audit-prefix.db"))
+    try:
+        log=AuditLog(store)
+        for i in range(4):
+            log.record(actor="test", action="write", source_protocol="mcp",
+                       target_protocol="a2a", capability="read", decision="allow")
+        assert log.verify_durable()
+        # Model malicious store operator deleting original history.
+        store.truncate_audit_before(2)
+        assert log.verify_durable()  # Legacy dev-only suffix validation.
+        monkeypatch.setenv("AGENTBRIDGE_ENV", "production")
+        assert not log.verify_durable()
+        assert not log.verify_integrity()
+    finally:
+        store.close()
