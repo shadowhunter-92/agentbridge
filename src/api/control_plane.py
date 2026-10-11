@@ -39,6 +39,7 @@ from pydantic import BaseModel, Field
 from .ratelimit import RateLimiter
 from .auth_oidc import OidcConfig, OidcVerifier, OidcError
 from .trusted_targets import resolve_target, effective_call_cost, SecurityConfigurationError
+from ..governance.durable_policy import DurablePolicySet, DurableApprovalQueue
 from ..protocols import default_registry
 from ..governance import (
     AgentIdentity, IdentityRegistry, BudgetManager, Budget, ApprovalQueue,
@@ -150,8 +151,8 @@ if os.path.isdir(_static_dir):
 registry = default_registry
 identities = IdentityRegistry(store=store)
 budgets = BudgetManager(store=store)
-approvals = ApprovalQueue(store=store)
-policy_rules = PolicySet()          # declarative rules, managed via /control/policy/rules
+approvals = DurableApprovalQueue(store=store)
+policy_rules = DurablePolicySet(store)          # declarative rules, managed via /control/policy/rules
 policy = PolicyEngine(identities, budgets, approvals=approvals, policy_set=policy_rules)
 audit = AuditLog(store=store)
 gateway = GovernanceGateway(identities=identities, budgets=budgets, approvals=approvals,
