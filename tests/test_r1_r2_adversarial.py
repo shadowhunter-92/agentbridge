@@ -114,18 +114,31 @@ def test_production_gateway_requires_signed_agent_proof(tmp_path, monkeypatch):
         base = dict(agent_id="agent", src_proto="openai", dst_proto="mcp",
                     src_wire=wire, invoke=target, cost=1)
         from src.governance.gateway import GovernanceError
-        with pytest.raises(GovernanceError, match="signed agent proof required"):
+        with pytest.raises(GovernanceError, match="request-bound signed agent proof required"):
             asyncio.run(gateway.route_call(**base))
         assert executions == []
-        with pytest.raises(GovernanceError, match="signed agent proof required"):
+        # Signing unrelated bytes is never sufficient.
+        with pytest.raises(GovernanceError, match="request-bound signed agent proof required"):
             asyncio.run(gateway.route_call(**base, signed_data=b"proof",
-                                           signature=bytes(64)))
+                                           signature=identity.sign(b"proof")))
         assert executions == []
-        # A valid Ed25519 proof is sufficient for this specific library gate,
-        # but payload-to-action binding still needs separate review.
+        import json
+        from src.governance.request_auth import canonical_payload
+        body = json.dumps({"src":"openai", "dst":"mcp", "wire":wire}).encode()
+        nonce = "signed-library-proof"
+        proof = canonical_payload("agent", nonce, body)
         result = asyncio.run(gateway.route_call(
-            **base, signed_data=b"proof", signature=identity.sign(b"proof")))
+            **base, signed_body=body, signed_nonce=nonce,
+            signed_data=proof, signature=identity.sign(proof)))
         assert result == {"ok": True}
+        assert executions == [1]
+        changed = json.dumps({"src":"openai", "dst":"mcp",
+                               "wire": {"tool": "delete"}}).encode()
+        changed_proof = canonical_payload("agent", nonce, changed)
+        with pytest.raises(GovernanceError, match="request-bound signed agent proof required"):
+            asyncio.run(gateway.route_call(
+                **base, signed_body=changed, signed_nonce=nonce,
+                signed_data=changed_proof, signature=identity.sign(changed_proof)))
         assert executions == [1]
     finally:
         store.close()
