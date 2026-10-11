@@ -114,6 +114,17 @@ class GovernanceGateway:
                         reason="request-bound signed agent proof required", cost=0.0)
                     raise GovernanceError(Decision(False, "request-bound signed agent proof required"), entry)
 
+            # Detect a known idempotency collision before the budget pre-check.
+            # This is a read-only hint, NOT the concurrency lock: atomic
+            # ledger.claim below remains the authority for new operations.
+            if operation_id is not None:
+                existing = OperationLedger(self.identities.store).get(agent_id, operation_id)
+                if existing is not None:
+                    if existing["fingerprint"] != request_scope:
+                        raise OperationConflict("idempotency key reused for different request")
+                    raise OperationConflict("existing operation is " + existing["state"] +
+                                            "; no automatic replay")
+
             decision = self.policy.authorize(
                 agent_id=agent_id, capability=capability, cost=cost,
                 signed_data=signed_data, signature=signature,
