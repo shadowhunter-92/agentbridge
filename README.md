@@ -295,3 +295,16 @@ Detail + the demand-gated roadmap: `docs/ROADMAP.md`.
 
 ## License
 Apache 2.0
+
+
+## Release safety and current status (October 2026)
+
+> **Status: experimental alpha. NOT production certified.** Do not connect consequential customer actions or payment systems without independent security acceptance and a supervised pilot.
+
+The maintained development review line is `release/rc0-hardening-and-validation-2026-10` (not the default branch). It incorporates the P0/R1–R3 engineering work, but release gates remain open. The core includes six protocol adapters, controlled targets, Ed25519 request authentication, human approval, SQL-backed operation replay safeguards, and offline audit verification. These are supported features only within the tested behavior and are not blanket protocol conformance or exactly-once execution.
+
+**Unresolved:** transactional settlement of unknown outcomes and outstanding budgets; trusted evidence/retention and legal holds; SSRF and egress policy hardening; official MCP/A2A conformance; independent penetration testing; full backup/failover and kill-process drills; actual external integrations and pilots.
+
+Read [Release gates](docs/HARDENING_RELEASE_GATES.md), [Staging/operator drills](docs/PRODUCTION_OPERATOR_DRILLS.md), and [External review and pilot plan](docs/EXTERNAL_REVIEW_AND_PILOTS.md) before deploying or proposing a security-sensitive integration.
+
+For a first external evaluation, use read-only or synthetic actions in a disposable environment, with no secrets or customer data. Report reproducible failures in GitHub Issues without posting credentials.
