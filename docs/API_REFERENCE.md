@@ -85,3 +85,8 @@ curl -s localhost:8000/control/translate/call -H 'content-type: application/json
   "wire": {"id":"1","type":"function","function":{"name":"add","arguments":"{\"a\":2,\"b\":3}"}}
 }'
 ```
+
+
+## October 2026 release-review restrictions
+
+For `POST /control/route`, specify `target_id` (operator-owned configuration) rather than a caller-supplied `target` object. Production requires a distinct signed `operation_id` of 16–128 characters for each governed call, including SDK calls, and denies unallowlisted capabilities. Operation IDs are scoped to the exact action for one-shot approvals. Audit retention and ad-hoc checkpoint creation intentionally return 503 in production until durable holds and independent trust anchors are implemented. **No production release is approved.** See `HARDENING_RELEASE_GATES.md`.
