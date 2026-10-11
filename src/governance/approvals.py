@@ -64,9 +64,10 @@ class ApprovalQueue:
     def requires_approval(self, capability: str) -> bool:
         return capability in self._sensitive
 
-    def request(self, agent_id: str, capability: str, cost: float) -> ApprovalRequest:
+    def request(self, agent_id: str, capability: str, cost: float, request_scope: Optional[str] = None) -> ApprovalRequest:
+        scoped_capability = capability if request_scope is None else capability + "|" + request_scope
         req = ApprovalRequest(id=uuid.uuid4().hex, agent_id=agent_id,
-                              capability=capability, cost=cost)
+                              capability=scoped_capability, cost=cost)
         self.store.insert_approval({
             "id": req.id, "agent_id": req.agent_id, "capability": req.capability,
             "cost": req.cost, "status": req.status, "created_at": req.created_at,
@@ -81,28 +82,31 @@ class ApprovalQueue:
     def deny(self, request_id: str) -> bool:
         return self.store.update_approval_status(request_id, "denied")
 
-    def is_granted(self, agent_id: str, capability: str) -> bool:
+    def is_granted(self, agent_id: str, capability: str, request_scope: Optional[str] = None) -> bool:
         """True iff there exists an approved-but-not-yet-consumed grant for this
         (agent_id, capability). Reads the durable store so multi-worker is safe."""
+        scoped_capability = capability if request_scope is None else capability + "|" + request_scope
         for a in self.store.list_approvals("approved"):
-            if a["agent_id"] == agent_id and a["capability"] == capability:
+            if a["agent_id"] == agent_id and a["capability"] == scoped_capability:
                 return True
         return False
 
-    def consume(self, agent_id: str, capability: str) -> None:
+    def consume(self, agent_id: str, capability: str, request_scope: Optional[str] = None) -> bool:
         """One-shot consume: mark the first approved grant for this pair as consumed.
 
         Multi-worker safe: the store's consume_approval() atomically transitions
         approved -> consumed. If two workers race, only one wins (returns True); the
         other's consume_approval() returns False because the row is no longer 'approved'.
         That's correct: a one-shot grant should be consumable exactly once."""
+        scoped_capability = capability if request_scope is None else capability + "|" + request_scope
         for a in self.store.list_approvals("approved"):
-            if a["agent_id"] == agent_id and a["capability"] == capability:
+            if a["agent_id"] == agent_id and a["capability"] == scoped_capability:
                 # Atomic approved -> consumed. If a concurrent worker already consumed
                 # it, this returns False and we silently no-op — that's fine, the grant
                 # was already used.
-                self.store.consume_approval(a["id"])
-                return
+                if self.store.consume_approval(a["id"]):
+                    return True
+        return False
 
     def pending(self) -> List[ApprovalRequest]:
         return [ApprovalRequest(**a) for a in self.store.list_approvals("pending")]
