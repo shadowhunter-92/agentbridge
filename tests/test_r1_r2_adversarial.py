@@ -169,3 +169,37 @@ def test_atomic_duplicate_claim_has_one_winner(tmp_path):
     finally:
         first.close()
         second.close()
+
+
+def test_production_rejects_missing_operation_identity_before_invocation(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTBRIDGE_ENV", "production")
+    monkeypatch.setenv("AGENTBRIDGE_CAPABILITY_ALLOWLIST_JSON", '{"agent":["read"]}')
+    store = SqliteStore(str(tmp_path / "prod.db"))
+    try:
+        ids = IdentityRegistry(store)
+        identity = AgentIdentity.generate("agent")
+        ids.register(identity)
+        budget = BudgetManager(store)
+        budget.set_budget("agent", Budget(spend_limit=10))
+        gateway = GovernanceGateway(identities=ids, budgets=budget)
+        wire = gateway.registry.get("openai").from_canonical_call(CanonicalCall("read", {"id": 1}))
+        effects = []
+        async def invoke(_):
+            effects.append(1)
+            return {"ok": True}
+        from src.governance.gateway import GovernanceError
+        with pytest.raises(GovernanceError, match="durable operation_id required"):
+            asyncio.run(gateway.route_call(agent_id="agent", src_proto="openai", dst_proto="mcp",
+                                            src_wire=wire, invoke=invoke))
+        assert effects == []
+    finally:
+        store.close()
+
+
+def test_budget_state_roundtrip_preserves_reservations():
+    budget = Budget(spend_limit=5)
+    token, _ = budget.reserve(2)
+    restored = Budget.from_state(budget.state())
+    assert restored.reserved == 2
+    assert not restored.can_afford(4)[0]
+    assert restored.release(token)
