@@ -25,6 +25,7 @@ from .approvals import ApprovalQueue
 from .policy import PolicyEngine, Decision
 from .audit import AuditLog, AuditEntry
 from .operation_ledger import OperationLedger, OperationConflict
+from .request_auth import canonical_payload
 from ..observability import span, record_call, update_audit_count, update_budget_gauge
 
 
@@ -68,6 +69,8 @@ class GovernanceGateway:
         operation_id: Optional[str] = None,
         signed_data: Optional[bytes] = None,
         signature: Optional[bytes] = None,
+        signed_body: Optional[bytes] = None,
+        signed_nonce: Optional[str] = None,
     ) -> Dict[str, Any]:
         t0 = time.monotonic()
         with span("gateway.route_call", {
@@ -84,13 +87,32 @@ class GovernanceGateway:
             if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
                 # An identity registered in SQL is not proof that an arbitrary
                 # in-process caller possesses its signing key.
-                if (signed_data is None or signature is None
-                        or not self.identities.verify_signature(agent_id, signed_data, signature)):
+                proof_ok = False
+                try:
+                    # Proof has to authenticate this operation, not unrelated
+                    # caller-selected bytes. Cost is an operator reservation, so
+                    # it is not trusted from the signed caller payload.
+                    body = json.loads(signed_body) if signed_body is not None else None
+                    if isinstance(body, dict) and isinstance(signed_nonce, str):
+                        matches = (
+                            body.get("src") == src_proto and body.get("dst") == dst_proto
+                            and body.get("wire") == src_wire
+                            and body.get("target_id") == target_id
+                            and body.get("operation_id") == operation_id
+                        )
+                        if matches and signed_data == canonical_payload(
+                                agent_id, signed_nonce, signed_body):
+                            proof_ok = (signature is not None and
+                                        self.identities.verify_signature(
+                                            agent_id, signed_data, signature))
+                except (TypeError, ValueError, UnicodeError):
+                    proof_ok = False
+                if not proof_ok:
                     entry = self.audit.record(actor=agent_id, action="route_call",
                         source_protocol=src_proto, target_protocol=dst_proto,
                         capability=capability, decision="deny",
-                        reason="signed agent proof required", cost=0.0)
-                    raise GovernanceError(Decision(False, "signed agent proof required"), entry)
+                        reason="request-bound signed agent proof required", cost=0.0)
+                    raise GovernanceError(Decision(False, "request-bound signed agent proof required"), entry)
 
             decision = self.policy.authorize(
                 agent_id=agent_id, capability=capability, cost=cost,
