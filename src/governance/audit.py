@@ -21,6 +21,7 @@ Retention model (production-ready):
 """
 
 import hashlib
+import os
 import json
 import threading
 from dataclasses import dataclass, field, asdict
@@ -119,6 +120,11 @@ class AuditLog:
         """Load the full chain from the store and verify it — the true cross-worker check.
         Like verify_integrity, tolerates a retention-truncated chain."""
         records = self.store.load_audit()
+        if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+            # Destructive retention is disabled for production until durable
+            # checkpoint anchoring is implemented and independently trusted.
+            # Never mistake a self-consistent suffix for intact full history.
+            return self.verify_chain(records, require_genesis=True)
         return self.verify_chain(records, require_genesis=self._starts_at_genesis(records))
 
     @staticmethod
