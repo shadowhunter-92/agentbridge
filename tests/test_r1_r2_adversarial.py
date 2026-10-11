@@ -91,3 +91,68 @@ def test_unknown_remote_outcome_is_not_retried(tmp_path):
         assert OperationLedger(store).get("agent","unique-operation-0002")["state"] == "unknown"
     finally:
         store.close()
+
+
+
+def test_production_gateway_requires_signed_agent_proof(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTBRIDGE_ENV", "production")
+    monkeypatch.setenv("AGENTBRIDGE_CAPABILITY_ALLOWLIST_JSON", '{"agent":["read"]}')
+    store = SqliteStore(str(tmp_path / "signed.db"))
+    try:
+        ids = IdentityRegistry(store)
+        identity = AgentIdentity.generate("agent")
+        ids.register(identity)
+        budgets = BudgetManager(store)
+        budgets.set_budget("agent", Budget(spend_limit=10))
+        gateway = GovernanceGateway(identities=ids, budgets=budgets)
+        wire = gateway.registry.get("openai").from_canonical_call(
+            CanonicalCall("read", {"id": 1}))
+        executions = []
+        async def target(_):
+            executions.append(1)
+            return {"ok": True}
+        base = dict(agent_id="agent", src_proto="openai", dst_proto="mcp",
+                    src_wire=wire, invoke=target, cost=1)
+        from src.governance.gateway import GovernanceError
+        with pytest.raises(GovernanceError, match="signed agent proof required"):
+            asyncio.run(gateway.route_call(**base))
+        assert executions == []
+        with pytest.raises(GovernanceError, match="signed agent proof required"):
+            asyncio.run(gateway.route_call(**base, signed_data=b"proof",
+                                           signature=bytes(64)))
+        assert executions == []
+        # A valid Ed25519 proof is sufficient for this specific library gate,
+        # but payload-to-action binding still needs separate review.
+        result = asyncio.run(gateway.route_call(
+            **base, signed_data=b"proof", signature=identity.sign(b"proof")))
+        assert result == {"ok": True}
+        assert executions == [1]
+    finally:
+        store.close()
+
+
+def test_atomic_duplicate_claim_has_one_winner(tmp_path):
+    import threading
+    path = str(tmp_path / "claim-race.db")
+    first, second = SqliteStore(path), SqliteStore(path)
+    outcomes = []
+    try:
+        ledgers = [OperationLedger(first), OperationLedger(second)]
+        barrier = threading.Barrier(2)
+        def worker(ledger):
+            barrier.wait()
+            try:
+                ledger.claim("agent", "key-1234567891011", "scope")
+                outcomes.append("claimed")
+            except OperationConflict:
+                outcomes.append("duplicate")
+        threads = [threading.Thread(target=worker, args=(l,)) for l in ledgers]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+        assert not any(t.is_alive() for t in threads)
+        assert sorted(outcomes) == ["claimed", "duplicate"]
+    finally:
+        first.close()
+        second.close()
