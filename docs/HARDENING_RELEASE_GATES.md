@@ -93,3 +93,11 @@ Scope limit: the verifier does not establish that a remote action actually occur
 | R5 | First paid pilot with measured ROI | Not yet observed |
 | R6 | Repeatable managed enterprise deployment and retention | Not yet observed |
 | R7 | Multi-industry infrastructure adoption | Not yet observed |
+
+## R3 follow-up: human-reviewed reconciliation groundwork (October 11, 2026)
+
+A transactional SQL-backed `Reconciliation` class now records an operator's determination of an unknown operation, with reviewer identity, destination reference, and a 64-character SHA-256 evidence digest. Concurrent or repeated attempts cannot overwrite the initial determination. Synthetic SQLite cross-worker tests cover the state transition and rejection of unsupported claims.
+
+**Critical limitations / incomplete:** the evidence hash is not proof that the external destination completed an action. Destination-specific read-back verification, trusted operator authorization through the control plane, verified signer identities, reconciled budget reservation settlement, audit event linkage and remote exactly-once guarantees remain unimplemented. This component is **not exposed as a general production HTTP API** and must not be used to approve consequential settlements without independent review.
+
+R3 staging and live operations, protocol conformance, recovery under process kill/network partitions, external penetration testing, R4 integrations, paid R5 pilots, R6 managed distribution and R7 global adoption remain unproven. Do not merge merely because unit tests pass.
