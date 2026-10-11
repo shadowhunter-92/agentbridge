@@ -215,6 +215,10 @@ class AuditLog:
         N forward (with the understanding that pre-N history lives only in the checkpoint
         signature, not in the live log).
         """
+        if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+            # Reject direct library deletion as well as the disabled HTTP route.
+            # A process-local legal hold is NOT sufficient for production.
+            raise PermissionError("production audit deletion requires durable legal holds and trusted checkpoints")
         if seq <= 0:
             return 0
         with self._lock:
