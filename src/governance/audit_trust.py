@@ -36,7 +36,9 @@ class AuditTrustStore:
             with store._lock:
                 store._db.execute("INSERT INTO audit_holds(name,enabled) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET enabled=excluded.enabled",(name,int(bool(enabled))))
         else:
-            with store._lock,store._db.cursor() as c:
+            with store._lock, store._db.transaction(), store._db.cursor() as c:
+                # Same transaction-scoped lock as PostgresStore.truncate_audit_before.
+                c.execute("SELECT pg_advisory_xact_lock(%s)", (911003,))
                 c.execute("INSERT INTO audit_holds(name,enabled) VALUES(%s,%s) ON CONFLICT(name) DO UPDATE SET enabled=excluded.enabled",(name,bool(enabled)))
 
     def holds(self):
