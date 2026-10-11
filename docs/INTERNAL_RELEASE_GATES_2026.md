@@ -75,3 +75,20 @@ The pair of trust roots may be absent only for read-only/translation-only deploy
 unknown-action production reconciliation then remains unavailable (fail closed).
 `tests/test_readback_config_validation.py` exercises these boundaries. These checks do
 not validate independent operations of the readback service or certify key ownership.
+
+## Portable independent audit witness protocol (implementation added)
+
+`src/governance/external_anchor.py` provides a distinct Ed25519 signed witness
+envelope over the canonical first-party audit checkpoint and an offline
+`verify_anchored_audit` function. The verifier pins **two independently administered
+public keys** and requires full genesis-to-head audit continuity, catching
+altered records, rollback behind the witnessed sequence and checkpoint forks.
+`tests/test_external_anchor.py` exercises the invariant and negative cases.
+
+This does **not** provision an external immutable store, implement witness
+monotonicity or rollback detection across successive witness receipts, or
+guarantee the supplied witness is the most recent. An independent service
+must durably publish and retain the latest witness, independently validate
+checkpoint history before signing, and provide a trusted lookup path. Without
+those operational controls a legitimate old receipt can be replayed. Production
+audit deletion remains disabled and this release gate remains **OPEN**.
