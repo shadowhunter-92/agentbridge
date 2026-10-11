@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import math
+import ipaddress
 import os
 from dataclasses import dataclass
 from typing import Any, Mapping
@@ -122,6 +123,20 @@ def resolve_target(target_id: Any, protocol: str, capability: str,
         raise SecurityConfigurationError("target must be an absolute HTTP(S) URL without userinfo/fragment")
     if env.get("AGENTBRIDGE_ENV", "").lower() in ("prod", "production") and u.scheme != "https":
         raise SecurityConfigurationError("production target must use HTTPS")
+    if env.get("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+        # URL allowlisting alone is not a DNS-rebinding defense. Require a
+        # separate reviewed network egress proxy for live HTTP targets.
+        # Fail closed unless the operator affirmatively configures isolation.
+        if env.get("AGENTBRIDGE_EGRESS_PROXY_ENFORCED") != "1":
+            raise SecurityConfigurationError("production HTTP execution requires enforced egress proxy")
+        try:
+            if ipaddress.ip_address(u.hostname):
+                raise SecurityConfigurationError("literal IP target prohibited")
+        except ValueError:
+            pass
+        host = u.hostname.lower().rstrip(".")
+        if host in ("localhost", "localhost.localdomain") or "." not in host or host.endswith((".local",".internal",".test")):
+            raise SecurityConfigurationError("private or ambiguous DNS target prohibited")
     invocation: dict[str, Any] = {"kind": kind, "base_url": address}
     if kind == "acp_http":
         name = record.get("agent_name", "agent")
