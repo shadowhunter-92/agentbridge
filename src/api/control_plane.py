@@ -591,11 +591,13 @@ async def _invoke_target(dst_proto: str, dst_wire: Dict[str, Any],
         return {"result": res}
     if kind == "a2a_http":
         message = registry.get(dst_proto).to_canonical_call(dst_wire).best_text()
-        return {"result": await transport.send_a2a_message(target["base_url"], message)}
+        return {"result": await transport.send_a2a_message(target["base_url"], message,
+                                                           proxy_url=target.get("proxy_url"))}
     if kind == "acp_http":
         return {"result": await transport.call_acp_agent(target["base_url"],
                                                           target.get("agent_name", "agent"),
-                                                          registry.get(dst_proto).to_canonical_call(dst_wire).best_text())}
+                                                          registry.get(dst_proto).to_canonical_call(dst_wire).best_text(),
+                                                          proxy_url=target.get("proxy_url"))}
     raise HTTPException(400, f"unknown target kind '{kind}'")
 
 
