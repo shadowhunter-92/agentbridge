@@ -28,6 +28,9 @@ class OperationLedger:
                     "(agent_id TEXT NOT NULL, operation_id TEXT NOT NULL, "
                     "fingerprint TEXT NOT NULL, state TEXT NOT NULL, updated REAL NOT NULL, "
                     "PRIMARY KEY(agent_id,operation_id))")
+                store._db.execute("CREATE TABLE IF NOT EXISTS operation_reservations ("
+                                  "agent_id TEXT NOT NULL, operation_id TEXT NOT NULL, "
+                                  "token TEXT NOT NULL, PRIMARY KEY(agent_id, operation_id))")
         else:
             with store._lock, store._db.cursor() as cur:
                 cur.execute(
@@ -35,11 +38,16 @@ class OperationLedger:
                     "(agent_id TEXT NOT NULL, operation_id TEXT NOT NULL, "
                     "fingerprint TEXT NOT NULL, state TEXT NOT NULL, updated DOUBLE PRECISION NOT NULL, "
                     "PRIMARY KEY(agent_id,operation_id))")
+                cur.execute("CREATE TABLE IF NOT EXISTS operation_reservations ("
+                            "agent_id TEXT NOT NULL, operation_id TEXT NOT NULL, "
+                            "token TEXT NOT NULL, PRIMARY KEY(agent_id, operation_id))")
 
-    def claim(self, agent_id, operation_id, fingerprint):
+    def claim(self, agent_id, operation_id, fingerprint, reservation_token=None):
         if not all(isinstance(x, str) and x and len(x) <= 256
                    for x in (agent_id, operation_id, fingerprint)):
             raise ValueError("invalid operation claim")
+        if reservation_token is not None and (not isinstance(reservation_token, str) or not reservation_token):
+            raise ValueError("reservation_token must be nonempty")
         stamp = time.time()
         store = self.store
         if isinstance(store, SqliteStore):
@@ -59,6 +67,9 @@ class OperationLedger:
                     db.execute(
                         "INSERT INTO agent_operations VALUES(?,?,?,?,?)",
                         (agent_id, operation_id, fingerprint, "unknown", stamp))
+                    if reservation_token is not None:
+                        db.execute("INSERT INTO operation_reservations VALUES(?,?,?)",
+                                   (agent_id, operation_id, reservation_token))
                     db.execute("COMMIT")
                 except BaseException:
                     db.execute("ROLLBACK")
@@ -78,6 +89,9 @@ class OperationLedger:
                                         "; no automatic replay")
             cur.execute("INSERT INTO agent_operations VALUES(%s,%s,%s,%s,%s)",
                         (agent_id, operation_id, fingerprint, "unknown", stamp))
+            if reservation_token is not None:
+                cur.execute("INSERT INTO operation_reservations VALUES(%s,%s,%s)",
+                            (agent_id, operation_id, reservation_token))
 
     def finish(self, agent_id, operation_id, state):
         if state not in ("succeeded", "failed", "unknown"):
