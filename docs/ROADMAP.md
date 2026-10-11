@@ -117,3 +117,8 @@ In rough priority, built when a real use-case or user pulls for it:
 5. One-command `docker-compose` quickstart with mock agents (sub-60s time-to-first-demo).
 6. Richer protocol semantics (streaming, resources) where a concrete integration needs it.
 7. Retention policies / legal hold for the audit log (the remaining compliance gap).
+
+
+## R1–R7 evidence gates (October 2026)
+
+R1 automated authorization hardening is substantial but lacks independent security approval. R2 includes crash-conservative idempotency and operator-entered reconciliation with SQL state/budget settlement, not universal exactly-once semantics. R3 has a review branch with automated SQLite/PostgreSQL tests but lacks actual customer target failover exercises, signed externally anchored audit/legal-hold controls, and reviewed deployment posture. R4 SDK ecosystem installations, R5 paid design partnerships, R6 repeatable enterprise service, and R7 global infrastructure adoption are separate **unachieved** milestones. See `docs/HARDENING_RELEASE_GATES.md` and the external review call in GitHub issue #33.
