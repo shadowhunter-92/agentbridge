@@ -22,3 +22,11 @@ The original code remains on `main` pending a gate-based review. PR #32 is the c
 No independent security report, real operated staging failure drill or paid pilot is asserted by this document. A signed destination statement proves that a holder of the pinned key signed those fields, **not** that the physical or remote side effect actually took place. Likewise an internal SQL checkpoint is **not** an external tamper-resistant anchor.
 
 **Decision:** no unrestricted production release or merge of PR #34 today. Separate code merge approval from go-live; if engineering review eventually approves an experimental, disabled-by-default feature merge, tag it clearly as alpha.
+
+## October 11 follow-on engineering checkpoint
+
+- Signed receipt verification rejects unknown unsigned metadata, missing fields, malformed signatures and ill-typed/oversized identifiers. Regression corpus: `tests/test_destination_receipt_envelope.py`.
+- Production HTTP target and proxy configuration parsing rejects ambiguous authority/port/path/query/control-character combinations. Regression corpus: `tests/test_production_url_ambiguity.py`.
+- These are source-level hardening changes, not a DNS rebinding solution: deployment must still constrain resolved IPs, redirect destinations, CONNECT tunneling, destination ports and post-DNS network access at the egress enforcement point.
+- Latest follow-on changes must have successful CI against their exact final head before claiming tested status. Keep PR #34 draft and main untouched.
+- Next acceptance work: external-state readback tied to operation identity, independent immutable audit anchoring, network-policy-backed egress with active adversarial DNS/redirect tests, and operated failover/restoration with signed evidence.
