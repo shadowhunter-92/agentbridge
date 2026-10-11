@@ -105,19 +105,22 @@ class IdentityRegistry:
         return True
 
     def is_revoked(self, agent_id: str) -> bool:
-        return self._revoked.get(agent_id, False)
+        rec = self.store.get_identity(agent_id)
+        return rec is None or bool(rec.get("revoked", False))
 
     def get(self, agent_id: str) -> Optional[AgentIdentity]:
         return self._cache.get(agent_id)
 
     def is_registered(self, agent_id: str) -> bool:
-        return agent_id in self._cache and not self.is_revoked(agent_id)
+        rec = self.store.get_identity(agent_id)
+        return bool(rec and not rec.get("revoked", False))
 
     def verify_signature(self, agent_id: str, data: bytes, signature: bytes) -> bool:
-        if self.is_revoked(agent_id):
+        rec = self.store.get_identity(agent_id)
+        if not rec or rec.get("revoked", False):
             return False
-        ident = self._cache.get(agent_id)
-        return bool(ident and ident.verify(data, signature))
+        ident = AgentIdentity(agent_id, rec["public_key_hex"])
+        return ident.verify(data, signature)
 
     def did_of(self, agent_id: str) -> Optional[str]:
         ident = self._cache.get(agent_id)
