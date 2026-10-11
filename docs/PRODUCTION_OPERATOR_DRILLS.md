@@ -42,3 +42,10 @@ A staging run is not a penetration test or certification. The release requires e
 ## Roadmap beyond initial release
 
 R4: SDK and three outside integrations. R5: evidence-backed paid design-partner pilot. R6: HA managed deployments, long-term support, repeatability and customer retention. R7: interoperability and standards participation, only after external adoption.
+## October 11 R3 engineering update — simulated ambiguous outcomes
+
+Automated test `tests/test_r3_fault_drill.py` now injects a **simulated side effect followed by a lost acknowledgement** (TimeoutError or cancellation). It verifies that a claimed operation stays unknown, that the reserved budget is not released prematurely, and that a replay of the same operation ID is rejected. These synthetic tests are not proof of correct behavior against actual customer systems, nor do they exercise OS-level kill -9, container restarts, network partitions, recovery of orphan reservations, or PostgreSQL failover.
+
+**Release blocker:** an operator must be able to reconcile a durable unknown operation using verified remote-state evidence, update the operation and budget transactionally, and retain an auditable reconciliation record. Merely retaining the reservation indefinitely is a conservative temporary safeguard; it is not a complete recovery system. A failed translation should be distinguished from dispatched-but-unknown outcomes.
+
+**Do not execute the staging drills against production systems.** PR changes are in an isolated draft branch and require the complete CI and independent security gates.
