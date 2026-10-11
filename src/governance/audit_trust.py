@@ -57,6 +57,14 @@ class AuditTrustStore:
         seq=checkpoint.get("seq")
         if not isinstance(seq,int) or seq<0:
             raise AuditTrustError("bad checkpoint sequence")
+        records=self.store.load_audit()
+        if not AuditLog.verify_chain(records,require_genesis=True):
+            raise AuditTrustError("stored audit chain failed verification")
+        if seq>len(records):
+            raise AuditTrustError("checkpoint beyond current audit history")
+        expected=(AuditLog.GENESIS if seq==0 else records[seq-1]["entry_hash"])
+        if checkpoint.get("head_hash") != expected:
+            raise AuditTrustError("checkpoint signature does not match the stored audit history")
         blob=json.dumps(checkpoint,sort_keys=True)
         store=self.store
         if isinstance(store,SqliteStore):
