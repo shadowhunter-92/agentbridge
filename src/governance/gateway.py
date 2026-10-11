@@ -80,14 +80,6 @@ class GovernanceGateway:
             }, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
             request_scope = hashlib.sha256(request_material).hexdigest()
 
-            if operation_id is not None:
-                # The existing operation is never retried automatically.
-                # A worker crash leaves an indeterminate outcome for reconciliation.
-                ledger = OperationLedger(self.identities.store)
-                ledger.claim(agent_id, operation_id, request_scope)
-            else:
-                ledger = None
-
             decision = self.policy.authorize(
                 agent_id=agent_id, capability=capability, cost=cost,
                 signed_data=signed_data, signature=signature,
@@ -131,6 +123,18 @@ class GovernanceGateway:
                         source_protocol=src_proto, target_protocol=dst_proto,
                         capability=capability, decision="deny", reason="approval grant already consumed", cost=0.0)
                     raise GovernanceError(Decision(False, "approval grant already consumed"), entry)
+
+            ledger = None
+            if operation_id is not None:
+                # Claim after authorization, budget reservation and approval, but
+                # BEFORE translation or external execution. A failed/unknown
+                # downstream outcome is never automatically replayed.
+                ledger = OperationLedger(self.identities.store)
+                try:
+                    ledger.claim(agent_id, operation_id, request_scope)
+                except BaseException:
+                    self.budgets.release(agent_id, token)
+                    raise
 
             try:
                 dst_wire = self.registry.translate_call(src_wire, src_proto, dst_proto)
