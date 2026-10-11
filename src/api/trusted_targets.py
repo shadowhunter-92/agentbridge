@@ -68,7 +68,8 @@ def effective_call_cost(value: Any, capability: str,
 
 
 def resolve_target(target_id: Any, protocol: str, capability: str,
-                   *, env: Mapping[str, str] | None = None) -> dict[str, Any] | None:
+                   *, env: Mapping[str, str] | None = None,
+                   agent_id: str | None = None) -> dict[str, Any] | None:
     """Resolve an agent-selected target ID to an administrator-configured route.
 
     Configure AGENTBRIDGE_TARGETS_JSON with an object keyed by target ID.
@@ -92,6 +93,15 @@ def resolve_target(target_id: Any, protocol: str, capability: str,
         raise SecurityConfigurationError("target requires a nonempty capability allowlist")
     if capability not in capabilities:
         raise SecurityConfigurationError("capability not authorized for target")
+    if env.get("AGENTBRIDGE_ENV", "").lower() == "production":
+        # Binding trust to destination *and* agent avoids any registered agent
+        # inheriting permissions for every configured target.
+        allowed_agents = record.get("allowed_agents")
+        if not isinstance(allowed_agents, list) or not allowed_agents or not all(
+                isinstance(x, str) and bool(x) for x in allowed_agents):
+            raise SecurityConfigurationError("production target requires allowed_agents")
+        if not agent_id or agent_id not in allowed_agents:
+            raise SecurityConfigurationError("agent not authorized for target")
     kind = record.get("kind")
     if (protocol, kind) not in {
             ("mcp", "mcp_stdio"), ("a2a", "a2a_http"), ("acp", "acp_http")}:
