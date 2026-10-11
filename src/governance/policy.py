@@ -19,6 +19,7 @@ class Decision:
     allowed: bool
     reason: str
     needs_approval: bool = False
+    approval_required: bool = False
 
 
 class PolicyEngine:
@@ -40,7 +41,8 @@ class PolicyEngine:
                   signed_data: Optional[bytes] = None,
                   signature: Optional[bytes] = None,
                   src_protocol: Optional[str] = None,
-                  dst_protocol: Optional[str] = None) -> Decision:
+                  dst_protocol: Optional[str] = None,
+                  request_scope: Optional[str] = None) -> Decision:
         # 1) identity (registered AND not revoked)
         if self.require_verified and not self.identities.is_registered(agent_id):
             return Decision(False, f"unknown or revoked identity '{agent_id}'")
@@ -53,9 +55,11 @@ class PolicyEngine:
         if allowed is not None and capability not in allowed:
             return Decision(False, f"capability '{capability}' not permitted for '{agent_id}'")
 
+        approval_required = False
         # 3) human approval for sensitive capabilities
         if self.approvals and self.approvals.requires_approval(capability):
-            if not self.approvals.is_granted(agent_id, capability):
+            approval_required = True
+            if not self.approvals.is_granted(agent_id, capability, request_scope):
                 return Decision(False, f"approval required for '{capability}'", needs_approval=True)
 
         # 4) declarative policy rules (policy engine v2), if configured
@@ -66,7 +70,8 @@ class PolicyEngine:
             if not r.allowed:
                 return Decision(False, r.reason)
             if r.needs_approval:
-                granted = self.approvals and self.approvals.is_granted(agent_id, capability)
+                approval_required = True
+                granted = self.approvals and self.approvals.is_granted(agent_id, capability, request_scope)
                 if not granted:
                     return Decision(False, r.reason, needs_approval=True)
 
@@ -75,4 +80,4 @@ class PolicyEngine:
         if not ok:
             return Decision(False, why)
 
-        return Decision(True, "authorized")
+        return Decision(True, "authorized", approval_required=approval_required)
