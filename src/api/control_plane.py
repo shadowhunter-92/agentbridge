@@ -619,7 +619,8 @@ async def governed_route(request: Request):
 
     try:
         result = await gateway.route_call(agent_id=agent_id, src_proto=src, dst_proto=dst,
-                                          src_wire=wire, invoke=_invoke, cost=cost)
+                                          src_wire=wire, invoke=_invoke, cost=cost,
+                                          target_id=body.get("target_id"))
         return {"decision": "allow", **result}
     except GovernanceError as e:
         detail = {"reason": str(e)}
