@@ -612,7 +612,8 @@ async def governed_route(request: Request):
     try:
         canonical = registry.get(src).to_canonical_call(wire)
         cost = effective_call_cost(body.get("cost", 1.0), canonical.capability)
-        target = resolve_target(body.get("target_id"), dst, canonical.capability)
+        target = resolve_target(body.get("target_id"), dst, canonical.capability,
+                                agent_id=agent_id)
     except SecurityConfigurationError as exc:
         raise HTTPException(400, f"security policy rejected call: {exc}")
     except KeyError as exc:
