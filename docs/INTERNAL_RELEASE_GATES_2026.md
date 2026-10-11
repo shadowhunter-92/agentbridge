@@ -1,0 +1,24 @@
+# Internal release gate execution register — October 2026
+
+**Branch:** `release/r4-internal-gates-2026-10` (draft PR #34).
+**Decision:** NOT production-certified; keep `main` protected.
+
+## Seven engineering workstreams
+
+| Gate | Code added in this review | Evidence | Still required before production |
+|---|---|---|---|
+| Trusted reconciliation | Pinned Ed25519 destination signature, operation ID/fingerprint/outcome binding, hash check; production digest-only claims denied | `tests/test_destination_receipts.py`, `tests/test_production_reconciliation_receipts.py` | Establish real destination key enrollment/rotation, destination read-back, operator RBAC, trust in target-reported fact, witnessed test |
+| Durable audit trust | SQL-backed legal-hold registry; SQL signed checkpoint registry validates pinned signer AND recorded hash-chain state | `tests/test_audit_trust.py`; production destructive retention remains disabled | Enforce holds on every retention path, independent off-database immutable anchoring and trusted signer service, atomic archive/retention and rollback tests |
+| Network isolation | Named target ACLs plus mandatory explicit HTTP proxy configuration in production; proxy passed through supported A2A/ACP clients; local/IP target exclusions | `tests/test_proxy_boundary.py`, `tests/test_trusted_targets.py` | Actual locked-down proxy deployment, egress firewall/network policy, tested DNS rebinding/redirect handling; test non-HTTP stdio execution permissions |
+| Protocol conformance | Written versioned support/unsupported matrix; limited registered-adapter test | `tests/test_protocol_scope.py`, prior pinned-SDK conformance tests | Official latest MCP and A2A 1.0 interoperability suites, server transports, streaming/task lifecycle; do NOT market as full conformance |
+| Recovery | Real POSIX worker SIGKILL tests against SQLite and disposable PostgreSQL plus earlier lost-ack loopback tests | `tests/test_worker_kill_recovery.py`, `tests/test_pg_worker_kill_recovery.py` | Failover, network partition, backup/restore, remote action before/after acknowledgements, independent staging drill and operator reconciliation |
+| Packaging | Nonroot isolated review container, secure local-only Compose, wheel/sdist and container build CI | `Dockerfile.release`, `docker-compose.release.yml`, package-review job | Immutable image digests, pinned SBOM/dependency locks, vulnerability scan, secrets/KMS, staging upgrade/rollback, signed artifacts |
+| Performance | Repeatable synthetic translation and concurrent SQLite governance benchmark p50/p95/p99, checks budget and audit integrity | `tools/benchmark_synthetic.py`, `tools/benchmark_governance.py`, CI smoke | Real Postgres and remote agent traffic tests under expected load, SLOs, error-budget acceptance and independent deployment metrics |
+
+## Release decision and branches
+
+The original code remains on `main` pending a gate-based review. PR #32 is the consolidated earlier hardening draft. PR #34 is the isolated new internal-gates draft, branched from PR #32; **do not merge both separately**. Avoid deleting either until the proposed release commit is stable and rollback-rehearsed.
+
+No independent security report, real operated staging failure drill or paid pilot is asserted by this document. A signed destination statement proves that a holder of the pinned key signed those fields, **not** that the physical or remote side effect actually took place. Likewise an internal SQL checkpoint is **not** an external tamper-resistant anchor.
+
+**Decision:** no unrestricted production release or merge of PR #34 today. Separate code merge approval from go-live; if engineering review eventually approves an experimental, disabled-by-default feature merge, tag it clearly as alpha.
