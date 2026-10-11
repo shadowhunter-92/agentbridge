@@ -58,9 +58,9 @@ def test_production_requires_https(routes):
     routes["AGENTBRIDGE_ENV"] = "production"
     routes["AGENTBRIDGE_TARGETS_JSON"] = json.dumps({
         "x": {"protocol": "a2a", "kind": "a2a_http",
-              "capabilities": ["send"], "base_url": "http://internal.local"}})
+              "capabilities": ["send"], "allowed_agents": ["agent1"], "base_url": "http://internal.local"}})
     with pytest.raises(SecurityConfigurationError, match="HTTPS"):
-        resolve_target("x", "a2a", "send", env=routes)
+        resolve_target("x", "a2a", "send", env=routes, agent_id="agent1")
 
 
 def test_invalid_capability_allowlist_fails_closed():
