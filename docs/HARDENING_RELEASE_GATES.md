@@ -101,3 +101,13 @@ A transactional SQL-backed `Reconciliation` class now records an operator's dete
 **Critical limitations / incomplete:** the evidence hash is not proof that the external destination completed an action. Destination-specific read-back verification, trusted operator authorization through the control plane, verified signer identities, reconciled budget reservation settlement, audit event linkage and remote exactly-once guarantees remain unimplemented. This component is **not exposed as a general production HTTP API** and must not be used to approve consequential settlements without independent review.
 
 R3 staging and live operations, protocol conformance, recovery under process kill/network partitions, external penetration testing, R4 integrations, paid R5 pilots, R6 managed distribution and R7 global adoption remain unproven. Do not merge merely because unit tests pass.
+
+## Consolidated review and outreach status — October 11, 2026
+
+The active cumulative **draft** review is PR #32 on `release/rc0-hardening-and-validation-2026-10`. Prior duplicate PRs #27–#31 were closed unmerged after checking that their commits were included in the release branch. Their branches remain preserved; historical PR #17 is still divergent and needs separate reconciliation. `main` remains unchanged.
+
+A public request for independent review and disposable read-only/synthetic integrations is in GitHub issue #33. An inquiry was sent to OSTIF requesting scope, indicative audit costs, and potential funding guidance. **No audit engagement, pilot agreement, endorsement, reviewer feedback or outside validation is yet confirmed.**
+
+R3 reconciliation now links durable operation IDs to reservations and performs a single SQL transaction for the reconciled operation state and reserved budget on SQLite/PostgreSQL. Reviewers must still verify the **truth of external evidence** and the security of operator authorization; a digest alone is not validation. The reconciliation code is not an approved production service and is not an independently witnessed compliance process.
+
+Outstanding P0–P3/R1–R3 release gates: attack-surface review, policy bypass tests, safe egress and DNS/SSRF controls, real target idempotency, signed durable audit anchors/legal holds, DB migrations and restore, failover and worker crash drills, supported protocol conformance, measured performance and independent signoff. R4–R7 require external integrations, market evidence, paid pilots, repeatable enterprise operations, and ecosystem adoption and cannot be claimed completed by source changes.
