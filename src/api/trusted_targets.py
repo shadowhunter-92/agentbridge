@@ -127,8 +127,12 @@ def resolve_target(target_id: Any, protocol: str, capability: str,
         # URL allowlisting alone is not a DNS-rebinding defense. Require a
         # separate reviewed network egress proxy for live HTTP targets.
         # Fail closed unless the operator affirmatively configures isolation.
-        if env.get("AGENTBRIDGE_EGRESS_PROXY_ENFORCED") != "1":
-            raise SecurityConfigurationError("production HTTP execution requires enforced egress proxy")
+        proxy_url = env.get("AGENTBRIDGE_EGRESS_PROXY_URL")
+        if not proxy_url or not isinstance(proxy_url,str):
+            raise SecurityConfigurationError("production HTTP requires configured outbound proxy URL")
+        proxy = urlparse(proxy_url)
+        if proxy.scheme not in ("http","https") or not proxy.hostname or proxy.username or proxy.password:
+            raise SecurityConfigurationError("outbound proxy configuration invalid")
         try:
             if ipaddress.ip_address(u.hostname):
                 raise SecurityConfigurationError("literal IP target prohibited")
@@ -138,6 +142,8 @@ def resolve_target(target_id: Any, protocol: str, capability: str,
         if host in ("localhost", "localhost.localdomain") or "." not in host or host.endswith((".local",".internal",".test")):
             raise SecurityConfigurationError("private or ambiguous DNS target prohibited")
     invocation: dict[str, Any] = {"kind": kind, "base_url": address}
+    if env.get("AGENTBRIDGE_ENV", "").lower() in ("prod","production"):
+        invocation["proxy_url"] = proxy_url
     if kind == "acp_http":
         name = record.get("agent_name", "agent")
         if not isinstance(name, str) or not name:
