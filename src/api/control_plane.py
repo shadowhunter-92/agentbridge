@@ -634,6 +634,8 @@ async def governed_route(request: Request):
                                           target_id=body.get("target_id"),
                                           operation_id=operation_id,
                                           signed_data=canonical_payload(agent_id, request.headers.get("X-Nonce", ""), raw),
+                                          signed_body=raw,
+                                          signed_nonce=request.headers.get("X-Nonce", ""),
                                           signature=bytes.fromhex(request.headers.get("X-Signature", "")))
         return {"decision": "allow", **result}
     except GovernanceError as e:
