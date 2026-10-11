@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from .destination_receipts import verify_destination_receipt, UntrustedReceipt
+from .readback_attestations import verify_readback_attestation, UntrustedReadback
 import time
 from .store import SqliteStore, PostgresStore
 from .operation_ledger import OperationLedger, OperationConflict
@@ -42,7 +43,7 @@ class Reconciliation:
             raise ReconciliationError("durable database required")
 
     def record(self, *, agent_id, operation_id, result, external_reference,
-               evidence_sha256, reviewer, destination_receipt=None):
+               evidence_sha256, reviewer, destination_receipt=None, readback_attestation=None):
         if result not in ("succeeded", "failed"):
             raise ReconciliationError("operator must determine succeeded or failed")
         if any(not isinstance(x, str) or not x.strip() or len(x)>512
@@ -66,6 +67,21 @@ class Reconciliation:
                     destination_receipt["external_reference"]!=external_reference or
                     evidence_sha256!=digest):
                 raise ReconciliationError("destination receipt does not match settlement")
+        readback_digest = None
+        if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+            verifier_key = os.getenv("AGENTBRIDGE_TRUSTED_READBACK_KEY_HEX")
+            if not verifier_key or not isinstance(readback_attestation, dict):
+                raise ReconciliationError("independent state-readback attestation required in production")
+            try:
+                readback_digest = verify_readback_attestation(
+                    readback_attestation, agent_id=agent_id, operation_id=operation_id,
+                    fingerprint=operation["fingerprint"], outcome=result,
+                    external_reference=external_reference,
+                    destination_receipt_sha256=digest,
+                    trusted_readback_key_hex=verifier_key,
+                    destination_key_hex=key)
+            except UntrustedReadback as exc:
+                raise ReconciliationError("untrusted independent state readback") from exc
         store=self.store
         if isinstance(store, SqliteStore):
             with store._lock:
@@ -98,6 +114,9 @@ class Reconciliation:
                             state.setdefault("calls",[]).append(time.time())
                         db.execute("UPDATE budgets SET state=? WHERE agent_id=?",
                                    (json.dumps(state), agent_id))
+                    if readback_digest:
+                        db.execute("CREATE TABLE IF NOT EXISTS reconciliation_readbacks (agent_id TEXT NOT NULL, operation_id TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(agent_id,operation_id))")
+                        db.execute("INSERT INTO reconciliation_readbacks VALUES(?,?,?)", (agent_id,operation_id,readback_digest))
                     db.execute("COMMIT")
                 except BaseException:
                     db.execute("ROLLBACK")
@@ -131,6 +150,9 @@ class Reconciliation:
                         state.setdefault("calls",[]).append(time.time())
                     cur.execute("UPDATE budgets SET state=%s WHERE agent_id=%s",
                                 (json.dumps(state),agent_id))
+                if readback_digest:
+                    cur.execute("CREATE TABLE IF NOT EXISTS reconciliation_readbacks (agent_id TEXT NOT NULL, operation_id TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(agent_id,operation_id))")
+                    cur.execute("INSERT INTO reconciliation_readbacks VALUES(%s,%s,%s)", (agent_id,operation_id,readback_digest))
         return {"agent_id":agent_id,"operation_id":operation_id,"state":result,
                 "evidence_sha256":evidence_sha256,"external_reference":external_reference,
-                "reviewer":reviewer}
+                "reviewer":reviewer,"readback_sha256":readback_digest}
