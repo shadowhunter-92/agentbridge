@@ -130,7 +130,7 @@ def resolve_target(target_id: Any, protocol: str, capability: str,
             port = u.port
         except ValueError as exc:
             raise SecurityConfigurationError("invalid destination port") from exc
-        if (not u.netloc or any(ch in address for ch in ("\\", "\\r", "\\n", "\\t"))
+        if (not u.netloc or any(ch in address for ch in ("\\", chr(13), chr(10), chr(9)))
                 or "%" in u.netloc or u.query or u.params
                 or not port and ":" in u.netloc
                 or not u.hostname or u.hostname.endswith(".")
@@ -147,7 +147,7 @@ def resolve_target(target_id: Any, protocol: str, capability: str,
         if (proxy.scheme not in ("http","https") or not proxy.hostname
                 or proxy.username or proxy.password or proxy.path not in ("", "/")
                 or proxy.query or proxy.fragment or "%" in proxy.netloc
-                or any(ch in proxy_url for ch in ("\\", "\\r", "\\n", "\\t"))):
+                or any(ch in proxy_url for ch in ("\\", chr(13), chr(10), chr(9)))):
             raise SecurityConfigurationError("outbound proxy configuration invalid")
         try:
             proxy_port = proxy.port
