@@ -34,6 +34,7 @@ from pydantic import BaseModel, Field
 
 from .ratelimit import RateLimiter
 from .auth_oidc import OidcConfig, OidcVerifier, OidcError
+from .trusted_targets import resolve_target, effective_call_cost, SecurityConfigurationError
 from ..protocols import default_registry
 from ..governance import (
     AgentIdentity, IdentityRegistry, BudgetManager, Budget, ApprovalQueue,
@@ -375,10 +376,18 @@ async def governed_route(request: Request):
     agent_id = await authenticate_agent(request, raw)
     body = json.loads(raw or b"{}")
     src, dst, wire = body.get("src"), body.get("dst"), body.get("wire")
-    cost = float(body.get("cost", 1.0))
-    target = body.get("target")
     if not (src and dst and wire is not None):
         raise HTTPException(400, "src, dst, wire required")
+    if "target" in body:
+        raise HTTPException(400, "agent-selected target configurations are prohibited; use target_id")
+    try:
+        canonical = registry.get(src).to_canonical_call(wire)
+        cost = effective_call_cost(body.get("cost", 1.0), canonical.capability)
+        target = resolve_target(body.get("target_id"), dst, canonical.capability)
+    except SecurityConfigurationError as exc:
+        raise HTTPException(400, f"security policy rejected call: {exc}")
+    except KeyError as exc:
+        raise HTTPException(400, str(exc))
 
     async def _invoke(dst_wire):
         return await _invoke_target(dst, dst_wire, target)
