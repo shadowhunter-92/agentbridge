@@ -1,0 +1,25 @@
+# Isolated single-node staging reference. NOT a production HA deployment.
+# Set AGENTBRIDGE_DB_URL, AGENTBRIDGE_ADMIN_KEY, outbound proxy and allowlists
+# in a private .env file never committed to Git.
+services:
+  agentbridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.release
+    user: "10001:10001"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=64m
+    environment:
+      AGENTBRIDGE_ENV: production
+      AGENTBRIDGE_DB: ${AGENTBRIDGE_DB_URL:?configure an isolated PostgreSQL DSN}
+      AGENTBRIDGE_ADMIN_KEY: ${AGENTBRIDGE_ADMIN_KEY:?configure a long random secret}
+      AGENTBRIDGE_TARGETS_JSON: ${AGENTBRIDGE_TARGETS_JSON:-{}}
+      AGENTBRIDGE_COST_SCHEDULE_JSON: ${AGENTBRIDGE_COST_SCHEDULE_JSON:-{}}
+      AGENTBRIDGE_CAPABILITY_ALLOWLIST_JSON: ${AGENTBRIDGE_CAPABILITY_ALLOWLIST_JSON:-{}}
+      AGENTBRIDGE_EGRESS_PROXY_URL: ${AGENTBRIDGE_EGRESS_PROXY_URL:-}
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: "no"
