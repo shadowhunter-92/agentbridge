@@ -5,6 +5,8 @@ A call is allowed only if the caller is a known, non-revoked identity, is permit
 the requested capability, has any required human approval, and is within budget.
 """
 
+import json
+import os
 from dataclasses import dataclass
 from typing import Dict, Optional, Set
 
@@ -50,10 +52,24 @@ class PolicyEngine:
             if not self.identities.verify_signature(agent_id, signed_data, signature):
                 return Decision(False, "signature verification failed")
 
-        # 2) capability allowlist (if configured for this agent)
-        allowed = self._capability_allow.get(agent_id)
-        if allowed is not None and capability not in allowed:
-            return Decision(False, f"capability '{capability}' not permitted for '{agent_id}'")
+        # 2) Strict, operator-owned capability allowlist in production. Registered
+        # identities confer authentication only, never blanket authorization.
+        if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+            try:
+                allowlists = json.loads(os.getenv("AGENTBRIDGE_CAPABILITY_ALLOWLIST_JSON", "{}"))
+                if not isinstance(allowlists, dict):
+                    raise ValueError("capability allowlist must be an object")
+                allowed = allowlists.get(agent_id)
+                if not isinstance(allowed, list) or not all(isinstance(x, str) for x in allowed):
+                    return Decision(False, "production capability allowlist missing or invalid")
+            except (ValueError, TypeError):
+                return Decision(False, "production capability allowlist invalid")
+            if capability not in allowed:
+                return Decision(False, f"capability '{capability}' not permitted for '{agent_id}'")
+        else:
+            allowed = self._capability_allow.get(agent_id)
+            if allowed is not None and capability not in allowed:
+                return Decision(False, f"capability '{capability}' not permitted for '{agent_id}'")
 
         approval_required = False
         # 3) human approval for sensitive capabilities
