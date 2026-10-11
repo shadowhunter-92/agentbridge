@@ -39,6 +39,7 @@ from pydantic import BaseModel, Field
 from .ratelimit import RateLimiter
 from .auth_oidc import OidcConfig, OidcVerifier, OidcError
 from .trusted_targets import resolve_target, effective_call_cost, SecurityConfigurationError
+from ..governance.request_auth import canonical_payload
 from ..governance.durable_policy import DurablePolicySet, DurableApprovalQueue
 from ..protocols import default_registry
 from ..governance import (
@@ -631,7 +632,9 @@ async def governed_route(request: Request):
         result = await gateway.route_call(agent_id=agent_id, src_proto=src, dst_proto=dst,
                                           src_wire=wire, invoke=_invoke, cost=cost,
                                           target_id=body.get("target_id"),
-                                          operation_id=operation_id)
+                                          operation_id=operation_id,
+                                          signed_data=canonical_payload(agent_id, request.headers.get("X-Nonce", ""), raw),
+                                          signature=bytes.fromhex(request.headers.get("X-Signature", "")))
         return {"decision": "allow", **result}
     except GovernanceError as e:
         detail = {"reason": str(e)}
