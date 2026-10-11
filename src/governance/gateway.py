@@ -23,6 +23,7 @@ from .budget import BudgetManager
 from .approvals import ApprovalQueue
 from .policy import PolicyEngine, Decision
 from .audit import AuditLog, AuditEntry
+from .operation_ledger import OperationLedger, OperationConflict
 from ..observability import span, record_call, update_audit_count, update_budget_gauge
 
 
@@ -63,6 +64,7 @@ class GovernanceGateway:
         invoke: Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]],
         cost: float = 1.0,
         target_id: Optional[str] = None,
+        operation_id: Optional[str] = None,
         signed_data: Optional[bytes] = None,
         signature: Optional[bytes] = None,
     ) -> Dict[str, Any]:
@@ -77,6 +79,14 @@ class GovernanceGateway:
                 "wire": src_wire, "cost": cost, "target_id": target_id,
             }, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
             request_scope = hashlib.sha256(request_material).hexdigest()
+
+            if operation_id is not None:
+                # The existing operation is never retried automatically.
+                # A worker crash leaves an indeterminate outcome for reconciliation.
+                ledger = OperationLedger(self.identities.store)
+                ledger.claim(agent_id, operation_id, request_scope)
+            else:
+                ledger = None
 
             decision = self.policy.authorize(
                 agent_id=agent_id, capability=capability, cost=cost,
@@ -137,6 +147,8 @@ class GovernanceGateway:
                 raise
 
             self.budgets.commit(agent_id, token)
+            if ledger is not None:
+                ledger.finish(agent_id, operation_id, "succeeded")
             self.audit.record(
                 actor=agent_id, action="route_call",
                 source_protocol=src_proto, target_protocol=dst_proto,
