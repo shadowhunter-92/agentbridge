@@ -136,3 +136,8 @@ Two parts of the "enterprise tier" cannot be shipped as code in this repo:
 - **SOC 2 Type II / HIPAA:** these are independent audits with human auditors over months, not
   something a codebase can claim. The controls above (RBAC, OIDC, signed audit, retention) are
   the technical evidence such an audit would examine, but certification itself is a process.
+
+
+## Security and compliance qualification (October 2026)
+
+This document describes experimental components, not a certified enterprise release. In particular, in-production destructive audit retention and ad-hoc checkpoint signing are intentionally disabled. Process-local legal-hold controls and ephemeral signing keys are not acceptable compliance controls. Operator reconciliation requires independently verified external evidence before financial settlement. External security review, safe network egress, current protocol conformance and staged recoverability acceptance remain open. Please see `docs/HARDENING_RELEASE_GATES.md`.
