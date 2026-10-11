@@ -10,6 +10,7 @@ Store-backed so spend survives restarts.
 """
 
 import threading
+import math
 import time
 import uuid
 from collections import deque
@@ -17,6 +18,18 @@ from typing import Deque, Dict, List, Optional, Tuple
 
 from .store import GovernanceStore, InMemoryStore
 
+
+
+def _checked_cost(cost: float) -> float:
+    if isinstance(cost, bool):
+        raise ValueError("cost must be a finite, nonnegative number")
+    try:
+        numeric = float(cost)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("cost must be a finite, nonnegative number") from exc
+    if not math.isfinite(numeric) or numeric < 0:
+        raise ValueError("cost must be a finite, nonnegative number")
+    return numeric
 
 class Budget:
     def __init__(self, spend_limit: float = 100.0, rate_limit: int = 1000,
@@ -49,6 +62,7 @@ class Budget:
         return self.spend_limit - self.spent - self.reserved
 
     def can_afford(self, cost: float, now: Optional[float] = None) -> Tuple[bool, str]:
+        cost = _checked_cost(cost)
         with self._lock:
             now = now if now is not None else time.time()
             self._prune(now)
@@ -60,6 +74,7 @@ class Budget:
 
     # --- atomic reserve / commit / release ---
     def reserve(self, cost: float, now: Optional[float] = None) -> Tuple[Optional[str], str]:
+        cost = _checked_cost(cost)
         with self._lock:
             ok, why = self.can_afford(cost, now)
             if not ok:
@@ -83,6 +98,7 @@ class Budget:
 
     # backward-compatible direct charge (non-reserved path)
     def charge(self, cost: float, now: Optional[float] = None) -> None:
+        cost = _checked_cost(cost)
         with self._lock:
             self.spent += cost
             self._calls.append(now if now is not None else time.time())
@@ -158,6 +174,7 @@ class BudgetManager:
     # --- store-backed atomic operations (cross-worker safe) ---------------------------
     def can_afford(self, agent_id: str, cost: float,
                    now: Optional[float] = None) -> Tuple[bool, str]:
+        cost = _checked_cost(cost)
         now = now if now is not None else time.time()
 
         def mutator(state: Dict) -> Tuple[bool, str]:
@@ -175,6 +192,7 @@ class BudgetManager:
 
     def reserve(self, agent_id: str, cost: float,
                 now: Optional[float] = None) -> Tuple[Optional[str], str]:
+        cost = _checked_cost(cost)
         now = now if now is not None else time.time()
 
         def mutator(state: Dict) -> Tuple[Optional[str], str]:
