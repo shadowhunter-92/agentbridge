@@ -6,6 +6,7 @@ Register N adapters; translate between any pair without pairwise code:
     registry.translate_result(wire, "mcp", "acp")
 """
 
+import time
 from typing import Any, Dict, List
 
 from .base import ProtocolAdapter, MalformedWireError
@@ -15,6 +16,7 @@ from .acp import AcpAdapter
 from .openai_fc import OpenAIFunctionAdapter
 from .gemini import GeminiFunctionAdapter
 from .agntcy_acp import AgntcyAcpAdapter
+from ..observability import record_translate
 
 
 class ProtocolRegistry:
@@ -33,6 +35,7 @@ class ProtocolRegistry:
         return sorted(self._adapters)
 
     def translate_call(self, wire: Dict[str, Any], src: str, dst: str) -> Dict[str, Any]:
+        t0 = time.monotonic()
         canonical = self.get(src).to_canonical_call(wire)
         # Backstop: a structurally-valid but empty payload (e.g. {} or {"params": {}})
         # yields nothing to route. Fail loudly instead of forwarding an empty call.
@@ -40,11 +43,16 @@ class ProtocolRegistry:
             raise MalformedWireError(
                 f"{src}: could not extract a capability, arguments, or text from the request"
             )
-        return self.get(dst).from_canonical_call(canonical)
+        out = self.get(dst).from_canonical_call(canonical)
+        record_translate(src, dst, time.monotonic() - t0)
+        return out
 
     def translate_result(self, wire: Dict[str, Any], src: str, dst: str) -> Dict[str, Any]:
+        t0 = time.monotonic()
         canonical = self.get(src).to_canonical_result(wire)
-        return self.get(dst).from_canonical_result(canonical)
+        out = self.get(dst).from_canonical_result(canonical)
+        record_translate(src, dst, time.monotonic() - t0)
+        return out
 
 
 def _build_default() -> ProtocolRegistry:
