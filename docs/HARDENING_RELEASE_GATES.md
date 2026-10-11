@@ -75,3 +75,21 @@ Production direct gateway calls now reject missing or invalid Ed25519 signatures
 
 ### R1 proof-binding update
 The direct gateway now validates that the Ed25519-signed canonical payload corresponds to the same signed JSON request body, source and destination protocols, wire arguments, target identity and operation ID before authorizing production execution. HTTP forwards its already-validated raw signed body and nonce. Unlike the earlier implementation, an unrelated signed byte string does not authenticate an action. Direct SDK callers still need a reviewed shared-nonce replay policy; normal HTTP callers use the shared durable nonce ledger. No claim of universal direct-SDK safety is made.
+
+### R3 preliminary work: independent audit evidence verification
+
+An offline verifier at `src/governance/audit_verify.py` validates a signed audit checkpoint against an **independently pinned Ed25519 public key**, not merely the signer key embedded in a checkpoint. It verifies full-chain or checkpoint-anchored tail integrity, including explicit failure on wrong keys, altered entries and incorrect continuation hashes. Tests live in `tests/test_audit_verify.py`.
+
+Scope limit: the verifier does not establish that a remote action actually occurred, and no trusted KMS signer, externally anchored checkpoint registry, durable legal hold or production retention transaction has yet been delivered. The destructive production retention endpoint remains disabled.
+
+### R1–R7 acceptance milestones
+
+| Stage | Production-grade acceptance gate | Evidence so far |
+|---|---|---|
+| R1 | All execution entry points fail closed for unauthorized identities/capabilities/actions; independent security review | Automated negative tests added; third-party audit missing |
+| R2 | Durable operation state, crash/retry reconciliation, operator runbooks, concurrent recovery | Conservative SQL unknown-outcome ledger and synthetic failure tests; no external side effects or kill -9 exercise |
+| R3 | Verified evidence and operations, recoverable HA deployment, current protocol conformance | Offline pinned-key verifier and PostgreSQL CI; trusted storage and staging missing |
+| R4 | Three unrelated developer integrations and repeat usage | Not yet observed |
+| R5 | First paid pilot with measured ROI | Not yet observed |
+| R6 | Repeatable managed enterprise deployment and retention | Not yet observed |
+| R7 | Multi-industry infrastructure adoption | Not yet observed |
