@@ -23,6 +23,20 @@ def verify_destination_receipt(receipt, *, agent_id, operation_id, fingerprint,
                                trusted_public_key_hex):
     if not isinstance(receipt,dict) or not isinstance(trusted_public_key_hex,str):
         raise UntrustedReceipt("missing trusted destination configuration")
+    # Refuse unsigned metadata and ambiguous envelopes: the signature covers
+    # every accepted semantic field (except the signature itself).
+    required = {"agent_id", "operation_id", "fingerprint", "outcome",
+                "external_reference", "signature_hex"}
+    if set(receipt) != required:
+        raise UntrustedReceipt("unexpected or missing receipt fields")
+    if any(not isinstance(receipt[name], str) or not receipt[name]
+           or len(receipt[name]) > 512
+           for name in ("agent_id", "operation_id", "fingerprint",
+                        "external_reference")):
+        raise UntrustedReceipt("invalid receipt identifiers")
+    if (not isinstance(receipt["signature_hex"], str)
+            or len(receipt["signature_hex"]) != 128):
+        raise UntrustedReceipt("invalid signature encoding")
     if (receipt.get("agent_id") != agent_id
             or receipt.get("operation_id") != operation_id
             or receipt.get("fingerprint") != fingerprint
