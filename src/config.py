@@ -13,6 +13,7 @@ discipline that production services need.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import re
 from dataclasses import dataclass
@@ -78,6 +79,25 @@ def validate_config(fail_fast: bool = True) -> List[ConfigIssue]:
                 "BEGIN IMMEDIATE), but for HA you'll want Postgres."
             ))
 
+    if env in ("prod", "production"):
+        receipt_key = os.getenv("AGENTBRIDGE_TRUSTED_DESTINATION_KEY_HEX", "")
+        readback_key = os.getenv("AGENTBRIDGE_TRUSTED_READBACK_KEY_HEX", "")
+        # Read-only or translation-only deployments may leave both unset;
+        # reconciliation then remains fail-closed. A partially configured
+        # write-capable deployment is never allowed to start.
+        if bool(receipt_key) != bool(readback_key):
+            issues.append(ConfigIssue(
+                "error", "production reconciliation requires both destination and independent readback keys"
+            ))
+        for label, key in (("AGENTBRIDGE_TRUSTED_DESTINATION_KEY_HEX", receipt_key),
+                           ("AGENTBRIDGE_TRUSTED_READBACK_KEY_HEX", readback_key)):
+            if key and not re.fullmatch(r"[0-9a-fA-F]{64}", key):
+                issues.append(ConfigIssue("error", f"{label} must be a 32-byte Ed25519 public key in hex"))
+        if receipt_key and readback_key and receipt_key.lower() == readback_key.lower():
+            issues.append(ConfigIssue("error", "destination and readback keys must be distinct trust roots"))
+        if oidc_issuer and not oidc_issuer.startswith("https://"):
+            issues.append(ConfigIssue("error", "production OIDC issuer must use HTTPS"))
+
     if db and _is_postgres_url(db):
         # Sanity check that psycopg is importable so we fail at boot, not first write.
         try:
@@ -110,7 +130,7 @@ def validate_config(fail_fast: bool = True) -> List[ConfigIssue]:
 
     try:
         sg = float(shutdown_grace)
-        if sg < 0 or sg > 300:
+        if not math.isfinite(sg) or sg < 0 or sg > 300:
             issues.append(ConfigIssue(
                 "error", f"AGENTBRIDGE_SHUTDOWN_GRACE={shutdown_grace!r} must be in [0, 300]."
             ))
@@ -121,7 +141,7 @@ def validate_config(fail_fast: bool = True) -> List[ConfigIssue]:
 
     try:
         sl = float(slow_log)
-        if sl < 0:
+        if not math.isfinite(sl) or sl < 0:
             issues.append(ConfigIssue(
                 "error", f"AGENTBRIDGE_SLOW_LOG_SECONDS={slow_log!r} must be >= 0."
             ))
