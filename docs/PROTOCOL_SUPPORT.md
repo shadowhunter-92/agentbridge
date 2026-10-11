@@ -1,3 +1,5 @@
+> **Scope correction — October 2026:** This document's legacy "full" conformance statements refer only to the repository-pinned SDK call wire subsets, NOT full current MCP/A2A standards compliance. See [2026 Compatibility Contract](PROTOCOL_COMPATIBILITY_2026.md) for exact supported and unsupported behaviors. Complete MCP 2026-07-28 and A2A 1.0 conformance has not been verified.
+
 # Protocol Support Matrix — the Meta-Bridge
 
 **Date:** 2026-06-06
