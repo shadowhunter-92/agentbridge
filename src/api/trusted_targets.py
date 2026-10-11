@@ -124,6 +124,19 @@ def resolve_target(target_id: Any, protocol: str, capability: str,
     if env.get("AGENTBRIDGE_ENV", "").lower() in ("prod", "production") and u.scheme != "https":
         raise SecurityConfigurationError("production target must use HTTPS")
     if env.get("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+        # Prevent URL-parser differentials and ambiguous authority interpretation.
+        # Actual resolved IP enforcement MUST still happen at the egress proxy.
+        try:
+            port = u.port
+        except ValueError as exc:
+            raise SecurityConfigurationError("invalid destination port") from exc
+        if (not u.netloc or any(ch in address for ch in ("\\", "\\r", "\\n", "\\t"))
+                or "%" in u.netloc or u.query or u.params
+                or not port and ":" in u.netloc
+                or not u.hostname or u.hostname.endswith(".")
+                or not u.hostname.isascii()):
+            raise SecurityConfigurationError("ambiguous production destination URL")
+    if env.get("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
         # URL allowlisting alone is not a DNS-rebinding defense. Require a
         # separate reviewed network egress proxy for live HTTP targets.
         # Fail closed unless the operator affirmatively configures isolation.
@@ -131,8 +144,17 @@ def resolve_target(target_id: Any, protocol: str, capability: str,
         if not proxy_url or not isinstance(proxy_url,str):
             raise SecurityConfigurationError("production HTTP requires configured outbound proxy URL")
         proxy = urlparse(proxy_url)
-        if proxy.scheme not in ("http","https") or not proxy.hostname or proxy.username or proxy.password:
+        if (proxy.scheme not in ("http","https") or not proxy.hostname
+                or proxy.username or proxy.password or proxy.path not in ("", "/")
+                or proxy.query or proxy.fragment or "%" in proxy.netloc
+                or any(ch in proxy_url for ch in ("\\", "\\r", "\\n", "\\t"))):
             raise SecurityConfigurationError("outbound proxy configuration invalid")
+        try:
+            proxy_port = proxy.port
+        except ValueError as exc:
+            raise SecurityConfigurationError("outbound proxy port invalid") from exc
+        if proxy_port is None:
+            raise SecurityConfigurationError("outbound proxy must specify port")
         try:
             ipaddress.ip_address(u.hostname)
         except ValueError:
