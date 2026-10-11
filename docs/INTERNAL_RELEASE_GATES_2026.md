@@ -42,3 +42,26 @@ a local disposable database. These numbers are **not** production SLOs,
 proof of horizontal HA scaling, or end-to-end customer-agent latency.
 Production sizing, sustained-load failure behavior and SLO acceptance
 remain open until a real operated deployment measures them.
+
+## Independent readback contract (October 11)
+
+Production unknown-operation settlement now requires **two distinct, operation-bound
+cryptographic statements**: a pinned destination receipt plus a separately pinned,
+fresh signed readback attestation. Missing, altered, stale, or same-key attestations
+fail closed before the SQL reconciliation transaction. A SHA-256 digest of the
+accepted readback attestation is saved transactionally with reconciliation.
+
+Configuration: `AGENTBRIDGE_TRUSTED_READBACK_KEY_HEX` must contain the Ed25519 public
+key of an independently operated destination-state readback verifier. The signing
+component must use **separately controlled read-only credentials** and query the
+authoritative system of record, not accept arbitrary caller-supplied claims or
+simply re-sign the destination receipt. The verifier records a hash of its
+observed source evidence and binds destination receipt, operation, fingerprint,
+outcome, and external reference. Rotate and revoke keys with documented controls.
+
+**Not yet accepted:** This is a verification *contract*, not a deployed
+independent readback service or demonstration of real external action state.
+A trusted key alone cannot establish independent sourcing. Production
+qualification requires a real readback adapter for the selected target, a
+separate operator/trust domain, and tampering/lost-acknowledgement tests on
+staging. Do not close the overall reconciliation release gate yet.
