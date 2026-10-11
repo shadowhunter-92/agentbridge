@@ -63,6 +63,24 @@ class Reconciliation:
                                (agent_id,operation_id,result,external_reference,evidence_sha256,reviewer,time.time()))
                     db.execute("UPDATE agent_operations SET state=?,updated=? WHERE agent_id=? AND operation_id=?",
                                (result,time.time(),agent_id,operation_id))
+                    reservation = db.execute(
+                        "SELECT token FROM operation_reservations WHERE agent_id=? AND operation_id=?",
+                        (agent_id, operation_id)).fetchone()
+                    if reservation:
+                        budget_row = db.execute("SELECT state FROM budgets WHERE agent_id=?",
+                                                (agent_id,)).fetchone()
+                        if not budget_row:
+                            raise ReconciliationError("budget missing; cannot settle")
+                        state=json.loads(budget_row["state"])
+                        token=reservation["token"]
+                        amount=state.get("reserved", {}).pop(token, None)
+                        if amount is None:
+                            raise ReconciliationError("reserved budget token missing; cannot settle")
+                        if result=="succeeded":
+                            state["spent"]=state.get("spent",0.0)+amount
+                            state.setdefault("calls",[]).append(time.time())
+                        db.execute("UPDATE budgets SET state=? WHERE agent_id=?",
+                                   (json.dumps(state), agent_id))
                     db.execute("COMMIT")
                 except BaseException:
                     db.execute("ROLLBACK")
@@ -78,6 +96,24 @@ class Reconciliation:
                             (agent_id,operation_id,result,external_reference,evidence_sha256,reviewer,time.time()))
                 cur.execute("UPDATE agent_operations SET state=%s,updated=%s WHERE agent_id=%s AND operation_id=%s",
                             (result,time.time(),agent_id,operation_id))
+                cur.execute("SELECT token FROM operation_reservations WHERE agent_id=%s AND operation_id=%s",
+                            (agent_id,operation_id))
+                reservation=cur.fetchone()
+                if reservation:
+                    cur.execute("SELECT state FROM budgets WHERE agent_id=%s FOR UPDATE",(agent_id,))
+                    budget_row=cur.fetchone()
+                    if not budget_row:
+                        raise ReconciliationError("budget missing; cannot settle")
+                    state=json.loads(budget_row["state"])
+                    token=reservation["token"]
+                    amount=state.get("reserved",{}).pop(token,None)
+                    if amount is None:
+                        raise ReconciliationError("reserved budget token missing; cannot settle")
+                    if result=="succeeded":
+                        state["spent"]=state.get("spent",0.0)+amount
+                        state.setdefault("calls",[]).append(time.time())
+                    cur.execute("UPDATE budgets SET state=%s WHERE agent_id=%s",
+                                (json.dumps(state),agent_id))
         return {"agent_id":agent_id,"operation_id":operation_id,"state":result,
                 "evidence_sha256":evidence_sha256,"external_reference":external_reference,
                 "reviewer":reviewer}
