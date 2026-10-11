@@ -65,3 +65,13 @@ A trusted key alone cannot establish independent sourcing. Production
 qualification requires a real readback adapter for the selected target, a
 separate operator/trust domain, and tampering/lost-acknowledgement tests on
 staging. Do not close the overall reconciliation release gate yet.
+
+## Production start-up fail-closed configuration checks
+
+Production now rejects partial readback trust-root configuration, equal destination/readback
+Ed25519 public keys, malformed public key encodings, non-HTTPS OIDC issuer configuration,
+and non-finite shutdown-grace/slow-request logging values.
+The pair of trust roots may be absent only for read-only/translation-only deployments;
+unknown-action production reconciliation then remains unavailable (fail closed).
+`tests/test_readback_config_validation.py` exercises these boundaries. These checks do
+not validate independent operations of the readback service or certify key ownership.
