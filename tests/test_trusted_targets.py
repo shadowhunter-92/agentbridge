@@ -74,6 +74,7 @@ def test_both_production_spellings_require_operator_cost_and_agent_acl(productio
     env = {
         "AGENTBRIDGE_ENV": production_label,
         "AGENTBRIDGE_COST_SCHEDULE_JSON": '{"pay":7.0}',
+        "AGENTBRIDGE_EGRESS_PROXY_ENFORCED": "1",
         "AGENTBRIDGE_TARGETS_JSON": json.dumps({
             "finance":{"protocol":"acp","capabilities":["pay"],"kind":"acp_http",
                         "base_url":"https://payments.example.test","allowed_agents":["approved"]}
