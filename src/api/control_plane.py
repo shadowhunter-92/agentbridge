@@ -494,6 +494,8 @@ def export_audit(_role: str = Depends(operator_guard("audit:export"))):
 
 @app.post("/control/audit/checkpoint")
 def create_audit_checkpoint(_role: str = Depends(operator_guard("audit:export"))):
+    if os.getenv("AGENTBRIDGE_ENV", "").lower() == "production":
+        raise HTTPException(503, "durable trusted audit checkpoint signer not configured; checkpoint creation disabled")
     """Sign the current audit head so a third party can later prove the log wasn't
     truncated before this point. We sign with the server's admin-key-derived identity
     if one exists; otherwise we generate an ephemeral operator key for this call only
@@ -510,6 +512,8 @@ def create_audit_checkpoint(_role: str = Depends(operator_guard("audit:export"))
 @app.post("/control/audit/retention")
 def set_audit_retention(body: dict,
                         _role: str = Depends(operator_guard("audit:export"))):
+    if os.getenv("AGENTBRIDGE_ENV", "").lower() == "production":
+        raise HTTPException(503, "audit retention and legal holds require durable policy and verified checkpoints")
     """Truncate the audit log up to a given seq, or toggle legal hold.
 
     Body:
