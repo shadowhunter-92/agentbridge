@@ -49,3 +49,23 @@ Do not expose the control plane before TLS, stable secrets, a shared database, t
 ## Merge rule
 
 Keep PR #27 as a draft while the unresolved release gates remain. Keep `main` unchanged. Rebase/reconcile against latest main, review, rerun CI and obtain independent approval before changing protected deployment behavior.
+
+## R1/R2 experimental follow-up (2026-10-11)
+
+An independent follow-up branch adds production deny-by-default capability ACLs and a conservative SQL execution ledger. Production live execution now requires an `operation_id` (16–128 characters) and operators must explicitly set `AGENTBRIDGE_CAPABILITY_ALLOWLIST_JSON` to authorize the named agent and capability. This is a breaking configuration change for production.
+
+The ledger atomically claims an (agent_id, operation_id, request fingerprint) before target invocation, records the outcome conservatively as `unknown` before execution, and updates to `succeeded` on success. Duplicate operation IDs never automatically reinvoke a target. A mismatched fingerprint is rejected. A post-dispatch transport failure remains `unknown` for external reconciliation; a failure after an external side effect cannot be reliably inferred from the exception.
+
+**Important remaining limitations:** this is not exactly-once execution, a transactional outbox, automatic reconciliation, or a full execution-state machine. Authorization and approval verification need further independent review; notably direct library calls do not yet require explicit signed-request proof, and server-trusted targets still need SSRF/DNS rebinding hardening. Timeouts, cancellation, operation-status access control, signed receipts and durable checkpoint anchoring are not complete. An audit hash chain proves record integrity against simple tampering, not independent truth of a target's outcome.
+
+### R1/R2 adversarial test matrix (current automated scope)
+
+- Deny unallowlisted production capabilities even for registered identities.
+- Detect repeated operation IDs across separate SQLite worker connections.
+- Reject reuse of the same operation ID with different payloads.
+- Refuse to reinvoke a successful operation.
+- Refuse automatic reinvocation after an injected connection timeout, preserving an `unknown` outcome.
+
+**Not yet exercised:** kill -9 at every transition, target acknowledgement loss, remote partial success, aggressive multi-node Postgres failover, hostile SSRF endpoints, external penetration testing, policy changes during execution, high load and real network partitions.
+
+The R1/R2 branch and its PR must stay draft until final CI checks and independent acceptance gates pass. No production release is asserted.
