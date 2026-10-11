@@ -176,7 +176,7 @@ class GovernanceGateway:
                 # downstream outcome is never automatically replayed.
                 ledger = OperationLedger(self.identities.store)
                 try:
-                    ledger.claim(agent_id, operation_id, request_scope)
+                    ledger.claim(agent_id, operation_id, request_scope, reservation_token=token)
                 except BaseException:
                     self.budgets.release(agent_id, token)
                     raise
