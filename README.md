@@ -12,10 +12,17 @@ built into the call path.
 
 *The whole product in 12 seconds: an unknown agent blocked, six protocols reaching one live MCP tool through the mesh, budget tracked, tamper-evident audit chain verified. Reproduce with `python examples/demo_story.py`.*
 
-> Status: working prototype. 6 protocols live + conformance-tested against real SDKs, a
-> governance plane, an HTTP control plane, and framework integrations. **153 tests passing
-> (159 with a Postgres DB).**
-> Business demand still being validated — this is an early, honest work-in-progress.
+> **Release status (October 2026): ALPHA / RELEASE-CANDIDATE ENGINEERING ONLY.**
+> Protocol adapter examples and SDK checks are **not equivalent to complete current MCP/A2A
+> conformance**. The governance implementation has draft hardening work in PRs #27–#31
+> and a consolidated review branch; there is **no certified production release**.
+> Tests run in GitHub Actions, including a disposable PostgreSQL service; consult the
+> latest commit's checks rather than relying on historical test counts. Unknown-outcome
+> operation settlement is a developing capability, not evidence that a remote action
+> occurred. Independent security review, actual failure drills, and external pilots
+> have not been completed. Production audit truncation remains disabled.
+> See [Release Gates](docs/HARDENING_RELEASE_GATES.md) and
+> [Operator Drills](docs/PRODUCTION_OPERATOR_DRILLS.md).
 
 > **Name note:** this project (`github.com/shadowhunter-92/agentbridge`) is a Python
 > **protocol-translation + governance mesh**. It is unrelated to other products that may share
