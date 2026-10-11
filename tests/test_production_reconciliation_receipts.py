@@ -7,6 +7,8 @@ from src.governance.store import SqliteStore
 from src.governance.operation_ledger import OperationLedger
 from src.governance.reconciliation import Reconciliation, ReconciliationError
 from src.governance.destination_receipts import canonical_receipt_payload
+from src.governance.readback_attestations import canonical_readback_payload
+import time
 import hashlib
 
 
@@ -25,6 +27,18 @@ def test_production_reconciliation_rejects_untrusted_and_accepts_pinned(tmp_path
         digest=hashlib.sha256(canonical_receipt_payload(receipt)).hexdigest()
         monkeypatch.setenv("AGENTBRIDGE_ENV","production")
         monkeypatch.setenv("AGENTBRIDGE_TRUSTED_DESTINATION_KEY_HEX",pub)
+        readback_private=Ed25519PrivateKey.generate()
+        readback_key=readback_private.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw).hex()
+        monkeypatch.setenv("AGENTBRIDGE_TRUSTED_READBACK_KEY_HEX",readback_key)
+        proof=dict(agent_id="agent",operation_id="op-production-123456",
+                   fingerprint="fingerprint",outcome="succeeded",
+                   external_reference="simulated-target:op/11",
+                   observed_at=int(time.time()),source="independent-readonly-test",
+                   source_evidence_sha256=hashlib.sha256(b"readback").hexdigest(),
+                   destination_receipt_sha256=digest)
+        proof["signature_hex"]=readback_private.sign(canonical_readback_payload(proof)).hex()
         rec=Reconciliation(store)
         kwargs=dict(agent_id="agent",operation_id="op-production-123456",
                     result="succeeded",external_reference="simulated-target:op/11",
@@ -33,6 +47,12 @@ def test_production_reconciliation_rejects_untrusted_and_accepts_pinned(tmp_path
             rec.record(**kwargs)
         with pytest.raises(ReconciliationError, match="untrusted destination receipt"):
             rec.record(**kwargs,destination_receipt={**receipt,"outcome":"failed"})
-        assert rec.record(**kwargs,destination_receipt=receipt)["state"]=="succeeded"
+        with pytest.raises(ReconciliationError, match="independent state-readback"):
+            rec.record(**kwargs,destination_receipt=receipt)
+        with pytest.raises(ReconciliationError, match="untrusted independent"):
+            rec.record(**kwargs,destination_receipt=receipt,
+                       readback_attestation={**proof,"outcome":"failed"})
+        assert rec.record(**kwargs,destination_receipt=receipt,
+                          readback_attestation=proof)["state"]=="succeeded"
     finally:
         store.close()
