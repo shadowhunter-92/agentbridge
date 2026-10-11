@@ -72,3 +72,6 @@ The R1/R2 branch and its PR must stay draft until final CI checks and independen
 
 ### Direct gateway signature hardening
 Production direct gateway calls now reject missing or invalid Ed25519 signatures; the HTTP route forwards its authenticated raw request signature to the gateway. **Remaining caveat:** the direct SDK signer interface has not yet been independently reviewed for binding proof to the exact action, since callers can provide their own signed_data payload. Treat direct SDK usage as unsupported for production until that gap is closed and adversarial tests pass.
+
+### R1 proof-binding update
+The direct gateway now validates that the Ed25519-signed canonical payload corresponds to the same signed JSON request body, source and destination protocols, wire arguments, target identity and operation ID before authorizing production execution. HTTP forwards its already-validated raw signed body and nonce. Unlike the earlier implementation, an unrelated signed byte string does not authenticate an action. Direct SDK callers still need a reviewed shared-nonce replay policy; normal HTTP callers use the shared durable nonce ledger. No claim of universal direct-SDK safety is made.
