@@ -11,6 +11,7 @@ For every cross-protocol call:
 Atomic reserve/commit closes the TOCTOU race. Protocol-agnostic — the moat in action.
 """
 
+import time
 from typing import Any, Awaitable, Callable, Dict, Optional
 
 from ..protocols import default_registry
@@ -20,6 +21,7 @@ from .budget import BudgetManager
 from .approvals import ApprovalQueue
 from .policy import PolicyEngine, Decision
 from .audit import AuditLog, AuditEntry
+from ..observability import span, record_call, update_audit_count, update_budget_gauge
 
 
 class GovernanceError(PermissionError):
@@ -61,56 +63,76 @@ class GovernanceGateway:
         signed_data: Optional[bytes] = None,
         signature: Optional[bytes] = None,
     ) -> Dict[str, Any]:
-        canonical = self.registry.get(src_proto).to_canonical_call(src_wire)
-        capability = canonical.capability
+        t0 = time.monotonic()
+        with span("gateway.route_call", {
+            "agent_id": agent_id, "src": src_proto, "dst": dst_proto, "cost": cost,
+        }):
+            canonical = self.registry.get(src_proto).to_canonical_call(src_wire)
+            capability = canonical.capability
 
-        decision = self.policy.authorize(
-            agent_id=agent_id, capability=capability, cost=cost,
-            signed_data=signed_data, signature=signature,
-            src_protocol=src_proto, dst_protocol=dst_proto,
-        )
-
-        if not decision.allowed:
-            approval_id = None
-            if decision.needs_approval and self.approvals:
-                approval_id = self.approvals.request(agent_id, capability, cost).id
-            entry = self.audit.record(
-                actor=agent_id, action="route_call",
-                source_protocol=src_proto, target_protocol=dst_proto,
-                capability=capability, decision="deny", reason=decision.reason, cost=0.0,
+            decision = self.policy.authorize(
+                agent_id=agent_id, capability=capability, cost=cost,
+                signed_data=signed_data, signature=signature,
+                src_protocol=src_proto, dst_protocol=dst_proto,
             )
-            raise GovernanceError(decision, entry, approval_id=approval_id)
 
-        # Atomically reserve budget before doing any work. The reservation is recorded in
-        # the durable store inside an atomic section, so concurrent workers can't both pass
-        # the cap (the fix for the multi-worker double-spend).
-        token, why = self.budgets.reserve(agent_id, cost)
-        if token is None:
-            entry = self.audit.record(
-                actor=agent_id, action="route_call",
-                source_protocol=src_proto, target_protocol=dst_proto,
-                capability=capability, decision="deny", reason=why, cost=0.0,
-            )
-            raise GovernanceError(Decision(False, why), entry)
+            if not decision.allowed:
+                approval_id = None
+                if decision.needs_approval and self.approvals:
+                    approval_id = self.approvals.request(agent_id, capability, cost).id
+                entry = self.audit.record(
+                    actor=agent_id, action="route_call",
+                    source_protocol=src_proto, target_protocol=dst_proto,
+                    capability=capability, decision="deny", reason=decision.reason, cost=0.0,
+                )
+                update_audit_count(self.audit.count())
+                record_call(src_proto, dst_proto, capability, "deny", time.monotonic() - t0)
+                raise GovernanceError(decision, entry, approval_id=approval_id)
 
-        try:
-            dst_wire = self.registry.translate_call(src_wire, src_proto, dst_proto)
-            result = await invoke(dst_wire)
-        except Exception as e:
-            self.budgets.release(agent_id, token)
+            # Atomically reserve budget before doing any work. The reservation is recorded in
+            # the durable store inside an atomic section, so concurrent workers can't both pass
+            # the cap (the fix for the multi-worker double-spend).
+            token, why = self.budgets.reserve(agent_id, cost)
+            if token is None:
+                entry = self.audit.record(
+                    actor=agent_id, action="route_call",
+                    source_protocol=src_proto, target_protocol=dst_proto,
+                    capability=capability, decision="deny", reason=why, cost=0.0,
+                )
+                update_audit_count(self.audit.count())
+                record_call(src_proto, dst_proto, capability, "deny", time.monotonic() - t0)
+                raise GovernanceError(Decision(False, why), entry)
+
+            try:
+                dst_wire = self.registry.translate_call(src_wire, src_proto, dst_proto)
+                result = await invoke(dst_wire)
+            except Exception as e:
+                self.budgets.release(agent_id, token)
+                self.audit.record(
+                    actor=agent_id, action="route_call",
+                    source_protocol=src_proto, target_protocol=dst_proto,
+                    capability=capability, decision="error", reason=str(e)[:200], cost=0.0,
+                )
+                update_audit_count(self.audit.count())
+                record_call(src_proto, dst_proto, capability, "error", time.monotonic() - t0)
+                raise
+
+            self.budgets.commit(agent_id, token)
+            if self.approvals and self.approvals.requires_approval(capability):
+                self.approvals.consume(agent_id, capability)
             self.audit.record(
                 actor=agent_id, action="route_call",
                 source_protocol=src_proto, target_protocol=dst_proto,
-                capability=capability, decision="error", reason=str(e)[:200], cost=0.0,
+                capability=capability, decision="allow", reason=decision.reason, cost=cost,
             )
-            raise
 
-        self.budgets.commit(agent_id, token)
-        if self.approvals and self.approvals.requires_approval(capability):
-            self.approvals.consume(agent_id, capability)
-        self.audit.record(
-            actor=agent_id, action="route_call",
-            source_protocol=src_proto, target_protocol=dst_proto,
-            capability=capability, decision="allow", reason=decision.reason, cost=cost,
-        )
-        return result
+            # Update gauges so Prometheus sees live state.
+            update_audit_count(self.audit.count())
+            try:
+                b = self.budgets.get(agent_id)
+                update_budget_gauge(agent_id, b.spent, b.remaining())
+            except Exception:
+                pass  # budget gauge is best-effort; never break a real call for it
+
+            record_call(src_proto, dst_proto, capability, "allow", time.monotonic() - t0)
+            return result
