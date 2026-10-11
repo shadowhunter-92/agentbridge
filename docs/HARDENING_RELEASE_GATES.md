@@ -111,3 +111,11 @@ A public request for independent review and disposable read-only/synthetic integ
 R3 reconciliation now links durable operation IDs to reservations and performs a single SQL transaction for the reconciled operation state and reserved budget on SQLite/PostgreSQL. Reviewers must still verify the **truth of external evidence** and the security of operator authorization; a digest alone is not validation. The reconciliation code is not an approved production service and is not an independently witnessed compliance process.
 
 Outstanding P0–P3/R1–R3 release gates: attack-surface review, policy bypass tests, safe egress and DNS/SSRF controls, real target idempotency, signed durable audit anchors/legal holds, DB migrations and restore, failover and worker crash drills, supported protocol conformance, measured performance and independent signoff. R4–R7 require external integrations, market evidence, paid pilots, repeatable enterprise operations, and ecosystem adoption and cannot be claimed completed by source changes.
+
+## CI and branch reconciliation audit (2026-10-11)
+
+- Historical GitHub Actions failures were observed in runs 38128768386, 38128922383, 38131485656 and 38131554980. Their failures involved prior integration/fault-drill changes; subsequent cumulative runs 38131638734, 38132332997, 38133074316 and 38133546126 passed Python 3.11, 3.12 and PostgreSQL. History is retained as evidence, not deleted.
+- Historical PR #17 has five unique divergent commits relative to this branch. Its substantial implementation was ported/modified, but the remaining documentation/dependency differences have not been equated with an exact merge. No claim of identical history.
+- All engineering branch commits from PRs #27–#31 are ancestors of this release branch. Those duplicate review PRs have been closed **without merging**. Their source branches remain intact; default `main` has not changed.
+- Production direct gateway now denies calls without a durable operation ID and includes the ID in the approval/request fingerprint. Budget serialization retains held reservations.
+- Active review remains draft PR #32. Safe merge and production status are independently gated by security, real fault tests, current protocol conformance, trustworthy audit controls and external operator acceptance.
