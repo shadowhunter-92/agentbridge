@@ -134,10 +134,11 @@ def resolve_target(target_id: Any, protocol: str, capability: str,
         if proxy.scheme not in ("http","https") or not proxy.hostname or proxy.username or proxy.password:
             raise SecurityConfigurationError("outbound proxy configuration invalid")
         try:
-            if ipaddress.ip_address(u.hostname):
-                raise SecurityConfigurationError("literal IP target prohibited")
+            ipaddress.ip_address(u.hostname)
         except ValueError:
-            pass
+            pass  # normal DNS name, not an IP literal
+        else:
+            raise SecurityConfigurationError("literal IP target prohibited")
         host = u.hostname.lower().rstrip(".")
         if host in ("localhost", "localhost.localdomain") or "." not in host or host.endswith((".local",".internal",".test")):
             raise SecurityConfigurationError("private or ambiguous DNS target prohibited")
