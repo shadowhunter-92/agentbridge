@@ -7,6 +7,8 @@ the destination system independently.
 from __future__ import annotations
 import hashlib
 import json
+import os
+from .destination_receipts import verify_destination_receipt, UntrustedReceipt
 import time
 from .store import SqliteStore, PostgresStore
 from .operation_ledger import OperationLedger, OperationConflict
@@ -40,7 +42,7 @@ class Reconciliation:
             raise ReconciliationError("durable database required")
 
     def record(self, *, agent_id, operation_id, result, external_reference,
-               evidence_sha256, reviewer):
+               evidence_sha256, reviewer, destination_receipt=None):
         if result not in ("succeeded", "failed"):
             raise ReconciliationError("operator must determine succeeded or failed")
         if any(not isinstance(x, str) or not x.strip() or len(x)>512
@@ -49,6 +51,21 @@ class Reconciliation:
         if (not isinstance(evidence_sha256,str) or len(evidence_sha256)!=64
                 or any(c not in "0123456789abcdef" for c in evidence_sha256)):
             raise ReconciliationError("independent evidence SHA256 digest required")
+        if os.getenv("AGENTBRIDGE_ENV","").lower() in ("prod","production"):
+            key=os.getenv("AGENTBRIDGE_TRUSTED_DESTINATION_KEY_HEX")
+            operation=self.operations.get(agent_id,operation_id)
+            if not key or not operation or not isinstance(destination_receipt,dict):
+                raise ReconciliationError("verified destination receipt required in production")
+            try:
+                digest=verify_destination_receipt(
+                    destination_receipt,agent_id=agent_id,operation_id=operation_id,
+                    fingerprint=operation["fingerprint"],trusted_public_key_hex=key)
+            except UntrustedReceipt as exc:
+                raise ReconciliationError("untrusted destination receipt") from exc
+            if (destination_receipt["outcome"]!=result or
+                    destination_receipt["external_reference"]!=external_reference or
+                    evidence_sha256!=digest):
+                raise ReconciliationError("destination receipt does not match settlement")
         store=self.store
         if isinstance(store, SqliteStore):
             with store._lock:
