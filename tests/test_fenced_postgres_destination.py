@@ -28,7 +28,7 @@ def test_fenced_destination_rejects_stale_worker_and_recovers_lost_ack():
             serialization.Encoding.Raw,serialization.PublicFormat.Raw).hex()
     fences=PgFencing(dsn)
     fences.initialize()
-    old_epoch=fences.acquire(scope,"worker-1",ttl_seconds=.5)
+    old_epoch=fences.acquire(scope,"worker-1",ttl_seconds=3)
     destination=FencedPostgresDestination(dsn,sign=dest_key.sign)
     destination.initialize()
     with pytest.raises(TimeoutError,match="ACK was lost"):
@@ -48,7 +48,7 @@ def test_fenced_destination_rejects_stale_worker_and_recovers_lost_ack():
         destination.commit(scope=scope,owner="worker-1",epoch=old_epoch,
                            agent_id=agent,operation_id=operation,fingerprint=fprint)
     import time
-    time.sleep(.75)
+    time.sleep(3.2)
     new_epoch=fences.acquire(scope,"worker-2",ttl_seconds=20)
     assert new_epoch>old_epoch
     with pytest.raises(StaleDestinationLeader):
