@@ -61,7 +61,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt "psycopg[binary]"
       - name: Run real PostgreSQL integration and concurrency tests
-        run: python -m pytest tests/test_postgres_store.py tests/test_postgres_reconciliation.py tests/test_pg_worker_kill_recovery.py tests/test_postgres_durable_hold_boundary.py tests/test_pg_connection_loss_fail_closed.py tests/test_pg_backend_termination_boundaries.py tests/test_pg_authoritative_readback_role.py tests/test_pg_fencing.py -q
+        run: python -m pytest tests/test_postgres_store.py tests/test_postgres_reconciliation.py tests/test_pg_worker_kill_recovery.py tests/test_postgres_durable_hold_boundary.py tests/test_pg_connection_loss_fail_closed.py tests/test_pg_backend_termination_boundaries.py tests/test_pg_authoritative_readback_role.py tests/test_pg_fencing.py tests/test_pg_schema_migrations.py -q
       - name: Disposable PostgreSQL backup, restore and schema rollback drill
         env:
           AGENTBRIDGE_DISPOSABLE_PG_RESTORE_DRILL: "1"
