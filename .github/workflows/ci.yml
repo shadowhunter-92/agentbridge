@@ -25,6 +25,8 @@ jobs:
           pip install -r requirements.txt
       - name: Run tests
         run: python -m pytest tests/ -q --cov=src --cov-report=term
+      - name: Run offline Trust/Evidence SDK example
+        run: python examples/verify_synthetic_action_evidence.py
       - name: Synthetic local performance observation (not an SLO)
         run: python tools/benchmark_synthetic.py --count 1000 --workers 4
       - name: Synthetic concurrent SQL governance smoke load (not production SLO)
