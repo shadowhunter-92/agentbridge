@@ -26,3 +26,17 @@ def test_staged_active_revoked_rotation():
     with pytest.raises(ObserverKeyDenied):
         ObserverTrustRegistry([
             ObserverKey("same",pub(old),"active"),ObserverKey("same",pub(new),"active")])
+
+
+def test_sdk_registered_verifier_cannot_be_overridden_or_revoked():
+    from src.governance.trust_sdk import verify_registered_action_evidence
+    key=Ed25519PrivateKey.generate()
+    active=ObserverTrustRegistry([ObserverKey("observer-1",pub(key),"active")])
+    with pytest.raises(ValueError,match="cannot override"):
+        verify_registered_action_evidence(
+            observer_registry=active,observer_key_id="observer-1",
+            readback_key_hex=pub(key))
+    revoked=ObserverTrustRegistry([ObserverKey("observer-1",pub(key),"revoked")])
+    with pytest.raises(ObserverKeyDenied):
+        verify_registered_action_evidence(
+            observer_registry=revoked,observer_key_id="observer-1")
