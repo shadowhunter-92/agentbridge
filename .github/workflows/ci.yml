@@ -195,6 +195,46 @@ jobs:
           docker build -f Dockerfile.release -t agentbridge:release-review .
           docker image inspect --format 'REVIEW_IMAGE_ID={{.Id}}' agentbridge:release-review
 
+
+  container-security-review:
+    needs: package-review
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build reviewed, digest-pinned container image
+        run: docker build -f Dockerfile.release -t agentbridge:release-review .
+      - name: Generate full image CycloneDX SBOM
+        uses: aquasecurity/trivy-action@v0.34.0
+        with:
+          image-ref: agentbridge:release-review
+          format: cyclonedx
+          output: agentbridge-image-sbom.cdx.json
+          exit-code: "0"
+      - name: Upload image SBOM
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentbridge-review-image-sbom
+          path: agentbridge-image-sbom.cdx.json
+          if-no-files-found: warn
+      - name: Block on HIGH or CRITICAL container vulnerabilities
+        uses: aquasecurity/trivy-action@v0.34.0
+        with:
+          image-ref: agentbridge:release-review
+          format: json
+          output: agentbridge-image-vulnerabilities.json
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: Upload image vulnerability evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentbridge-review-image-vulnerabilities
+          path: agentbridge-image-vulnerabilities.json
+          if-no-files-found: warn
+
+
   egress-isolation-drill:
     runs-on: ubuntu-latest
     timeout-minutes: 12
