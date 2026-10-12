@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import time
 
 from .destination_receipts import UntrustedReceipt, verify_destination_receipt
@@ -45,6 +46,26 @@ def observe_postgres_effect(
             with conn.transaction():
                 with conn.cursor() as cur:
                     cur.execute("SET TRANSACTION READ ONLY")
+                    # A READ ONLY transaction alone does not establish a
+                    # separately provisioned, unprivileged observer login.
+                    if os.getenv("AGENTBRIDGE_ENV", "").strip().lower() in ("prod", "production"):
+                        access = cur.execute(
+                            "SELECT current_user = session_user, "
+                            "(SELECT rolsuper OR rolcreaterole OR rolcreatedb "
+                            "OR rolreplication OR rolbypassrls FROM pg_roles "
+                            "WHERE rolname = current_user), "
+                            "has_table_privilege(current_user, "
+                            "'public.ab_evidence_effects', 'INSERT'), "
+                            "has_table_privilege(current_user, "
+                            "'public.ab_evidence_effects', 'UPDATE'), "
+                            "has_table_privilege(current_user, "
+                            "'public.ab_evidence_effects', 'DELETE'), "
+                            "has_table_privilege(current_user, "
+                            "'public.ab_evidence_effects', 'TRUNCATE')"
+                        ).fetchone()
+                        if not access or tuple(access) != (True, False, False, False, False, False):
+                            raise PostgresReadbackUnavailable(
+                                "production readback principal must have SELECT-only privileges")
                     cur.execute(
                         "SELECT agent_id,operation_id,fingerprint,outcome,"
                         "external_reference,receipt_json "
