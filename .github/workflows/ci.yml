@@ -205,12 +205,13 @@ jobs:
       - name: Build reviewed, digest-pinned container image
         run: docker build -f Dockerfile.release -t agentbridge:release-review .
       - name: Generate full image CycloneDX SBOM
-        uses: aquasecurity/trivy-action@v0.34.0
-        with:
-          image-ref: agentbridge:release-review
-          format: cyclonedx
-          output: agentbridge-image-sbom.cdx.json
-          exit-code: "0"
+        run: |
+          mkdir -p "$HOME/.cache/trivy"
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD":/scan -v "$HOME/.cache/trivy":/root/.cache \\
+            aquasec/trivy:0.69.1 image --format cyclonedx \
+            --output /scan/agentbridge-image-sbom.cdx.json agentbridge:release-review
       - name: Upload image SBOM
         if: always()
         uses: actions/upload-artifact@v4
@@ -219,13 +220,14 @@ jobs:
           path: agentbridge-image-sbom.cdx.json
           if-no-files-found: warn
       - name: Block on HIGH or CRITICAL container vulnerabilities
-        uses: aquasecurity/trivy-action@v0.34.0
-        with:
-          image-ref: agentbridge:release-review
-          format: json
-          output: agentbridge-image-vulnerabilities.json
-          severity: HIGH,CRITICAL
-          exit-code: "1"
+        run: |
+          mkdir -p "$HOME/.cache/trivy"
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD":/scan -v "$HOME/.cache/trivy":/root/.cache \\
+            aquasec/trivy:0.69.1 image --format json \
+            --output /scan/agentbridge-image-vulnerabilities.json \
+            --severity HIGH,CRITICAL --exit-code 1 agentbridge:release-review
       - name: Upload image vulnerability evidence
         if: always()
         uses: actions/upload-artifact@v4
