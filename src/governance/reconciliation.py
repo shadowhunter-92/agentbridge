@@ -10,6 +10,7 @@ import json
 import os
 from .destination_receipts import verify_destination_receipt, UntrustedReceipt
 from .readback_attestations import verify_readback_attestation, UntrustedReadback
+from .operator_review import verify_operator_review, UntrustedReviewer
 import time
 from .store import SqliteStore, PostgresStore
 from .operation_ledger import OperationLedger, OperationConflict
@@ -43,7 +44,8 @@ class Reconciliation:
             raise ReconciliationError("durable database required")
 
     def record(self, *, agent_id, operation_id, result, external_reference,
-               evidence_sha256, reviewer, destination_receipt=None, readback_attestation=None):
+               evidence_sha256, reviewer, destination_receipt=None, readback_attestation=None,
+               reviewer_signature_hex=None):
         if result not in ("succeeded", "failed"):
             raise ReconciliationError("operator must determine succeeded or failed")
         if any(not isinstance(x, str) or not x.strip() or len(x)>512
@@ -82,6 +84,18 @@ class Reconciliation:
                     destination_key_hex=key)
             except UntrustedReadback as exc:
                 raise ReconciliationError("untrusted independent state readback") from exc
+        if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+            try:
+                verify_operator_review(
+                    reviewer=reviewer, agent_id=agent_id, operation_id=operation_id,
+                    fingerprint=operation["fingerprint"], outcome=result,
+                    external_reference=external_reference,
+                    destination_receipt_sha256=digest, readback_sha256=readback_digest,
+                    signature_hex=reviewer_signature_hex,
+                    trusted_operators_json=os.getenv(
+                        "AGENTBRIDGE_RECONCILIATION_OPERATOR_KEYS_JSON"))
+            except UntrustedReviewer as exc:
+                raise ReconciliationError("authorized signed operator review required") from exc
         store=self.store
         if isinstance(store, SqliteStore):
             with store._lock:
