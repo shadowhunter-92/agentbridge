@@ -45,6 +45,15 @@ def test_readback_rejects_replay_and_corruption():
     ):
         with pytest.raises(UntrustedReadback):
             check(modified)
+    # Same key encoded with different hex letter case must remain forbidden.
+    with pytest.raises(UntrustedReadback, match="independent trust root"):
+        verify_readback_attestation(
+            signed, agent_id="agent", operation_id="op-12345678901234",
+            fingerprint="request-fingerprint", outcome="succeeded",
+            external_reference="remote/item/10", destination_receipt_sha256=digest,
+            trusted_readback_key_hex=public(verifier).upper(),
+            destination_key_hex=public(verifier).lower(),
+            now=1001, max_age_seconds=60)
     with pytest.raises(UntrustedReadback, match="independent trust root"):
         verify_readback_attestation(
             signed, agent_id="agent", operation_id="op-12345678901234",
