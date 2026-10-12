@@ -110,10 +110,14 @@ def drill():
             time.sleep(.5)
         assert replicated, "committed state was not replicated before fencing"
         # FENCE old primary, then promote standby, avoiding synthetic split brain.
+        failover_started=time.monotonic()
         run(["docker", "stop", "--time", "4", primary], timeout=30)
         with connect(dsn(standby_port), autocommit=True) as conn:
             conn.execute("SELECT pg_promote(wait => true, wait_seconds => 30)")
         wait_sql(dsn(standby_port), recovery=False)
+        failover_seconds=round(time.monotonic()-failover_started,3)
+        if failover_seconds>60:
+            raise AssertionError("disposable fencing and promotion RTO smoke threshold exceeded")
         recovered = PostgresStore(dsn(standby_port))
         try:
             ledger = OperationLedger(recovered)
@@ -132,6 +136,9 @@ def drill():
             "standby_promoted": True,
             "unknown_operation_preserved": True,
             "replay_denied": True,
+            "measured_fence_to_promotion_seconds":failover_seconds,
+            "disposable_smoke_max_seconds":60,
+            "witnessed_operation_rpo_lost":0,
             "limitations": "No automatic HA, true network partition, witness fencing, RPO/RTO or managed provider",
         }
     finally:
