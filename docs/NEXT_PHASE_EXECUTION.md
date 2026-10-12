@@ -177,3 +177,34 @@ design-partner pilot. These are not things a green synthetic CI run can prove.
 
 **Release decision:** engineering progress verified; seven overall production
 gates remain OPEN. Keep PR #34 draft; no unrestricted production go-live.
+
+## October 12 actual PostgreSQL archive drill + authenticated isolated egress
+
+At review commit `5cad91f583f935af30de92f7bcdc9fa1b1b4b568`,
+GitHub Actions CI #257 passed the five jobs, including a new actual
+PostgreSQL custom-format `pg_dump` to a separately created empty database
+with `pg_restore --single-transaction --exit-on-error`.
+
+The isolated drill is explicitly opt-in, restricted to the GitHub Actions
+localhost `agentbridge_test` Postgres principal, uses randomly generated
+`ab_drill_*` database names and drops only those newly created names. It
+checks restored unknown-operation state and no replay, preserved pending
+budget, intact full audit chain, and rollback of a post-snapshot table.
+A SHA256 of the dump plus test verdict is uploaded as CI evidence.
+
+This **does not** prove write-ahead-log point-in-time restore, synchronous
+HA failover, RPO/RTO, data encryption, independently preserved audit
+witnesses or disaster recovery in a managed provider. Restore is a second
+isolated database, not a production cutover.
+
+The disposable dual-homed proxy now requires a long bearer token for
+non-loopback drill mode, checked in constant time before CONNECT dispatch.
+The CI drill verifies unauthenticated access to an allowlisted host is denied,
+while other outbound and metadata direct-access denials remain enforced.
+The token embedded in the disposable Compose fixture is intentionally public
+test data; it MUST NOT be reused outside CI. It is not mTLS/workload identity,
+production proxy authorization, tenancy or rate limiting. The proxy still
+refuses non-loopback use under AGENTBRIDGE_ENV=production.
+
+**Release:** keep unrestricted production NO-GO. This closes a subset
+of internal recovery/proxy engineering tests, not the seven production gates.
