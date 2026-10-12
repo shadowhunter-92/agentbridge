@@ -85,5 +85,21 @@ jobs:
           /tmp/agentbridge-wheel-check/bin/python -c "from src.governance.trust_sdk import verify_action_evidence; from src.governance.sandbox_readback import SandboxReadOnlyObserver; print('SDK import OK')"
           /tmp/agentbridge-wheel-check/bin/agentbridge --version
           /tmp/agentbridge-wheel-check/bin/python -m pip check
+      - name: Record review artifact digests and installed dependency inventory
+        run: |
+          sha256sum dist/* > release-review-sha256.txt
+          /tmp/agentbridge-wheel-check/bin/python -m pip freeze --all > release-review-installed-dependencies.txt
+          /tmp/agentbridge-wheel-check/bin/python -m pip inspect --local > release-review-pip-inspect.json
+          printf '%s\\n' "${GITHUB_SHA}" > release-review-source-commit.txt
+      - name: Upload release review evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentbridge-release-review-evidence
+          path: |
+            release-review-sha256.txt
+            release-review-installed-dependencies.txt
+            release-review-pip-inspect.json
+            release-review-source-commit.txt
+          retention-days: 30
       - name: Build isolated release-review image
         run: docker build -f Dockerfile.release -t agentbridge:release-review .
