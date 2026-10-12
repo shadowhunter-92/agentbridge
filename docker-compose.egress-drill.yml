@@ -14,7 +14,7 @@ services:
     security_opt: ["no-new-privileges:true"]
     read_only: true
     tmpfs: [/tmp]
-    command: ["python", "-m", "http.server", "8000"]
+    command: ["python", "-c", "import time; time.sleep(3600)"]
   egress:
     build:
       context: .
