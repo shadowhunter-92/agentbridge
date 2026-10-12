@@ -103,3 +103,16 @@ jobs:
           retention-days: 30
       - name: Build isolated release-review image
         run: docker build -f Dockerfile.release -t agentbridge:release-review .
+
+  egress-isolation-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and run isolated worker plus separate outbound proxy
+        run: docker compose -f docker-compose.egress-drill.yml up -d --build
+      - name: Confirm direct internet and metadata access blocked
+        run: docker compose -f docker-compose.egress-drill.yml exec -T worker python -m tools.egress_docker_probe
+      - name: Stop disposable environment
+        if: always()
+        run: docker compose -f docker-compose.egress-drill.yml down --remove-orphans
