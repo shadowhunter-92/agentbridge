@@ -5,11 +5,12 @@ accepts HTTP CONNECT host:443, resolves once, rejects mixed/private addresses,
 connects to a pinned numeric IP and tunnels bytes without inspecting TLS.
 """
 import asyncio
+import hmac
 import os
 from .egress_policy import EgressDenied, parse_allowed_hosts, parse_connect_target, resolve_global_addresses
 
 
-async def serve_client(reader, writer, hosts):
+async def serve_client(reader, writer, hosts, auth_token=None):
     upstream = None
     try:
         header = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5)
@@ -28,6 +29,12 @@ async def serve_client(reader, writer, hosts):
         if any(line and (line.startswith((b" ", b"\t")) or b":" not in line)
                for line in lines[1:-2]):
             raise EgressDenied("malformed HTTP headers")
+        if auth_token is not None:
+            proxy_auth = [line.split(b":", 1)[1].strip() for line in lines[1:-2]
+                          if line.lower().startswith(b"proxy-authorization:")]
+            if (len(proxy_auth) != 1
+                    or not hmac.compare_digest(proxy_auth[0], b"Bearer " + auth_token)):
+                raise EgressDenied("proxy caller not authenticated")
         host, port = parse_connect_target(words[1], hosts)
         # Reject potentially ambiguous Host header or proxy authentication.
         provided_host = [line.split(b":", 1)[1].strip().lower()
@@ -87,8 +94,14 @@ async def start(host="127.0.0.1", port=3128):
                 or os.getenv("AGENTBRIDGE_EGRESS_DRILL_ONLY") != "1"
                 or os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production")):
             raise ValueError("non-loopback reference proxy requires isolated drill mode")
+    token = None
+    if host == "0.0.0.0":
+        token_value = os.getenv("AGENTBRIDGE_EGRESS_DRILL_BEARER_TOKEN", "")
+        if len(token_value) < 32 or len(token_value) > 1024 or not token_value.isascii():
+            raise ValueError("isolated drill relay requires a long bearer token")
+        token = token_value.encode("ascii")
     return await asyncio.start_server(
-        lambda r, w: serve_client(r, w, hosts), host, port, limit=8192)
+        lambda r, w: serve_client(r, w, hosts, auth_token=token), host, port, limit=8192)
 
 
 def main():
