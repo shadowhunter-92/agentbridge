@@ -1,0 +1,35 @@
+# Disposable egress-isolation topology. NEVER a production deployment.
+# The worker joins only a Docker internal bridge; the proxy is dual-homed.
+# DNS/host and the Docker host still require independent operational review.
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.release
+    environment:
+      AGENTBRIDGE_ENV: development
+      AGENTBRIDGE_EGRESS_PROXY_URL: http://egress:3128
+    networks: [sealed]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: [/tmp]
+    command: ["python", "-m", "http.server", "8000"]
+  egress:
+    build:
+      context: .
+      dockerfile: Dockerfile.release
+    environment:
+      AGENTBRIDGE_ENV: development
+      AGENTBRIDGE_EGRESS_DRILL_ONLY: "1"
+      AGENTBRIDGE_EGRESS_ALLOWED_HOSTS: "example.com"
+    command: ["python", "-m", "src.proxy.restricted_connect", "--host", "0.0.0.0"]
+    networks: [sealed, outbound]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: [/tmp]
+networks:
+  sealed:
+    internal: true
+  outbound: {}
