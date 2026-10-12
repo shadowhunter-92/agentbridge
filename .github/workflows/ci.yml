@@ -118,10 +118,20 @@ jobs:
         with:
           python-version: "3.12"
       - name: Build and validate Python artifacts
+        env:
+          SOURCE_DATE_EPOCH: "1760000000"
         run: |
           python -m pip install --upgrade pip build twine
           python -m build
           python -m twine check dist/*
+      - name: Independent wheel rebuild and reproducibility check
+        env:
+          SOURCE_DATE_EPOCH: "1760000000"
+        run: |
+          mkdir -p /tmp/agentbridge-wheel-rebuild
+          SOURCE_DATE_EPOCH=1760000000 python -m build --wheel --outdir /tmp/agentbridge-wheel-rebuild
+          sha256sum dist/*.whl /tmp/agentbridge-wheel-rebuild/*.whl
+          cmp dist/*.whl /tmp/agentbridge-wheel-rebuild/*.whl
       - name: Verify wheel installation and CLI in clean environment
         run: |
           python -m venv /tmp/agentbridge-wheel-check
