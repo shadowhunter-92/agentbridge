@@ -80,6 +80,7 @@ jobs:
       - name: Verify wheel installation and CLI in clean environment
         run: |
           python -m venv /tmp/agentbridge-wheel-check
+          /tmp/agentbridge-wheel-check/bin/python -m pip install --upgrade pip
           /tmp/agentbridge-wheel-check/bin/pip install dist/*.whl
           cd /tmp
           /tmp/agentbridge-wheel-check/bin/python -c "from src.governance.trust_sdk import verify_action_evidence; from src.governance.sandbox_readback import SandboxReadOnlyObserver; print('SDK import OK')"
