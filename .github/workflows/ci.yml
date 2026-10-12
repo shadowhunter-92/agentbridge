@@ -162,6 +162,14 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Compile hash-locked runtime graph for release review
+        run: |
+          python -m pip install "pip-tools>=7,<8"
+          python -m piptools compile --generate-hashes --allow-unsafe \
+            --output-file candidate-runtime.lock pyproject.toml
+          echo 'AGENTBRIDGE_RUNTIME_LOCK_BEGIN'
+          cat candidate-runtime.lock
+          echo 'AGENTBRIDGE_RUNTIME_LOCK_END'
       - name: Build and validate Python artifacts
         env:
           SOURCE_DATE_EPOCH: "1760000000"
