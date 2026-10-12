@@ -34,7 +34,7 @@ def _restricted_secret(path: str) -> bytes:
         raise ValueError("observer secret must be a regular non-symlink file")
     if os.name == "posix" and stat.S_IMODE(source.stat().st_mode) & 0o077:
         raise ValueError("observer secrets must not be group/world accessible")
-    data = source.read_bytes().strip()
+    data = source.read_bytes()
     if not data or len(data) > 4096:
         raise ValueError("missing or oversized observer secret")
     return data
