@@ -1,51 +1,62 @@
 # Contributing to AgentBridge
 
-Thanks for your interest — this is an early-stage, honestly-labeled work in progress,
-and feedback or PRs are very welcome.
+Thank you for helping improve AgentBridge, an **experimental alpha** for agent-protocol interoperability and governed execution. We welcome bug reports, interoperable test cases, documentation, accessibility fixes, and narrow security improvements.
 
-## Setup
+## Before you begin
+
+- Read [README](README.md), [Security Policy](SECURITY.md), and [Code of Conduct](CODE_OF_CONDUCT.md).
+- Discuss substantial changes in an issue before implementing them, so work is not duplicated.
+- Never test destructive actions against a third-party system or production database without explicit authority.
+- Do **not** disclose credentials, customer data, sensitive logs or exploitable vulnerabilities in a public issue. Follow `SECURITY.md`.
+
+## Set up
+
+Python 3.11 or 3.12 is supported for the basic local test workflow.
 
 ```bash
+git clone https://github.com/shadowhunter-92/agentbridge.git
+cd agentbridge
 python -m venv .venv
-.venv/Scripts/pip install -r requirements.txt    # Windows; use bin/ on macOS/Linux
-.venv/Scripts/python -m pytest tests/ -q          # 153 passing; 159 with a Postgres DB (6 PG tests skip without one)
 
-# To run the 6 Postgres integration tests (incl. multi-worker concurrency), point them at a throwaway DB:
-#   docker run -d --name pg -e POSTGRES_PASSWORD=pw -e POSTGRES_DB=agentbridge_test -p 5544:5432 postgres:16
-#   $env:AGENTBRIDGE_TEST_PG = "postgresql://postgres:pw@localhost:5544/agentbridge_test"   # PowerShell
-#   .venv/Scripts/python -m pytest tests/test_postgres_store.py -v
-.venv/Scripts/python examples/demo_story.py       # the whole product in one screen
+# Activate:
+# macOS/Linux: source .venv/bin/activate
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+
+python -m pip install -e ".[test]"
+python -m pytest tests/ -q
+python examples/quickstart.py
 ```
 
-## Ground rules
+The PostgreSQL integration tests require an isolated disposable PostgreSQL database and the `AGENTBRIDGE_TEST_PG` environment variable; without it, those tests skip. For CI-controlled failure drills, follow the explicit scope and opt-in procedures in the draft [operator drill documentation](https://github.com/shadowhunter-92/agentbridge/blob/release/r4-internal-gates-2026-10/docs/PRODUCTION_OPERATOR_DRILLS.md). Never run recovery drills against real customer records.
 
-- **Conformance first.** Every protocol adapter is validated against that protocol's
-  *real* official SDK type, not just a hand-written schema. New protocol work must keep
-  that discipline (the SDKs disagree on field names in ways that silently break bridges).
-- **Tests are required.** Add tests with any behaviour change; keep the suite green.
-- **Fail loudly, not silently.** Malformed input should raise a clear, protocol-named
-  error (`MalformedWireError`), never a confusing empty value.
-- **No secrets in commits.** `.env`, keys, and `*.db` are gitignored — keep it that way.
+## Good first contributions
 
-## Adding a protocol (the recipe)
+1. Improve a reproducible getting-started example, including Windows support.
+2. Add precise negative tests for malformed/unsupported protocol messages.
+3. Document a reproducible interoperability limitation using a pinned SDK.
+4. Improve validation, error messages, typing, accessibility and troubleshooting.
+5. Test the **draft** Trust/Evidence SDK with synthetic state and report measured setup effort.
 
-1. Add `src/protocols/<name>.py` implementing `ProtocolAdapter` (four to/from-canonical
-   methods); guard `to_canonical_call` with `require_mapping(wire, self.name)`.
-2. Register it in `src/protocols/registry.py`.
-3. Add a conformance case in `tests/test_protocols_conformance.py` validating output
-   against the protocol's real SDK type; the any-to-any matrix picks it up automatically.
-4. If it has a runnable server, add `examples/<name>_server_agent.py` + a live route.
+## Pull request checklist
 
-See `docs/PROTOCOL_SUPPORT.md` for the architecture and `docs/ROADMAP.md` for what's
-planned vs deliberately deferred.
+- Keep one problem or feature per PR, link an issue, and explain the user benefit.
+- Add tests that fail before the fix and pass afterward, when applicable.
+- Specify Python/protocol SDK versions and expected behavior, including rejected cases.
+- Describe security boundaries and whether your change affects identity, approvals, state transitions, budgets, receipts, logging, key management or network access.
+- State what you ran locally and what needs CI or independent review.
+- Update documentation and the compatibility matrix when changing behavior.
+- Keep PRs small and avoid unrelated formatting or refactors.
 
-## Pull requests
+All security-critical behavior must fail closed on invalid identity, unexpected state, untrusted evidence or unavailable authoritative data. A signed action claim alone does not establish that the external effect occurred.
 
-- Keep them focused and small where possible.
-- Describe *why*, not just *what*.
-- Run the full test suite and the demo before opening the PR.
+## Engineering workflow
 
-## License
+Contribute from your own fork or a narrowly scoped branch. The default `main` branch is the public prototype. Large production-hardening work remains in draft [PR #34](https://github.com/shadowhunter-92/agentbridge/pull/34); do not assume it is shipped. CI passing is necessary but not equivalent to security certification.
 
-By contributing you agree your contributions are licensed under the repository's
-**Apache 2.0** license.
+## Developer evaluations
+
+Independent engineering feedback is welcome **now** for synthetic and read-only workflows. See [OSS evaluator kit](https://github.com/shadowhunter-92/agentbridge/blob/release/r4-internal-gates-2026-10/docs/OSS_EVALUATION_KIT.md). Share installation time, existing-stack comparison, error cases and reproducible evidence. Do not connect the alpha to unsupervised consequential customer actions.
+
+Maintainers may ask for changes or decline proposals that expand unsupported protocol/security claims without end-to-end evidence.
+
+Thank you for helping build dependable, interoperable agent infrastructure.
