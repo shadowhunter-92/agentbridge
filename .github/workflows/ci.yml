@@ -89,6 +89,12 @@ jobs:
         run: |
           /tmp/agentbridge-wheel-check/bin/python tools/build_review_sbom.py > release-review-cyclonedx.json
           /tmp/agentbridge-wheel-check/bin/python -c "import json; b=json.load(open('release-review-cyclonedx.json')); assert b['specVersion']=='1.5'; assert any(c['name'].lower()=='agentbridge' for c in b['components'])"
+      - name: Record review artifact digests and installed dependency inventory
+        run: |
+          sha256sum dist/* > release-review-sha256.txt
+          /tmp/agentbridge-wheel-check/bin/python -m pip freeze --all > release-review-installed-dependencies.txt
+          /tmp/agentbridge-wheel-check/bin/python -m pip inspect --local > release-review-pip-inspect.json
+          printf '%s\\n' "${GITHUB_SHA}" > release-review-source-commit.txt
       - name: Audit installed wheel dependencies for known vulnerabilities (review evidence)
         run: |
           /tmp/agentbridge-wheel-check/bin/python -m pip install pip-audit
@@ -100,12 +106,6 @@ jobs:
           if [ "$status" -ne 0 ]; then
             echo "::warning::Dependency audit identified advisories or could not complete; release security gate remains OPEN. See artifact."
           fi
-      - name: Record review artifact digests and installed dependency inventory
-        run: |
-          sha256sum dist/* > release-review-sha256.txt
-          /tmp/agentbridge-wheel-check/bin/python -m pip freeze --all > release-review-installed-dependencies.txt
-          /tmp/agentbridge-wheel-check/bin/python -m pip inspect --local > release-review-pip-inspect.json
-          printf '%s\\n' "${GITHUB_SHA}" > release-review-source-commit.txt
       - name: Upload release review evidence
         uses: actions/upload-artifact@v4
         with:
