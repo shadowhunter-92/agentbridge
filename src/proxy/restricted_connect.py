@@ -81,7 +81,12 @@ async def serve_client(reader, writer, hosts):
 async def start(host="127.0.0.1", port=3128):
     hosts = parse_allowed_hosts(os.environ.get("AGENTBRIDGE_EGRESS_ALLOWED_HOSTS", ""))
     if host not in ("127.0.0.1", "::1"):
-        raise ValueError("reference proxy may bind only to loopback")
+        # Bind to the private container interface only in the disposable,
+        # separately networked integration drill. No production exposure.
+        if (host != "0.0.0.0"
+                or os.getenv("AGENTBRIDGE_EGRESS_DRILL_ONLY") != "1"
+                or os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production")):
+            raise ValueError("non-loopback reference proxy requires isolated drill mode")
     return await asyncio.start_server(
         lambda r, w: serve_client(r, w, hosts), host, port, limit=8192)
 
