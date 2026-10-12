@@ -9,7 +9,7 @@ and deleting old branches without verifying ancestry and unique changes is unsaf
 | --- | --- | --- |
 | `main` | Public, experimental default-branch prototype | Accept scoped, reviewed PRs only |
 | `release/r4-internal-gates-2026-10` | Cumulative security/recovery implementation (draft PR #34) | No unconditional production merge |
-| `docs/public-facing-refresh-2026-10` | Public README and contributor experience (PR #35) | Review and merge independently of PR #34 |
+| `docs/public-refresh-rebased-2026-10` | Public README and contributor experience (PR #39) | Review and merge independently of PR #34 |
 
 ## Incorporated history
 
@@ -44,8 +44,8 @@ merging/closing; do not silently remove them for cosmetic cleanliness.
 
 ## Safe cleanup sequence
 
-1. Review the current main, PR #35 and PR #34 CI by exact commit SHA.
-2. Merge only the bounded documentation PR if its content and checks pass.
+1. Review the current main, PR #39 and PR #34 CI by exact commit SHA.
+2. Merge only PR #39 after validating the current README, links, quickstart, and CI checks. Historical PR #35 was closed unmerged after its branch conflicted with the separately merged WAL contention fix.
 3. Keep PR #34 draft until the release-gate register and independent reviewers
    approve the applicable operational scope.
 4. Before deleting any obsolete branch, check no other open PR points to it,
