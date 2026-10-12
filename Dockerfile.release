@@ -5,9 +5,11 @@ FROM python:3.12-alpine3.22@sha256:a190708a2dec1bd18b1decb539f8e8f5407abaa9bf39c
 RUN apk upgrade --no-cache
 WORKDIR /build
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md requirements-runtime.lock ./
 COPY src ./src
-RUN python -m venv /venv && /venv/bin/pip install --no-cache-dir .
+RUN python -m venv /venv && \
+    /venv/bin/pip install --no-cache-dir --require-hashes -r requirements-runtime.lock && \
+    /venv/bin/pip install --no-cache-dir --no-deps .
 
 FROM python:3.12-alpine3.22@sha256:a190708a2dec1bd18b1decb539f8e8f5407abaa9bf39cacda583f7f8c11db322
 RUN apk upgrade --no-cache
