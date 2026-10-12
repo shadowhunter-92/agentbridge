@@ -32,7 +32,11 @@ class OperationLedger:
                                   "agent_id TEXT NOT NULL, operation_id TEXT NOT NULL, "
                                   "token TEXT NOT NULL, PRIMARY KEY(agent_id, operation_id))")
         else:
-            with store._lock, store._db.cursor() as cur:
+            # CREATE TABLE IF NOT EXISTS races on pg_type catalog for concurrent
+            # first-use workers. Serialize DDL on the same transaction advisory
+            # lock used by PostgresStore schema bootstrap.
+            with store._lock, store._db.transaction(), store._db.cursor() as cur:
+                cur.execute("SELECT pg_advisory_xact_lock(%s)", (911004,))
                 cur.execute(
                     "CREATE TABLE IF NOT EXISTS agent_operations "
                     "(agent_id TEXT NOT NULL, operation_id TEXT NOT NULL, "
