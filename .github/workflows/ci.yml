@@ -103,6 +103,9 @@ jobs:
           status=$?
           set -e
           printf '%s\\n' "$status" > release-review-vulnerability-exit-code.txt
+          if [ -s release-review-vulnerabilities.json ]; then
+            python -c "import json; d=json.load(open('release-review-vulnerabilities.json')); print('ADVISORY SUMMARY:'); [print(x['name'], x['version'], [v['id'] for v in x.get('vulns', [])]) for x in d.get('dependencies', []) if x.get('vulns')]"
+          fi
           if [ "$status" -ne 0 ]; then
             echo "::warning::Dependency audit identified advisories or could not complete; release security gate remains OPEN. See artifact."
           fi
