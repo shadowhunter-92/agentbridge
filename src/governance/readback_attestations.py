@@ -61,9 +61,16 @@ def verify_readback_attestation(
             or proof["external_reference"] != external_reference
             or proof["destination_receipt_sha256"] != destination_receipt_sha256):
         raise UntrustedReadback("readback not bound to the exact destination receipt")
-    if (not isinstance(trusted_readback_key_hex, str)
-            or not isinstance(destination_key_hex, str)
-            or trusted_readback_key_hex == destination_key_hex):
+    if not isinstance(trusted_readback_key_hex, str) or not isinstance(destination_key_hex, str):
+        raise UntrustedReadback("readback signer trust roots missing")
+    try:
+        readback_public = bytes.fromhex(trusted_readback_key_hex)
+        destination_public = bytes.fromhex(destination_key_hex)
+        if len(readback_public) != 32 or len(destination_public) != 32:
+            raise ValueError("public key must be 32 bytes")
+    except ValueError as exc:
+        raise UntrustedReadback("malformed readback or destination public key") from exc
+    if readback_public == destination_public:
         raise UntrustedReadback("readback signer must be an independent trust root")
     now = int(time.time()) if now is None else now
     if not isinstance(now, int) or isinstance(now, bool) or max_age_seconds <= 0:
@@ -71,9 +78,7 @@ def verify_readback_attestation(
     if not now - max_age_seconds <= proof["observed_at"] <= now + 30:
         raise UntrustedReadback("readback attestation is stale or from the future")
     try:
-        raw_key = bytes.fromhex(trusted_readback_key_hex)
-        if len(raw_key) != 32:
-            raise ValueError("wrong Ed25519 public key length")
+        raw_key = readback_public
         signature = bytes.fromhex(proof["signature_hex"])
         Ed25519PublicKey.from_public_bytes(raw_key).verify(
             signature, canonical_readback_payload(proof))
