@@ -115,3 +115,65 @@ reconciliation regression and `tests/test_operator_review.py` cover this.
 This closes **one repository-side reviewer authentication gap**, not full
 workload/operator RBAC, approval separation-of-duties, cryptographic key
 rotation, audit monitoring or an independently operated acceptance exercise.
+
+## October 12 verified hardening follow-on — R4 engineering branch
+
+The five-job CI matrix at commit `3087e35b0b49db5e8cb0406f122aef1f10431395`
+included Python 3.11/3.12 tests, disposable PostgreSQL integration,
+the wheel/container review and a real disposable Docker egress-isolation drill.
+The latter uses a worker on an `internal: true` bridge and a dual-homed
+separate proxy; direct public-IP/metadata/DNS-by-IP TCP probes are denied and
+unauthorized CONNECT requests are refused. It is an internal-network test,
+NOT proof of a CNI/host production deployment or an independently reviewed
+proxy. See `docs/EGRESS_DEPLOYMENT_VERIFICATION.md`.
+
+A second Kubernetes **review specimen**, `deploy/kubernetes/networkpolicy.review.yaml`,
+defines worker egress only to labeled proxy/DB/DNS pods and restricts
+proxy ingress to workers. Its structure is automatically checked, but the
+policy has not been applied or validated on any real cluster/CNI.
+
+`tests/test_pg_connection_loss_fail_closed.py` verifies a durable unknown
+operation remains claimed across a terminated PostgreSQL worker connection.
+This is not PITR, partition, replica failover or a managed restore rehearsal.
+
+The package review generates a CycloneDX 1.5 inventory of the installed
+wheel, pins built artifact SHA256 to source SHA, and audits installed
+dependencies. The first real scan found 12 advisory entries affecting the
+outdated `pip 25.0.1` in the test virtual environment; upgrading pip removed
+those findings. **CI scan has now reported no known vulnerabilities** in that
+review environment. This is not a guarantee of vulnerability absence in the
+base image, optional protocols, deployed infrastructure or future versions.
+A cryptographically signed release, complete image SBOM and repeatable lock
+remain open.
+
+`docs/OSS_EVALUATION_KIT.md` prepares a third-party bounded SDK evaluation
+but records no actual outside integration, customer review or payment.
+
+### Remaining internal blockers — must NOT be reclassified external
+
+1. Harden proxy with workload authentication, credential separation,
+   TLS/target-host enforcement, per-tenant policy, observability, IPv6/network
+   test matrix and host/CNI enforcement plans plus executable drills.
+2. Implement independently operable real-target authoritative state verifier
+   for one consented target, including revocation, failover and reviewer RBAC.
+3. Automate disposable PostgreSQL physical/logical backup-and-restore,
+   crash-window reconciliation, partition/recovery and migration/rollback
+   with captured reproducible logs; qualify on managed HA once available.
+4. Expand supported MCP/A2A subset negative/cross-version tests and establish
+   a verified scoped compatibility contract (not blanket protocol conformance).
+5. Lock Python and container versions/digests; scan base image, sign artifact,
+   rehearse schema upgrades and downgrades in disposable staging.
+6. Establish representative sustained load harness, accepted thresholds and
+   resource/error-budget reporting separate from today's short SQL benchmarks.
+7. Publish a stable OSS SDK contract, minimal reference integrations and
+   reviewable external pilot package; avoid claiming paying demand.
+
+### External acceptance work
+
+Requires an independent authorized security reviewer, actual customer/target
+owner permission and separate read-only credentials, production operator/CNI/
+database infrastructure, three independent SDK evaluators, and a consented
+design-partner pilot. These are not things a green synthetic CI run can prove.
+
+**Release decision:** engineering progress verified; seven overall production
+gates remain OPEN. Keep PR #34 draft; no unrestricted production go-live.
