@@ -42,6 +42,12 @@ class WitnessJournal:
     def close(self):
         self._db.close()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+
     def latest(self):
         with self._lock:
             row = self._db.execute(
