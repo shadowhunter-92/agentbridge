@@ -36,8 +36,8 @@ def test_postgres_observer_reads_committed_effect_without_write_privileges():
                           "(agent_id TEXT,operation_id TEXT,fingerprint TEXT,outcome TEXT,"
                           "external_reference TEXT,receipt_json JSONB,"
                           "PRIMARY KEY(agent_id,operation_id))")
-            admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD %s").format(sql.Identifier(role)),
-                          (observer_password,))
+            admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
+                sql.Identifier(role),sql.Literal(observer_password)))
             admin.execute(sql.SQL("GRANT SELECT ON public.ab_evidence_effects TO {}").format(sql.Identifier(role)))
             admin.execute("INSERT INTO public.ab_evidence_effects VALUES (%s,%s,%s,%s,%s,%s)",
                           (agent,operation,fingerprint,"succeeded",receipt["external_reference"],json.dumps(receipt)))
