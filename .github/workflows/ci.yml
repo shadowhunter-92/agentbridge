@@ -189,7 +189,11 @@ jobs:
             release-review-vulnerability-exit-code.txt
           retention-days: 30
       - name: Build isolated release-review image
-        run: docker build -f Dockerfile.release -t agentbridge:release-review .
+        run: |
+          docker pull python:3.12-slim
+          docker image inspect --format 'BASE_IMAGE_DIGEST={{index .RepoDigests 0}}' python:3.12-slim
+          docker build -f Dockerfile.release -t agentbridge:release-review .
+          docker image inspect --format 'REVIEW_IMAGE_ID={{.Id}}' agentbridge:release-review
 
   egress-isolation-drill:
     runs-on: ubuntu-latest
