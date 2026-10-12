@@ -81,6 +81,15 @@ jobs:
       - name: Validate SQL load artifact structure and counts
         run: |
           python -c "import json; d=json.load(open('postgres-load-evidence.json')); assert d['count']==250 and d['workers']==8 and d['throughput_ops_s']>0; assert d['p99_ms']>=d['p95_ms']>=d['p50_ms']>=0"
+      - name: Repeat multi-batch SQL load and enforce disposable resource smoke thresholds
+        run: python -m tools.qualify_postgres_load --batches 3 --count 250 --workers 8 > postgres-sql-smoke-qualification.json
+      - name: Upload SQL smoke qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentbridge-sql-smoke-qualification
+          path: postgres-sql-smoke-qualification.json
+          if-no-files-found: warn
       - name: Upload PostgreSQL load observations
         uses: actions/upload-artifact@v4
         with:
