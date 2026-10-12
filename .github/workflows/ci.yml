@@ -62,6 +62,18 @@ jobs:
           pip install -r requirements.txt "psycopg[binary]"
       - name: Run real PostgreSQL integration and concurrency tests
         run: python -m pytest tests/test_postgres_store.py tests/test_postgres_reconciliation.py tests/test_pg_worker_kill_recovery.py tests/test_postgres_durable_hold_boundary.py tests/test_pg_connection_loss_fail_closed.py -q
+      - name: Disposable PostgreSQL backup, restore and schema rollback drill
+        env:
+          AGENTBRIDGE_DISPOSABLE_PG_RESTORE_DRILL: "1"
+          AGENTBRIDGE_PG_DRILL_REPORT: postgres-restore-drill.json
+        run: python tools/drill_postgres_backup_restore.py
+      - name: Upload PostgreSQL recovery drill evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentbridge-postgres-restore-drill
+          path: postgres-restore-drill.json
+          if-no-files-found: warn
       - name: Measure bounded PostgreSQL governance latency (not a production SLO)
         run: python tools/benchmark_postgres_governance.py --count 50 --workers 4
 
