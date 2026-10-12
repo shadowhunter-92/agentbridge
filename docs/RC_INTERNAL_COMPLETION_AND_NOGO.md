@@ -229,3 +229,29 @@ before claiming they passed. No production release authorization is implied.
   qualified external security review remain explicit adoption/release goals.
 
 **Release posture remains unrestricted production NO-GO; PR #34 stays draft.**
+
+## October 12 — non-PostgreSQL destination reference (engineering only)
+
+`src/governance/fenced_sqlite_destination.py` provides an additional
+**single-authority SQLite** destination. Its destination-owned transaction
+atomically checks the live monotonic epoch and writes an operation-bound
+signed effect. The negative tests cover stale leadership, duplicate action,
+lost acknowledgement, and a separately signed read-only observation.
+
+**Limits:** a local SQLite single writer does not imply distributed HA,
+cross-host fencing, shared network filesystem safety, or universal external
+SaaS guarantees. No third-party production destination is qualified.
+Do not close the P0 generalized target-fencing gate on this basis.
+
+Current R4/PR #34 diverges from `main` after the standalone public
+documentation merge; this is a normal history conflict and is not itself a
+reason to merge the release branch without security review.
+
+The five unique `prod/readiness-pass` commits were identified:
+`1efbac5` (observability, approvals, OIDC, lifecycle);
+`d4a2a4b` (correctness and error handling);
+`4db3cc1` (documentation);
+`9006a0b` and `779e81e` (concurrency test stabilization).
+Compare functional patches to R4 before deciding whether the branch can
+be archived; historical commit ancestry is not sufficient evidence of
+feature equivalence. Preserve its tip until the audit is signed off.
