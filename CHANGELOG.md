@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation and community onboarding (public review)
+- Reorganized the README around product purpose, quick start, protocol scope, honest release status and four proposed offerings.
+- Updated contributor instructions, security-focused pull request template and links to the separately reviewed Trust/Evidence evaluator kit.
+- Replaced historical test-count assertions with references to exact CI commits; experimental production changes remain in draft PR #34.
+- Opened an opt-in, synthetic/read-only independent developer evaluation invitation (issue #36).
+
+
 ### Added — production/repo hygiene
 - GitHub Actions **CI** workflow: runs the test suite on Python 3.11 and 3.12 (`.github/workflows/ci.yml`).
 - **`pyproject.toml`** packaging with optional extras (`[test]`, `[postgres]`, `[dev]`).
