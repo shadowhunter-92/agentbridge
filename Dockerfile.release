@@ -1,20 +1,21 @@
 # AgentBridge release-review image (not production certified).
-# Base image is digest-pinned for this release-review snapshot; Python deps still need hash locking.
-FROM python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 AS builder
+# Alpine-based review candidate to remove unfixed Debian 13 runtime OS CVEs.
+# Re-pin by observed verified digest before any release; Python deps still need hash locking.
+FROM python:3.12-alpine3.22 AS builder
 WORKDIR /build
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 COPY pyproject.toml README.md ./
 COPY src ./src
 RUN python -m venv /venv && /venv/bin/pip install --no-cache-dir .
 
-FROM python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+FROM python:3.12-alpine3.22
 ENV PATH="/venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY --from=builder /venv /venv
 COPY --from=builder /build/src /app/src
 # Disposable egress drill probe, no production secrets or external endpoints.
 COPY tools/egress_docker_probe.py /app/tools/egress_docker_probe.py
-RUN useradd --system --create-home --uid 10001 agentbridge
+RUN addgroup -S -g 10001 agentbridge && adduser -S -D -H -u 10001 -G agentbridge agentbridge
 USER 10001:10001
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
