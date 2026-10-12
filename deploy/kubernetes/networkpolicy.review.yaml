@@ -1,0 +1,71 @@
+# Review-only reference. Apply only after an operator verifies selectors and CNI.
+# Namespaces and Pod labels must match actual deployment, or isolation fails.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agentbridge-worker-egress-only
+  namespace: agentbridge
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agentbridge-worker
+  policyTypes: [Egress]
+  egress:
+    # Only the private egress gateway is allowed to reach external systems.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: agentbridge
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agentbridge-egress
+      ports:
+        - protocol: TCP
+          port: 3128
+    # Database connectivity is separately explicit and requires TLS/RBAC.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: agentbridge
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agentbridge-postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+    # DNS is a necessary exception; DNS tunneling/exfil still needs controls.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Limit inbound connections to the proxy to AgentBridge workers only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agentbridge-egress-proxy-ingress
+  namespace: agentbridge
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agentbridge-egress
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: agentbridge
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agentbridge-worker
+      ports:
+        - protocol: TCP
+          port: 3128
