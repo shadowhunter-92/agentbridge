@@ -11,6 +11,8 @@ class McpAdapter(ProtocolAdapter):
 
     def to_canonical_call(self, wire: Dict[str, Any]) -> CanonicalCall:
         require_mapping(wire, self.name)
+        if "method" in wire and wire["method"] != "tools/call":
+            raise ValueError("only MCP tools/call has an explicitly supported canonical action")
         params = wire.get("params", {}) or {}
         kwargs = dict(
             capability=params.get("name") or params.get("tool") or "",
