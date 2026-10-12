@@ -9,6 +9,7 @@ services:
     environment:
       AGENTBRIDGE_ENV: development
       AGENTBRIDGE_EGRESS_PROXY_URL: http://egress:3128
+      AGENTBRIDGE_EGRESS_DRILL_BEARER_TOKEN: 'disposable-network-drill-token-not-a-production-secret'
     networks: [sealed]
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
@@ -22,6 +23,7 @@ services:
     environment:
       AGENTBRIDGE_ENV: development
       AGENTBRIDGE_EGRESS_DRILL_ONLY: "1"
+      AGENTBRIDGE_EGRESS_DRILL_BEARER_TOKEN: 'disposable-network-drill-token-not-a-production-secret'
       AGENTBRIDGE_EGRESS_ALLOWED_HOSTS: "example.com"
     command: ["python", "-m", "src.proxy.restricted_connect", "--host", "0.0.0.0"]
     networks: [sealed, outbound]
