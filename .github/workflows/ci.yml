@@ -76,6 +76,16 @@ jobs:
           if-no-files-found: warn
       - name: Measure bounded PostgreSQL governance latency (not a production SLO)
         run: python tools/benchmark_postgres_governance.py --count 50 --workers 4
+      - name: Extended SQL load and latency evidence (disposable, not production SLO)
+        run: python tools/benchmark_postgres_governance.py --count 250 --workers 8 > postgres-load-evidence.json
+      - name: Validate SQL load artifact structure and counts
+        run: |
+          python -c "import json; d=json.load(open('postgres-load-evidence.json')); assert d['count']==250 and d['workers']==8 and d['throughput_ops_s']>0; assert d['p99_ms']>=d['p95_ms']>=d['p50_ms']>=0"
+      - name: Upload PostgreSQL load observations
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentbridge-postgres-load-observations
+          path: postgres-load-evidence.json
 
   postgres-replica-drill:
     runs-on: ubuntu-latest
