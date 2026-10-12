@@ -96,15 +96,17 @@ def drill():
         deadline = time.monotonic() + 30
         replicated = False
         while time.monotonic() < deadline:
-            with connect(dsn(standby_port)) as conn:
+            with connect(dsn(standby_port), autocommit=True) as conn:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT state FROM agent_operations WHERE agent_id=%s "
-                        "AND operation_id=%s", (agent, operation))
-                    row = cur.fetchone()
-                    if row == ("unknown",):
-                        replicated = True
-                        break
+                    cur.execute("SELECT to_regclass('public.agent_operations')")
+                    if cur.fetchone()[0] is not None:
+                        cur.execute(
+                            "SELECT state FROM agent_operations WHERE agent_id=%s "
+                            "AND operation_id=%s", (agent, operation))
+                        row = cur.fetchone()
+                        if row == ("unknown",):
+                            replicated = True
+                            break
             time.sleep(.5)
         assert replicated, "committed state was not replicated before fencing"
         # FENCE old primary, then promote standby, avoiding synthetic split brain.
