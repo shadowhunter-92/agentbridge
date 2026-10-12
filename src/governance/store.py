@@ -121,7 +121,17 @@ class SqliteStore(GovernanceStore):
         self._db = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA busy_timeout=10000")
-        self._db.execute("PRAGMA journal_mode=WAL")
+        # Concurrent first-use connections can collide while enabling WAL.
+        # SQLite busy_timeout does not reliably cover this PRAGMA transition.
+        import time
+        for attempt in range(8):
+            try:
+                self._db.execute("PRAGMA journal_mode=WAL")
+                break
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower() or attempt == 7:
+                    raise
+                time.sleep(min(0.025 * (2 ** attempt), 0.4))
         self._init_schema()
 
     def _init_schema(self):
