@@ -24,7 +24,7 @@ async def _roundtrip(request, allowed=frozenset({"api.example.com"})):
         await server.wait_closed()
 
 
-@pytest.mark.parametrize("request", [
+@pytest.mark.parametrize("raw_request", [
     b"GET http://api.example.com/ HTTP/1.1\r\nHost: api.example.com\r\n\r\n",
     b"CONNECT 127.0.0.1:443 HTTP/1.1\r\nHost: 127.0.0.1:443\r\n\r\n",
     b"CONNECT evil.example.com:443 HTTP/1.1\r\nHost: evil.example.com:443\r\n\r\n",
@@ -32,6 +32,6 @@ async def _roundtrip(request, allowed=frozenset({"api.example.com"})):
     b"CONNECT api.example.com:443 HTTP/1.1\r\nHost: evil.example.com:443\r\n\r\n",
     b"CONNECT api.example.com:443 HTTP/1.1\r\n\r\n",
 ])
-def test_restricted_proxy_rejects_malformed_and_nonallowlisted_network_requests(request):
-    response = asyncio.run(_roundtrip(request))
+def test_restricted_proxy_rejects_malformed_and_nonallowlisted_network_requests(raw_request):
+    response = asyncio.run(_roundtrip(raw_request))
     assert response.startswith(b"HTTP/1.1 403 Forbidden")
