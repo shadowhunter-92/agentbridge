@@ -8,6 +8,7 @@ import asyncio
 import hmac
 import os
 from .egress_policy import EgressDenied, parse_allowed_hosts, parse_connect_target, resolve_global_addresses
+from .tls_sni_guard import InvalidClientHello, parse_tls_client_hello_sni
 
 
 async def serve_client(reader, writer, hosts, auth_token=None):
@@ -72,6 +73,17 @@ async def serve_client(reader, writer, hosts, auth_token=None):
             raise EgressDenied("destination unavailable")
         writer.write(b"HTTP/1.1 200 Connection Established\r\n\r\n")
         await writer.drain()
+        # Read and validate the initial TLS record BEFORE forwarding any bytes.
+        # No fragmented/opaque ClientHello or alternate SNI destination allowed.
+        record_head = await asyncio.wait_for(reader.readexactly(5), timeout=5)
+        record_size = int.from_bytes(record_head[3:5], 'big')
+        if record_size < 4 or record_size > 16384:
+            raise EgressDenied('invalid bounded TLS record')
+        record = record_head + await asyncio.wait_for(reader.readexactly(record_size), timeout=5)
+        if parse_tls_client_hello_sni(record) != host:
+            raise EgressDenied('CONNECT authority and TLS SNI mismatch')
+        upstream[1].write(record)
+        await upstream[1].drain()
         remote_reader, remote_writer = upstream
 
         async def relay(source, target):
@@ -86,7 +98,7 @@ async def serve_client(reader, writer, hosts, auth_token=None):
             asyncio.gather(relay(reader, remote_writer),
                            relay(remote_reader, writer)),
             timeout=120)
-    except (EgressDenied, asyncio.IncompleteReadError, asyncio.LimitOverrunError,
+    except (EgressDenied, InvalidClientHello, asyncio.IncompleteReadError, asyncio.LimitOverrunError,
             UnicodeError, asyncio.TimeoutError, OSError, ValueError):
         if not writer.is_closing():
             writer.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
