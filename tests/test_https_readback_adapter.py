@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from src.governance.https_readback_adapter import (
     ReadbackUnavailable, fetch_authoritative_receipt,
-    observe_authoritative_receipt, validated_origin,
+    observe_authoritative_receipt, validated_origin, fetch_and_attest_authoritative_state,
 )
 from src.governance.destination_receipts import canonical_receipt_payload
 from src.governance.readback_attestations import verify_readback_attestation
@@ -97,3 +97,32 @@ def test_https_fetch_does_not_follow_redirect_and_bounds_payload():
         fetch_authoritative_receipt(
             "https://api.example.com", "agent", "op-1",
             read_only_token="short")
+
+
+def test_integrated_readback_entrypoint_binds_fetch_to_source_and_signed_observation():
+    destination = Ed25519PrivateKey.generate()
+    observer = Ed25519PrivateKey.generate()
+    receipt = dict(agent_id="agent", operation_id="op-long-0123456789",
+                   fingerprint="requested-action", outcome="succeeded",
+                   external_reference="target/task/1")
+    receipt["signature_hex"] = destination.sign(canonical_receipt_payload(receipt)).hex()
+    with patch("src.governance.https_readback_adapter.fetch_authoritative_receipt",
+               return_value=receipt) as fetched:
+        _, proof = fetch_and_attest_authoritative_state(
+            origin="https://api.example.com", agent_id="agent",
+            operation_id="op-long-0123456789", fingerprint="requested-action",
+            read_only_token="r" * 40, destination_public_key_hex=pub(destination),
+            sign=observer.sign)
+    fetched.assert_called_once_with(
+        "https://api.example.com", "agent", "op-long-0123456789",
+        read_only_token="r" * 40, timeout=8)
+    assert proof["source"] == "https://api.example.com"
+    assert len(proof["signature_hex"]) == 128
+    with patch("src.governance.https_readback_adapter.fetch_authoritative_receipt",
+               side_effect=ReadbackUnavailable("no authoritative result")):
+        with pytest.raises(ReadbackUnavailable):
+            fetch_and_attest_authoritative_state(
+                origin="https://api.example.com", agent_id="agent",
+                operation_id="op-long-0123456789", fingerprint="requested-action",
+                read_only_token="r" * 40, destination_public_key_hex=pub(destination),
+                sign=observer.sign)
