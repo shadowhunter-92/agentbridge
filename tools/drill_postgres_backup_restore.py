@@ -38,7 +38,7 @@ def _require_disposable_test_target():
 
 def _pg_client(opts, command, *, source=None):
     args = [
-        "docker", "run", "--rm", "--network", "host",
+        "docker", "run", "--rm", "-i", "--network", "host",
         "-e", "PGPASSWORD=" + opts["password"],
         "postgres:16", command, "-h", "127.0.0.1", "-p",
         str(opts.get("port", "5432")), "-U", "agentbridge",
@@ -51,8 +51,10 @@ def _pg_client(opts, command, *, source=None):
                  "--single-transaction", "--no-owner", "--no-acl"]
     else:
         raise ValueError("unsupported client")
-    return subprocess.run(args, input=source, capture_output=True, check=True,
-                          timeout=120).stdout
+    result = subprocess.run(args, input=source, capture_output=True, timeout=120)
+    if result.returncode:
+        raise RuntimeError(f"{command} failed: {result.stderr.decode(errors='replace')[:1500]}")
+    return result.stdout
 
 
 def drill(report_path: str | None = None):
