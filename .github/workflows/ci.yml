@@ -228,6 +228,20 @@ jobs:
             aquasec/trivy:0.69.1 image --format json \
             --output /scan/agentbridge-image-vulnerabilities.json \
             --severity HIGH,CRITICAL --exit-code 1 agentbridge:release-review
+      - name: Summarize container vulnerability findings
+        if: always()
+        run: |
+          if [ -s agentbridge-image-vulnerabilities.json ]; then
+            python - <<'PY'
+          import json
+          report=json.load(open("agentbridge-image-vulnerabilities.json"))
+          for result in report.get("Results",[]):
+              for v in result.get("Vulnerabilities") or []:
+                  print("IMAGE_ADVISORY",result.get("Target"),v.get("PkgName"),
+                        v.get("InstalledVersion"),v.get("FixedVersion"),
+                        v.get("VulnerabilityID"),v.get("Severity"))
+          PY
+          fi
       - name: Upload image vulnerability evidence
         if: always()
         uses: actions/upload-artifact@v4
