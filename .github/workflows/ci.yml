@@ -91,9 +91,9 @@ jobs:
           /tmp/agentbridge-wheel-check/bin/python -c "import json; b=json.load(open('release-review-cyclonedx.json')); assert b['specVersion']=='1.5'; assert any(c['name'].lower()=='agentbridge' for c in b['components'])"
       - name: Audit installed wheel dependencies for known vulnerabilities (review evidence)
         run: |
-          python -m pip install pip-audit
+          /tmp/agentbridge-wheel-check/bin/python -m pip install pip-audit
           set +e
-          pip-audit --python /tmp/agentbridge-wheel-check/bin/python --format json --output release-review-vulnerabilities.json
+          /tmp/agentbridge-wheel-check/bin/pip-audit --local --format json --output release-review-vulnerabilities.json
           status=$?
           set -e
           printf '%s\\n' "$status" > release-review-vulnerability-exit-code.txt
