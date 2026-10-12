@@ -85,6 +85,10 @@ jobs:
           /tmp/agentbridge-wheel-check/bin/python -c "from src.governance.trust_sdk import verify_action_evidence; from src.governance.sandbox_readback import SandboxReadOnlyObserver; print('SDK import OK')"
           /tmp/agentbridge-wheel-check/bin/agentbridge --version
           /tmp/agentbridge-wheel-check/bin/python -m pip check
+      - name: Generate installed-wheel CycloneDX review SBOM
+        run: |
+          /tmp/agentbridge-wheel-check/bin/python tools/build_review_sbom.py > release-review-cyclonedx.json
+          /tmp/agentbridge-wheel-check/bin/python -c "import json; b=json.load(open('release-review-cyclonedx.json')); assert b['specVersion']=='1.5'; assert any(c['name'].lower()=='agentbridge' for c in b['components'])"
       - name: Record review artifact digests and installed dependency inventory
         run: |
           sha256sum dist/* > release-review-sha256.txt
@@ -100,6 +104,7 @@ jobs:
             release-review-installed-dependencies.txt
             release-review-pip-inspect.json
             release-review-source-commit.txt
+            release-review-cyclonedx.json
           retention-days: 30
       - name: Build isolated release-review image
         run: docker build -f Dockerfile.release -t agentbridge:release-review .
