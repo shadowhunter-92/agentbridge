@@ -77,6 +77,29 @@ jobs:
       - name: Measure bounded PostgreSQL governance latency (not a production SLO)
         run: python tools/benchmark_postgres_governance.py --count 50 --workers 4
 
+  postgres-replica-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install PostgreSQL drill dependencies
+        run: python -m pip install --upgrade pip "psycopg[binary]" -e .
+      - name: Fence primary and promote streaming replica
+        env:
+          AGENTBRIDGE_DISPOSABLE_REPLICA_DRILL: "1"
+          AGENTBRIDGE_REPLICA_DRILL_REPORT: postgres-replica-drill.json
+        run: python -m tools.drill_postgres_replica_promotion
+      - name: Upload replica drill evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentbridge-disposable-replica-drill
+          path: postgres-replica-drill.json
+          if-no-files-found: warn
+
   package-review:
     runs-on: ubuntu-latest
     steps:
