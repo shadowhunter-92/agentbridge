@@ -208,3 +208,30 @@ refuses non-loopback use under AGENTBRIDGE_ENV=production.
 
 **Release:** keep unrestricted production NO-GO. This closes a subset
 of internal recovery/proxy engineering tests, not the seven production gates.
+
+## October 12 follow-up: fenced disposable PostgreSQL streaming standby
+
+A separate `postgres-replica-drill` CI job now runs
+`tools/drill_postgres_replica_promotion.py` against disposable PostgreSQL 16
+containers. It creates a physical streaming standby with `pg_basebackup`,
+waits for committed operation state to be observed on the standby, **stops
+the old primary before promotion**, invokes `pg_promote` and verifies the
+operation remains `unknown` and cannot be claimed again. CI #266 confirmed
+this bounded test succeeded. It does not simulate a real network partition
+or eliminate possible split-brain under distributed fencing faults; it is
+not a managed HA/failover qualification or RPO/RTO guarantee.
+
+`tests/test_egress_ipv6_security.py` extends DNS policy checking to IPv6
+loopback, private/link-local, IPv4-mapped and mixed public/private answers.
+It does not exercise actual IPv6 routing from a Kubernetes workload.
+The reference CONNECT relay cannot reliably authenticate TLS SNI inside
+an encrypted tunnel. Real production egress remains blocked until a
+separately reviewed workload-authenticated and TLS-hostname-aware gateway
+(or narrowly approved existing enterprise egress gateway) is deployed.
+
+The following are still ours to engineer: a real target readback adapter,
+operator key controls, migration schema versioning/online rollback,
+container digest pinning, official protocol-version conformance, sustained
+resource/SLO testing, and signed release pipeline. Independent reviewers,
+outside customer permissions, and customer pilots remain external.
+**Production unrestricted NO-GO remains in force.**
