@@ -57,3 +57,21 @@ def verify_action_evidence(*, destination_receipt: dict, readback_attestation: d
 
 
 __all__ = ["VerifiedActionEvidence", "verify_action_evidence", "verify_anchored_audit"]
+
+
+def verify_registered_action_evidence(*, observer_registry, observer_key_id: str,
+                                      **kwargs) -> VerifiedActionEvidence:
+    """Verify evidence only against an actively enrolled observer key.
+
+    Caller must independently provision and refresh the operator-controlled
+    registry. Revoked/staged keys cannot sign *new* production settlements.
+    This does not retroactively erase previously accepted audit evidence.
+    """
+    from .observer_key_registry import ObserverTrustRegistry
+    if not isinstance(observer_registry, ObserverTrustRegistry):
+        raise TypeError("a pinned observer trust registry is required")
+    if "readback_key_hex" in kwargs:
+        raise ValueError("caller cannot override enrolled readback public key")
+    return verify_action_evidence(
+        readback_key_hex=observer_registry.resolve_active(observer_key_id),
+        **kwargs)
