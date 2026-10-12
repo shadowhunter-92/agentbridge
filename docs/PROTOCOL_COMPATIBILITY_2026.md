@@ -28,3 +28,18 @@ MCP or A2A specifications.
 Do not advertise "MCP 2026-07-28 compliant" or "A2A 1.0 compliant" until an official current-version conformance run covers the claimed subset and negative/cross-version transport behaviors. Version upgrades must be done on a separate branch with SDK smoke tests and verified protocol semantics; changing dependency ranges without testing is not evidence. Preserve unexpected fields only when safe and explicit, and fail closed when important semantics cannot be represented in the canonical model.
 
 The first supported customer-facing evaluation should be **synthetic/read-only MCP stdio tools/call bridging**. Features above that scope are research/compatibility backlog.
+
+## Release-scoped failure semantics matrix (not full conformance)
+
+| Input path | In scope | Required behavior if outside scope |
+|---|---|---|
+| MCP stdio `tools/call` simple JSON argument map | Real SDK message validation and live add-tool example | Invalid or unavailable tool must produce an error; no implicit arbitrary fallback |
+| MCP `resources/read`, `prompts/get`, sampling, notification, cancellation, session control | Not part of canonical action subset | Adapter rejects unsupported procedures; it MUST NOT convert them to tool actions |
+| MCP Streamable HTTP session, auth, resumability | Unqualified | No conformance claim until official transport-level tests |
+| A2A `Task` data schema from pinned 0.3.x SDK | Limited translation | Unknown task lifecycle, streaming, cancellation and notifications are unqualified |
+| A2A 1.0 full interoperable service | Not qualified | Do not claim 1.0 support based on 0.3.x model validation |
+
+Every supported protocol upgrade needs a pinned SDK family, a live reference
+server/client test, expected error paths and explicit mapping of behaviors
+that cannot be preserved across source/destination protocols. Test of model
+parsing alone is not a protocol certificate.
