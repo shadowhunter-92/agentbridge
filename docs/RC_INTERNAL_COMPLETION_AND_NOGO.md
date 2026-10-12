@@ -207,3 +207,25 @@ regression test was added in `27ecae3`.
 **Verification:** the previous branch head passed CI #346 (10/10 jobs). CI
 #348 was launched for these changes; record its final conclusion separately
 before claiming they passed. No production release authorization is implied.
+
+## October 12 — multiprocess stale-leader regression
+
+- Added `tools/drill_pg_stale_leader.py`: one OS process prepares an
+  operation, pauses before destination dispatch, and loses the PostgreSQL
+  lease. A distinct process/connection acquires the higher epoch, performs
+  the authorized effect with a deliberately lost acknowledgment, and refuses
+  duplicate execution. The paused old process resumes and must be rejected
+  by the destination-enforced fencing check.
+- `postgres-stale-leader-drill` runs in CI with a disposable PostgreSQL 16
+  service and uploads the structured evidence artifact. The drill job
+  passed in run #351; the complete run may still be processing other jobs.
+- This proves an important **single-authority PostgreSQL** boundary under
+  process isolation. It does **NOT** prove two simultaneously writable
+  primaries, stale work against third-party APIs, production cluster
+  network isolation, automatically orchestrated HA, or accepted RPO/RTO.
+- Independent developer discovery and synthetic/read-only SDK evaluations
+  can begin now. Do not invite unsupervised consequential customer-system
+  pilots while these gates are open. Three independent integrations and a
+  qualified external security review remain explicit adoption/release goals.
+
+**Release posture remains unrestricted production NO-GO; PR #34 stays draft.**
