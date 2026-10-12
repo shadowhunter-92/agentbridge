@@ -33,9 +33,8 @@ def parse_allowed_hosts(raw: str) -> frozenset[str]:
 def _valid_dns_name(host: str) -> bool:
     if not isinstance(host, str) or not 4 <= len(host) <= 253:
         return False
-    if not host.isascii() or host.lower() != host and host.upper() != host:
-        # Mixed-case names are valid DNS, but all characters are still validated below.
-        pass
+    if not host.isascii():
+        return False
     if host.endswith(".") or host.startswith(".") or ".." in host:
         return False
     labels = host.split(".")
