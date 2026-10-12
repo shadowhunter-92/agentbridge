@@ -9,11 +9,15 @@ import hmac
 import os
 from .egress_policy import EgressDenied, parse_allowed_hosts, parse_connect_target, resolve_global_addresses
 from .tls_sni_guard import InvalidClientHello, parse_tls_client_hello_sni
+from .workload_identity import (WorkloadDenied, validate_workload,
+                                make_mtls_server_context, parse_allowed_workload_spki)
 
 
-async def serve_client(reader, writer, hosts, auth_token=None):
+async def serve_client(reader, writer, hosts, auth_token=None, allowed_workload_spki=None):
     upstream = None
     try:
+        if allowed_workload_spki is not None:
+            validate_workload(writer, allowed_workload_spki)
         header = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5)
         if len(header) > 8192:
             raise EgressDenied("oversized headers")
@@ -98,7 +102,7 @@ async def serve_client(reader, writer, hosts, auth_token=None):
             asyncio.gather(relay(reader, remote_writer),
                            relay(remote_reader, writer)),
             timeout=120)
-    except (EgressDenied, InvalidClientHello, asyncio.IncompleteReadError, asyncio.LimitOverrunError,
+    except (EgressDenied, WorkloadDenied, InvalidClientHello, asyncio.IncompleteReadError, asyncio.LimitOverrunError,
             UnicodeError, asyncio.TimeoutError, OSError, ValueError):
         if not writer.is_closing():
             writer.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -126,13 +130,25 @@ async def start(host="127.0.0.1", port=3128):
                 or os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production")):
             raise ValueError("non-loopback reference proxy requires isolated drill mode")
     token = None
+    ssl_ctx = None
+    trusted_clients = None
     if host == "0.0.0.0":
-        token_value = os.getenv("AGENTBRIDGE_EGRESS_DRILL_BEARER_TOKEN", "")
-        if len(token_value) < 32 or len(token_value) > 1024 or not token_value.isascii():
-            raise ValueError("isolated drill relay requires a long bearer token")
-        token = token_value.encode("ascii")
+        if os.getenv("AGENTBRIDGE_EGRESS_MTLS_REVIEW_ONLY") == "1":
+            ssl_ctx = make_mtls_server_context(
+                certfile=os.environ["AGENTBRIDGE_EGRESS_MTLS_CERT_FILE"],
+                keyfile=os.environ["AGENTBRIDGE_EGRESS_MTLS_KEY_FILE"],
+                trust_ca_file=os.environ["AGENTBRIDGE_EGRESS_MTLS_CA_FILE"])
+            trusted_clients = parse_allowed_workload_spki(
+                os.getenv("AGENTBRIDGE_EGRESS_ALLOWED_CLIENT_SPKI_SHA256"))
+        else:
+            token_value = os.getenv("AGENTBRIDGE_EGRESS_DRILL_BEARER_TOKEN", "")
+            if len(token_value) < 32 or len(token_value) > 1024 or not token_value.isascii():
+                raise ValueError("isolated drill relay requires a long bearer token")
+            token = token_value.encode("ascii")
     return await asyncio.start_server(
-        lambda r, w: serve_client(r, w, hosts, auth_token=token), host, port, limit=8192)
+        lambda r, w: serve_client(r, w, hosts, auth_token=token,
+                                  allowed_workload_spki=trusted_clients),
+        host, port, limit=8192, ssl=ssl_ctx)
 
 
 def main():
