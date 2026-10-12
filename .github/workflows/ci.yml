@@ -96,6 +96,42 @@ jobs:
           name: agentbridge-postgres-load-observations
           path: postgres-load-evidence.json
 
+  sustained-sql-soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: agentbridge_test
+          POSTGRES_USER: agentbridge
+          POSTGRES_PASSWORD: testing-only-password
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U agentbridge -d agentbridge_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AGENTBRIDGE_TEST_PG: postgresql://agentbridge:testing-only-password@127.0.0.1:5432/agentbridge_test
+      AGENTBRIDGE_SUSTAINED_CI_SOAK: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install disposable SQL soak dependencies
+        run: python -m pip install -e . "psycopg[binary]"
+      - name: Qualify 90-second continuous SQL-governance load
+        run: python -m tools.qualify_postgres_soak --duration 90 --workers 8 --count 250 > postgres-soak-report.json
+      - name: Preserve latency, throughput, RSS and CPU evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentbridge-disposable-sql-soak
+          path: postgres-soak-report.json
+          if-no-files-found: warn
+
   postgres-tcp-partition-drill:
     runs-on: ubuntu-latest
     timeout-minutes: 9
