@@ -72,3 +72,79 @@ logs retained, and real target isolation verified. Until then **NO-GO**.
 Do not automatically merge this draft PR to protected main or release a
 consequential-action service. In particular, do not infer that a signed
 destination statement independently proves the outside effect happened.
+
+## Engineering sprint follow-on (October 12) — evidence and limits
+
+### P0 — Destination fencing and independently enrolled readback
+
+- `src/governance/fenced_postgres_destination.py` now takes the
+  authoritative PostgreSQL fence-row lock inside the **same transaction**
+  that inserts a signed destination effect. Stale/expired epochs are denied.
+  `tests/test_fenced_postgres_destination.py` covers lost acknowledgments,
+  independent PostgreSQL readback, duplicate denial, lease turnover and
+  old-leader denial.
+- `observer_key_registry.py` and the SDK's
+  `verify_registered_action_evidence` accept only explicitly enrolled active
+  readback public keys. Unit tests reject staged/revoked identities, caller
+  override, and duplicate key IDs.
+- A genuine outside source, separate key custodian and operational key
+  rotation and audit policy are NOT supplied by internal CI. Fencing MUST be
+  implemented by every non-PostgreSQL destination in the future.
+
+### P0 — Network and workload identity
+
+- Actual TLS 1.3 loopback connections now exercise client certificates and
+  operator-pinned client SPKI hashes; unenrolled certificates are rejected.
+- Existing sealed Docker network denies direct worker egress; strict CONNECT
+  allowlist/DNS/IP and TLS SNI guard tests continue.
+- A real Kubernetes CNI and production workload-authenticated network proxy
+  have not been deployed or adversarially accepted. Reference relay remains
+  deliberately prohibited in production.
+
+### P1 — Recovery
+
+- A new disposable PostgreSQL 16 WAL archive drill
+  (`tools/drill_postgres_pitr.py`) creates a base backup, marks a named
+  restore point, writes a later row, restores and promotes an isolated new
+  instance, and asserts the later row is absent. CI #334 ran the corrected
+  PITR job successfully.
+- Already passing: committed unknown/no-replay across worker death, physical
+  standby promotion after primary fencing, real Docker TCP network partition,
+  guarded schema migration/rollback, measured disposable promotion duration.
+- Automated distributed leader election/fencing against two simultaneously
+  reachable primaries, multi-zone failure and real customer RPO/RTO remain
+  unqualified. A SQL fence must be checked **at the destination**.
+
+### P1 — Supply chain
+
+- Both Python runtime-image stages use an observed SHA256-pinned Alpine base.
+  Complete-image Trivy HIGH/CRITICAL gate and CycloneDX artifact are in CI,
+  in addition to Python environment vulnerability scanning.
+- Added an ephemeral, explicitly **untrusted CI signing rehearsal** that
+  generates a throwaway Ed25519 key, signs the actual wheel digest and
+  verifies the source commit and signature with the public-key verifier.
+  No public publisher trust or independently held signing secret exists yet.
+- Complete transitive hash lock, signed artifact provenance, public package
+  registry and verified install/upgrade from signed published artifacts are
+  outstanding engineering and operational tasks.
+
+### P2 — Protocols
+
+- MCP unsupported methods and A2A terminal/control lifecycle messages now
+  reject instead of silently becoming new calls, with negative tests.
+- Official multi-version transport/session/auth/cancellation interoperability
+  matrix remains unqualified. SDK-shape assertions are not full compliance.
+
+### P2 — Performance
+
+- SQL concurrency CI includes measured 250-op/8-worker runs and three
+  repeated batches with explicit p99, throughput and process RSS smoke limits.
+- Saturation/soak, CPU budgets, error/queue/load shedding, actual external
+  side-effect latency and contractual SLO acceptance remain open.
+
+### Release posture
+
+CI passing on the exact latest commit must be verified again after all
+edits. No assumption of managed production readiness, no automatic merge,
+no customer deployment or outside audit has occurred. **Unrestricted
+production remains NO-GO.**
