@@ -172,6 +172,36 @@ jobs:
         run: |
           /tmp/agentbridge-wheel-check/bin/python tools/build_review_sbom.py > release-review-cyclonedx.json
           /tmp/agentbridge-wheel-check/bin/python -c "import json; b=json.load(open('release-review-cyclonedx.json')); assert b['specVersion']=='1.5'; assert any(c['name'].lower()=='agentbridge' for c in b['components'])"
+      - name: Test detached release signing and independent manifest verification
+        run: |
+          /tmp/agentbridge-wheel-check/bin/python - <<'PY'
+          import pathlib
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+          from cryptography.hazmat.primitives import serialization
+          key=Ed25519PrivateKey.generate()
+          pathlib.Path("/tmp/review-signing.key").write_bytes(key.private_bytes(
+              serialization.Encoding.Raw,serialization.PrivateFormat.Raw,
+              serialization.NoEncryption()))
+          pathlib.Path("/tmp/review-signing.key").chmod(0o600)
+          pathlib.Path("release-review-ephemeral-pubkey.txt").write_text(
+              key.public_key().public_bytes(serialization.Encoding.Raw,
+                                            serialization.PublicFormat.Raw).hex())
+          PY
+          /tmp/agentbridge-wheel-check/bin/python -m tools.sign_release_manifest \
+            --artifact-dir dist --source-commit "${GITHUB_SHA}" \
+            --private-key-file /tmp/review-signing.key \
+            --output-prefix release-review-test
+          /tmp/agentbridge-wheel-check/bin/python - <<'PY'
+          import json,pathlib
+          from src.governance.release_verification import verify_release
+          manifest=json.loads(pathlib.Path("release-review-test.manifest.json").read_text())
+          signature=pathlib.Path("release-review-test.sig").read_text().strip()
+          pubkey=pathlib.Path("release-review-ephemeral-pubkey.txt").read_text().strip()
+          assert verify_release("dist",manifest,signature,pubkey,
+                                expected_source_commit=manifest["source_commit"])
+          print("Ephemeral CI signing rehearsal verified; NOT a trusted publisher signature")
+          PY
+          rm /tmp/review-signing.key
       - name: Record review artifact digests and installed dependency inventory
         run: |
           sha256sum dist/* > release-review-sha256.txt
@@ -205,6 +235,9 @@ jobs:
             release-review-cyclonedx.json
             release-review-vulnerabilities.json
             release-review-vulnerability-exit-code.txt
+            release-review-test.manifest.json
+            release-review-test.sig
+            release-review-ephemeral-pubkey.txt
           retention-days: 30
       - name: Build isolated release-review image
         run: |
