@@ -29,6 +29,25 @@ async def serve_client(reader, writer, hosts, auth_token=None):
         if any(line and (line.startswith((b" ", b"\t")) or b":" not in line)
                for line in lines[1:-2]):
             raise EgressDenied("malformed HTTP headers")
+        # Reject request-smuggling ambiguity: CONNECT has no HTTP body,
+        # repeated Host/Authorization headers, or connection re-framing.
+        for line in lines[1:-2]:
+            if b"\x00" in line:
+                raise EgressDenied("NUL in HTTP header")
+            try:
+                name, value = line.split(b":", 1)
+            except ValueError as exc:
+                raise EgressDenied("malformed header field") from exc
+            if not name or not all(
+                (65 <= c <= 90) or (97 <= c <= 122) or (48 <= c <= 57) or c == 45
+                for c in name
+            ):
+                raise EgressDenied("invalid header name")
+            if name.lower() in (
+                b"transfer-encoding", b"content-length", b"proxy-connection",
+                b"upgrade", b"connection",
+            ):
+                raise EgressDenied("framing or connection headers forbidden on CONNECT")
         if auth_token is not None:
             proxy_auth = [line.split(b":", 1)[1].strip() for line in lines[1:-2]
                           if line.lower().startswith(b"proxy-authorization:")]
