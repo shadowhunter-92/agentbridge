@@ -114,6 +114,24 @@ jobs:
           path: postgres-network-partition.json
           if-no-files-found: warn
 
+  postgres-pitr-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v7
+      - name: Archive WAL and recover PostgreSQL to named restore point
+        env:
+          AGENTBRIDGE_DISPOSABLE_PITR_DRILL: "1"
+          AGENTBRIDGE_PITR_DRILL_REPORT: postgres-pitr-drill.json
+        run: python -m tools.drill_postgres_pitr
+      - name: Upload PITR evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentbridge-disposable-pitr-drill
+          path: postgres-pitr-drill.json
+          if-no-files-found: warn
+
   postgres-replica-drill:
     runs-on: ubuntu-latest
     timeout-minutes: 12
