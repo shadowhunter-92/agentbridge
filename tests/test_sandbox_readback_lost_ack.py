@@ -15,6 +15,9 @@ from src.governance.operation_ledger import OperationLedger, OperationConflict
 from src.governance.reconciliation import Reconciliation, ReconciliationError
 from src.governance.budget import BudgetManager, Budget
 from src.governance.destination_receipts import canonical_receipt_payload
+from src.governance.readback_attestations import canonical_readback_payload
+from src.governance.operator_review import canonical_review_payload
+import json
 
 
 def public(key):
@@ -68,14 +71,28 @@ def test_committed_lost_ack_is_recovered_from_independent_readback(tmp_path, mon
                 with pytest.raises(ReconciliationError, match="untrusted independent"):
                     reconciliation.record(**kwargs, readback_attestation={
                         **proof, "source_evidence_sha256": "0" * 64})
-                final = reconciliation.record(**kwargs, readback_attestation=proof)
+                operator_key = Ed25519PrivateKey.generate()
+                monkeypatch.setenv("AGENTBRIDGE_RECONCILIATION_OPERATOR_KEYS_JSON",
+                                   json.dumps({"sandbox-operator": public(operator_key)}))
+                statement = dict(
+                    reviewer="sandbox-operator", agent_id=agent, operation_id=op,
+                    fingerprint=fingerprint, outcome="succeeded",
+                    external_reference=receipt["external_reference"],
+                    destination_receipt_sha256=digest,
+                    readback_sha256=hashlib.sha256(
+                        canonical_readback_payload(proof)).hexdigest())
+                approval = operator_key.sign(canonical_review_payload(statement)).hex()
+                final = reconciliation.record(
+                    **kwargs, readback_attestation=proof,
+                    reviewer_signature_hex=approval)
                 assert final["state"] == "succeeded"
                 assert final["readback_sha256"]
                 assert OperationLedger(store).get(agent, op)["state"] == "succeeded"
                 assert store.get_budget(agent)["spent"] == 2
                 assert store.get_budget(agent)["reserved"] == {}
                 with pytest.raises(ReconciliationError):
-                    reconciliation.record(**kwargs, readback_attestation=proof)
+                    reconciliation.record(**kwargs, readback_attestation=proof,
+                                          reviewer_signature_hex=approval)
             assert target._db.execute("SELECT COUNT(*) FROM sandbox_effects").fetchone()[0] == 1
 
 
