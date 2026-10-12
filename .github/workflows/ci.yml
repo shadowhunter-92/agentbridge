@@ -77,5 +77,13 @@ jobs:
           python -m pip install --upgrade pip build twine
           python -m build
           python -m twine check dist/*
+      - name: Verify wheel installation and CLI in clean environment
+        run: |
+          python -m venv /tmp/agentbridge-wheel-check
+          /tmp/agentbridge-wheel-check/bin/pip install dist/*.whl
+          cd /tmp
+          /tmp/agentbridge-wheel-check/bin/python -c "from src.governance.trust_sdk import verify_action_evidence; from src.governance.sandbox_readback import SandboxReadOnlyObserver; print('SDK import OK')"
+          /tmp/agentbridge-wheel-check/bin/agentbridge --version
+          /tmp/agentbridge-wheel-check/bin/python -m pip check
       - name: Build isolated release-review image
         run: docker build -f Dockerfile.release -t agentbridge:release-review .
