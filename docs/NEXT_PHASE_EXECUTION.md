@@ -71,3 +71,32 @@ This is an internal reproducible installation gate, not a PyPI publication,
 third-party adoption, SBOM, signed artifact or production release certification.
 The follow-on release head must pass this new job before claiming the package
 layout is repaired.
+
+## October 12 continuation: sandbox service, package provenance, rollback test
+
+- The separately importable `sandbox_observer_service` is a loopback-bound,
+  authenticated, **non-production** FastAPI readback process. It refuses
+  `AGENTBRIDGE_ENV=production`, reads state through the earlier read-only
+  adapter and keeps its signing key in a restricted on-disk file.
+- Its service-level authentication, unknown-state behavior and two-signature
+  SDK integration are exercised by `tests/test_sandbox_observer_service.py`.
+  The private-key reader preserves exactly 32 raw bytes and has a regression
+  for otherwise lossy whitespace stripping.
+- The package-review CI now records built wheel hashes, source commit SHA,
+  dependency freeze and pip environment inventory as downloadable artifacts.
+  This is a **dependency inventory**, not a locked reproducible build, a
+  comprehensive SBOM, a vulnerability clearance or a signature.
+- `tests/test_witness_backup_rollback.py` makes a real SQLite backup,
+  advances the independent witness head, restores only the governance DB,
+  and asserts rejection of the stale/forked view. This is **not** a managed
+  PostgreSQL failover or offsite immutable archive test.
+- Complete latest-head CI before calling these internal milestones verified.
+
+### External versus internal work, unchanged
+
+Our responsibility still includes production-ready target adapters, credential
+and tenancy isolation, destination-state semantics, secure egress enforcement,
+protocol-version tests, migration/rollback scripts, SBOM and security scans,
+HA recovery rehearsal automation, and documentation. Real customer-system
+permissions, independent operators/reviewers, actual managed HA infrastructure
+and outside installations cannot be manufactured by internal unit tests.
