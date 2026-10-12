@@ -148,3 +148,47 @@ CI passing on the exact latest commit must be verified again after all
 edits. No assumption of managed production readiness, no automatic merge,
 no customer deployment or outside audit has occurred. **Unrestricted
 production remains NO-GO.**
+
+## CI #345 engineering evidence: 10/10 passed on c4a2bf5 (October 12)
+
+The disposable sustained-load job uncovered PostgreSQL catalog races that
+short-lived tests did not catch: concurrent `PostgresStore._init_schema`
+and later `OperationLedger.__init__` invocations were performing independent
+`CREATE TABLE IF NOT EXISTS` without a database-wide lock. Both now use
+transaction-scoped advisory lock 911004 during schema creation. A new
+eight-worker fresh-schema regression explicitly tests concurrent startup.
+CI #345 passed all ten jobs, including the **90-second sustained
+PostgreSQL SQL-governance soak** with enforced throughput, RSS and sampled
+p99 smoke thresholds. This is not a production service-level guarantee.
+
+The release review now commits `requirements-runtime.lock`, a SHA256-hash
+locked Python 3.12 runtime dependency graph. `Dockerfile.release` and the
+clean-wheel install enforce `pip install --require-hashes` and install
+AgentBridge without unbounded dependency resolution. CI regenerates the
+lock and diffs it against the committed copy to prevent resolution drift.
+The build toolchain, Python 3.11 and optional protocol extras are not
+yet under the same locked assurance.
+
+The release job also rehearses detached signing of the actual wheel with
+an **ephemeral test-only key** and checks the exact source commit and wheel
+hashes through the independent verifier. This is not an operator-controlled
+or publicly trusted release signature.
+
+The protocol adapter now denies unsupported A2A terminal/control lifecycle
+states in addition to unsupported MCP procedures, with negative tests.
+This does not certify complete MCP/A2A transport, sessions or cross-version
+interoperability.
+
+The network reference has actual TLS 1.3 loopback mTLS client-certificate
+tests, but no real CNI production deployment or independent trust operator.
+
+**Remaining internal blockers:** cross-system authoritative fencing for
+non-PostgreSQL targets; audited key rotation and separate operator identity;
+production CNI and independently deployed egress identity; automatic
+distributed failover and RPO/RTO on target topology; complete build/tool/test
+extra hash locks and real signing/publishing custody; pinned official
+MCP/A2A transport interoperability; production-shaped mixed target action
+load and accepted latency/error budgets. Independent external security
+review and customer consent are additional release gates.
+
+**Unrestricted production NO-GO.** PR #34 stays draft.
