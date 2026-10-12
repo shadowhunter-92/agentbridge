@@ -19,6 +19,27 @@ python -m pytest tests/test_trust_sdk_evidence.py \
 
 Never copy signing secrets into issues, logs or evaluation forms.
 
+## Fast, reproducible offline example
+
+From a checked-out, pinned draft commit in a fresh Python 3.11/3.12
+environment, after installing the project dependencies:
+
+```bash
+python -m examples.verify_synthetic_action_evidence
+```
+
+Expected output includes `signed_receipt_verified: true`,
+`separately_signed_readback_verified: true`,
+`altered_outcome_rejected: true`, and
+`external_production_truth_verified: false`. The example uses an isolated
+temporary SQLite destination and two newly generated signing keys. It makes
+no network calls and is not evidence of separately administered signing-key
+custody or customer-system outcomes.
+
+Record the exact source SHA, operating system, Python version, installation
+duration and any command failure. Do not post private keys, API tokens, or
+customer data.
+
 ## 2. What to attempt
 
 - Denied action never dispatches; reusing operation ID does not replay.
