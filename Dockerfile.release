@@ -1,7 +1,7 @@
 # AgentBridge release-review image (not production certified).
 # Alpine-based review candidate to remove unfixed Debian 13 runtime OS CVEs.
-# Re-pin by observed verified digest before any release; Python deps still need hash locking.
-FROM python:3.12-alpine3.22 AS builder
+# Base pinned to digest captured from passing CI #316; Python dependencies still need hash locking.
+FROM python:3.12-alpine3.22@sha256:a190708a2dec1bd18b1decb539f8e8f5407abaa9bf39cacda583f7f8c11db322 AS builder
 RUN apk upgrade --no-cache
 WORKDIR /build
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -9,7 +9,7 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 RUN python -m venv /venv && /venv/bin/pip install --no-cache-dir .
 
-FROM python:3.12-alpine3.22
+FROM python:3.12-alpine3.22@sha256:a190708a2dec1bd18b1decb539f8e8f5407abaa9bf39cacda583f7f8c11db322
 RUN apk upgrade --no-cache
 ENV PATH="/venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
