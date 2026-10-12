@@ -45,3 +45,11 @@ backing stores or compromise witness signing, rollback resistance is lost.
 Tests do not simulate independent ownership merely by opening a second file.
 
 **Verdict:** BUILD THE FOUNDATION / RELEASE BLOCKED pending all applicable gates.
+
+## October 12 implementation checkpoint
+
+- `src/governance/sandbox_readback.py` provides a durable sandbox target and a separately keyed, read-only authoritative-state observer.
+- `tests/test_sandbox_readback_lost_ack.py` exercises post-commit lost acknowledgment, no duplicate execution, persisted destination inspection, tamper rejection, and budget/operation settlement.
+- `src/governance/trust_sdk.py` is a lightweight importable evidence verifier that does not require starting the HTTP gateway; `tests/test_trust_sdk_evidence.py` tests it.
+- This establishes a **sandbox prototype and initial OSS SDK facade only**. It does not close external real-target readback, independent key custody, enterprise operations, network containment, protocol conformance, rollback or sustained production-load qualification.
+- Keep the seven production release gates open and PR #34 draft until all required acceptance evidence is verified.
