@@ -75,7 +75,7 @@ dev = [
 ]
 
 [project.scripts]
-agentbridge = "cli:main"
+agentbridge = "src.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/shadowhunter-92/agentbridge"
@@ -84,10 +84,11 @@ Repository = "https://github.com/shadowhunter-92/agentbridge"
 Issues = "https://github.com/shadowhunter-92/agentbridge/issues"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = {"" = "."}
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+include = ["src", "src.*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
