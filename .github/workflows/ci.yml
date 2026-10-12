@@ -66,7 +66,7 @@ jobs:
         env:
           AGENTBRIDGE_DISPOSABLE_PG_RESTORE_DRILL: "1"
           AGENTBRIDGE_PG_DRILL_REPORT: postgres-restore-drill.json
-        run: python tools/drill_postgres_backup_restore.py
+        run: python -m tools.drill_postgres_backup_restore
       - name: Upload PostgreSQL recovery drill evidence
         if: always()
         uses: actions/upload-artifact@v4
