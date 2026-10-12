@@ -53,3 +53,21 @@ Tests do not simulate independent ownership merely by opening a second file.
 - `src/governance/trust_sdk.py` is a lightweight importable evidence verifier that does not require starting the HTTP gateway; `tests/test_trust_sdk_evidence.py` tests it.
 - This establishes a **sandbox prototype and initial OSS SDK facade only**. It does not close external real-target readback, independent key custody, enterprise operations, network containment, protocol conformance, rollback or sustained production-load qualification.
 - Keep the seven production release gates open and PR #34 draft until all required acceptance evidence is verified.
+
+## October 12 packaging acceptance correction
+
+A source/build-only CI job cannot prove an installable OSS SDK. The existing
+`pyproject.toml` mapped discovered Python packages into the wrong hierarchy
+and used an unavailable `cli:main` console entry point. The corrected package
+discovery includes the actual `src` package and nested modules; the console
+entry now points to `src.cli:main`.
+
+The package-review CI job now creates a fresh virtual environment, installs
+the built wheel from its artifact, imports `src.governance.trust_sdk` and the
+sandbox readback module **outside the repository directory**, invokes
+`agentbridge --version`, and runs `pip check`.
+
+This is an internal reproducible installation gate, not a PyPI publication,
+third-party adoption, SBOM, signed artifact or production release certification.
+The follow-on release head must pass this new job before claiming the package
+layout is repaired.
