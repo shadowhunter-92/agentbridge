@@ -2,6 +2,7 @@
 # Alpine-based review candidate to remove unfixed Debian 13 runtime OS CVEs.
 # Re-pin by observed verified digest before any release; Python deps still need hash locking.
 FROM python:3.12-alpine3.22 AS builder
+RUN apk upgrade --no-cache
 WORKDIR /build
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 COPY pyproject.toml README.md ./
@@ -9,6 +10,7 @@ COPY src ./src
 RUN python -m venv /venv && /venv/bin/pip install --no-cache-dir .
 
 FROM python:3.12-alpine3.22
+RUN apk upgrade --no-cache
 ENV PATH="/venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY --from=builder /venv /venv
