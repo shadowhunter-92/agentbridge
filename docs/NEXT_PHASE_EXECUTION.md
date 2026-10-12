@@ -100,3 +100,18 @@ protocol-version tests, migration/rollback scripts, SBOM and security scans,
 HA recovery rehearsal automation, and documentation. Real customer-system
 permissions, independent operators/reviewers, actual managed HA infrastructure
 and outside installations cannot be manufactured by internal unit tests.
+
+## Operator-signed reconciliation authorization (additional control)
+
+Production `Reconciliation.record` now also requires
+`reviewer_signature_hex`, a pinned Ed25519 operator signature over the
+exact proposed operation, result, fingerprint, destination receipt digest,
+independent readback digest and external reference. The
+`AGENTBRIDGE_RECONCILIATION_OPERATOR_KEYS_JSON` configuration maps authorized
+operator IDs to pinned public keys; removal revokes future settlement authority.
+Unsigned or swapped approvals fail closed before SQL settlement. The sandbox
+reconciliation regression and `tests/test_operator_review.py` cover this.
+
+This closes **one repository-side reviewer authentication gap**, not full
+workload/operator RBAC, approval separation-of-duties, cryptographic key
+rotation, audit monitoring or an independently operated acceptance exercise.
