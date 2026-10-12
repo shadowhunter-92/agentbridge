@@ -462,7 +462,12 @@ class PostgresStore(GovernanceStore):
         self._init_schema()
 
     def _init_schema(self):
-        with self._lock, self._db.cursor() as cur:
+        # PostgreSQL CREATE TABLE IF NOT EXISTS is NOT race-free across
+        # independent connections: concurrent first-use can still conflict
+        # on pg_type_typname_nsp_index. Serialize the entire schema bootstrap
+        # using one database-wide transaction-scoped advisory lock.
+        with self._lock, self._db.transaction(), self._db.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (911004,))
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS identities (
