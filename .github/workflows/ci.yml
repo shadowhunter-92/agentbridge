@@ -209,7 +209,7 @@ jobs:
           mkdir -p "$HOME/.cache/trivy"
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$PWD":/scan -v "$HOME/.cache/trivy":/root/.cache \\
+            -v "$PWD":/scan -v "$HOME/.cache/trivy":/root/.cache \
             aquasec/trivy:0.69.1 image --format cyclonedx \
             --output /scan/agentbridge-image-sbom.cdx.json agentbridge:release-review
       - name: Upload image SBOM
@@ -224,7 +224,7 @@ jobs:
           mkdir -p "$HOME/.cache/trivy"
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$PWD":/scan -v "$HOME/.cache/trivy":/root/.cache \\
+            -v "$PWD":/scan -v "$HOME/.cache/trivy":/root/.cache \
             aquasec/trivy:0.69.1 image --format json \
             --output /scan/agentbridge-image-vulnerabilities.json \
             --severity HIGH,CRITICAL --exit-code 1 agentbridge:release-review
