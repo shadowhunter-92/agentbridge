@@ -138,3 +138,25 @@ def observe_authoritative_receipt(
         raise ReadbackUnavailable("invalid observer signature")
     observation["signature_hex"] = signature.hex()
     return receipt, observation
+
+
+def fetch_and_attest_authoritative_state(
+    *, origin: str, agent_id: str, operation_id: str, fingerprint: str,
+    read_only_token: str, destination_public_key_hex: str, sign,
+    timeout: int = 8,
+) -> tuple[dict, dict]:
+    """Read from pinned destination origin before independently signing.
+
+    This is the constrained integration entry point. Passing a caller-supplied
+    receipt to observe_authoritative_receipt alone cannot prove independent
+    observation. Caller MUST provision a separately administered read-only
+    API credential and observer signer, and enforce an external egress policy.
+    """
+    source = validated_origin(origin)
+    receipt = fetch_authoritative_receipt(
+        source, agent_id, operation_id, read_only_token=read_only_token,
+        timeout=timeout)
+    return observe_authoritative_receipt(
+        receipt=receipt, agent_id=agent_id, operation_id=operation_id,
+        fingerprint=fingerprint, destination_public_key_hex=destination_public_key_hex,
+        source=source, sign=sign)
