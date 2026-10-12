@@ -235,3 +235,28 @@ container digest pinning, official protocol-version conformance, sustained
 resource/SLO testing, and signed release pipeline. Independent reviewers,
 outside customer permissions, and customer pilots remain external.
 **Production unrestricted NO-GO remains in force.**
+
+## October 12: review-only release verification, extended load and SDK negatives
+
+The foundation now includes `src/governance/release_verification.py`:
+a standalone pinned-key Ed25519 manifest verifier that binds a specific
+40-character commit and SHA256 hashes of exact local wheel/artifact filenames.
+`tests/test_release_verification.py` rejects swapped source commits, forged
+signatures and tampered release files. A real independent publisher signing
+key and authenticated distribution channel are **not** deployed. Do not claim
+a signed public release exists.
+
+The disposable PostgreSQL integration job now archives an 8-worker,
+250-operation SQL governance benchmark with p50/p95/p99 observations,
+throughput and accounting assertions. It remains a local synthetic workload,
+**not** a measured production SLO or sustained capacity study.
+
+`tests/test_protocol_negative_sdk_cases.py` adds SDK-level negative
+parsing checks for incomplete MCP tool and A2A task representations.
+The supported contract remains the expressly scoped subset described in
+`docs/PROTOCOL_COMPATIBILITY_2026.md`, not universal conformance.
+
+An external evaluator can use `docs/OSS_EVALUATION_KIT.md` once this
+review branch is stable. We have not documented any independent adoption,
+customer authorization or paid usage. Do not contact targets or expose
+private systems without consent. Keep PR #34 draft and production NO-GO.
