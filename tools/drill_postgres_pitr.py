@@ -91,9 +91,11 @@ def drill():
              "postgres:16","bash","-c",
              "cp -a /backup/base/. /var/lib/postgresql/data/ && "
              "touch /var/lib/postgresql/data/recovery.signal && "
-             "printf \"\\nrestore_command = 'cp /archive/%f %p'\\n"
-             "recovery_target_name = 'before_later_write'\\n"
-             "recovery_target_action = 'promote'\\n\" >> "
+             "echo \"restore_command = 'cp /archive/%f %p'\" >> "
+             "/var/lib/postgresql/data/postgresql.auto.conf && "
+             "echo \"recovery_target_name = 'before_later_write'\" >> "
+             "/var/lib/postgresql/data/postgresql.auto.conf && "
+             "echo \"recovery_target_action = 'promote'\" >> "
              "/var/lib/postgresql/data/postgresql.auto.conf && "
              "chown -R postgres:postgres /var/lib/postgresql/data"],timeout=120)
         run(["docker","run","-d","--name",target,"--network","host",
