@@ -44,3 +44,40 @@ The four planned offerings (OSS, Trust, Evidence, Enterprise) share the same
 kernel; Enterprise is not a second cryptographic implementation. Independently
 evaluating the OSS SDK and developing an Enterprise business case are separate
 commercial objectives, not proof of security certification.
+
+## Review update — verified TLS SNI guard (October 12)
+
+`src/proxy/tls_sni_guard.py` now strictly parses an initial, complete
+bounded TLS ClientHello and the disposable CONNECT relay refuses SNI differing
+from the configured/allowed CONNECT authority. Missing/opaque ECH, multiple
+SNI identities, truncated/malformed TLS records fail closed.
+`tests/test_tls_sni_guard.py` checks these invariants and CI #285 ran all
+six GitHub Actions jobs successfully.
+
+**This is not an authenticated production proxy.** The reference only
+accepts a single-record ClientHello, cannot inspect encrypted SNI/ECH,
+does not authenticate a target certificate on behalf of the client,
+does not replace tenant-aware workload authentication and cannot prove
+that a compromised caller cannot bypass proxy networking. A production
+candidate needs a separate reviewed gateway deployment and end-to-end
+certificate/hostname verification by the real TLS client.
+
+### Explicit internal blocker burn-down: no phantom completions
+
+- Real target's operator-controlled read-only identity and signing service:
+  PostgreSQL and generic fixed-origin HTTPS prototypes are passing;
+  independent operation, key rotation and real source-of-truth semantics OPEN.
+- PostgreSQL: disposable dump/restore and manually fenced standby pass;
+  PITR, partition, automated election/lease fencing, audited RPO/RTO OPEN.
+- Release: clean wheel, CycloneDX Python inventory, advisory scan,
+  signed-manifest verification pass; dependency hash-lock, entire image
+  attestations, container scan and *actual* signed artifact OPEN.
+- MCP/A2A: narrow official SDK shape checks pass; transport/session/version
+  conformance and reference matrix OPEN.
+- Performance: bounded SQL concurrency passes; sustained saturation,
+  resource budgets and production-representative SLO OPEN.
+- Adoption: OSS evaluation kit written; three independent integrations,
+  security review and authorized paying pilot NOT demonstrated.
+
+**Release verdict remains NO-GO.** Do not close these gates by changing labels
+or relying solely on passing unit tests.
