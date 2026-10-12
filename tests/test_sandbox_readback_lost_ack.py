@@ -1,6 +1,7 @@
 """End-to-end sandbox: committed effect, lost ACK, independent readback, SQL settlement."""
 import hashlib
 import sqlite3
+from contextlib import closing
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -27,7 +28,7 @@ def test_committed_lost_ack_is_recovered_from_independent_readback(tmp_path, mon
     ledger_path = str(tmp_path / "governance.sqlite")
     agent, op, fingerprint = "sandbox-agent", "sandbox-operation-00001", "sandbox-fingerprint"
     with SandboxTarget(target_path, sign=target_key.sign) as target:
-        with SqliteStore(ledger_path) as store:
+        with closing(SqliteStore(ledger_path)) as store:
             budgets = BudgetManager(store)
             budgets.set_budget(agent, Budget(spend_limit=10))
             token, why = budgets.reserve(agent, 2)
