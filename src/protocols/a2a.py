@@ -23,6 +23,12 @@ class A2aAdapter(ProtocolAdapter):
         task = wire
         if "params" in wire and isinstance(wire["params"], dict) and "task" in wire["params"]:
             task = wire["params"]["task"]
+        if isinstance(task.get("status"), dict):
+            state=task["status"].get("state")
+            if state not in (None, "submitted"):
+                raise ValueError("A2A lifecycle state not supported as new action")
+        if wire.get("method") in ("tasks/cancel", "tasks/resubscribe", "tasks/get"):
+            raise ValueError("A2A lifecycle methods are not canonical action calls")
         capability, arguments, text = "", {}, None
         for msg in self._messages(task):
             for part in msg.get("parts", []):
