@@ -96,6 +96,24 @@ jobs:
           name: agentbridge-postgres-load-observations
           path: postgres-load-evidence.json
 
+  postgres-tcp-partition-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v7
+      - name: Disconnect/reconnect disposable PostgreSQL client network
+        env:
+          AGENTBRIDGE_DISPOSABLE_NETWORK_PARTITION: "1"
+          AGENTBRIDGE_NETWORK_PARTITION_REPORT: postgres-network-partition.json
+        run: python -m tools.drill_pg_network_partition
+      - name: Upload partition evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentbridge-network-partition-drill
+          path: postgres-network-partition.json
+          if-no-files-found: warn
+
   postgres-replica-drill:
     runs-on: ubuntu-latest
     timeout-minutes: 12
