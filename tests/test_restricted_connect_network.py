@@ -30,6 +30,10 @@ async def _roundtrip(request, allowed=frozenset({"api.example.com"})):
     b"CONNECT evil.example.com:443 HTTP/1.1\r\nHost: evil.example.com:443\r\n\r\n",
     b"CONNECT api.example.com:80 HTTP/1.1\r\nHost: api.example.com:80\r\n\r\n",
     b"CONNECT api.example.com:443 HTTP/1.1\r\nHost: evil.example.com:443\r\n\r\n",
+    b"CONNECT api.example.com:443 HTTP/1.1\r\nHost: api.example.com:443\r\nContent-Length: 1\r\n\r\n",
+    b"CONNECT api.example.com:443 HTTP/1.1\r\nHost: api.example.com:443\r\nTransfer-Encoding: chunked\r\n\r\n",
+    b"CONNECT api.example.com:443 HTTP/1.1\r\nHost: api.example.com:443\r\nHost: api.example.com:443\r\n\r\n",
+    b"CONNECT api.example.com:443 HTTP/1.1\r\nHost: api.example.com:443\r\nBad_Header: invalid\r\n\r\n",
     b"CONNECT api.example.com:443 HTTP/1.1\r\n\r\n",
 ])
 def test_restricted_proxy_rejects_malformed_and_nonallowlisted_network_requests(raw_request):
