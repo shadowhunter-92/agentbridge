@@ -167,6 +167,7 @@ jobs:
           python -m pip install "pip-tools>=7,<8"
           python -m piptools compile --generate-hashes --allow-unsafe \
             --output-file candidate-runtime.lock pyproject.toml
+          diff -u requirements-runtime.lock candidate-runtime.lock
           echo 'AGENTBRIDGE_RUNTIME_LOCK_BEGIN'
           cat candidate-runtime.lock
           echo 'AGENTBRIDGE_RUNTIME_LOCK_END'
@@ -189,7 +190,8 @@ jobs:
         run: |
           python -m venv /tmp/agentbridge-wheel-check
           /tmp/agentbridge-wheel-check/bin/python -m pip install --upgrade pip
-          /tmp/agentbridge-wheel-check/bin/pip install dist/*.whl
+          /tmp/agentbridge-wheel-check/bin/pip install --require-hashes -r requirements-runtime.lock
+          /tmp/agentbridge-wheel-check/bin/pip install --no-deps dist/*.whl
           cd /tmp
           /tmp/agentbridge-wheel-check/bin/python -c "from src.governance.trust_sdk import verify_action_evidence; from src.governance.sandbox_readback import SandboxReadOnlyObserver; print('SDK import OK')"
           /tmp/agentbridge-wheel-check/bin/agentbridge --version
