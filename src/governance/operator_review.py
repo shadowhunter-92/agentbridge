@@ -50,6 +50,6 @@ def verify_operator_review(*, reviewer, agent_id, operation_id, fingerprint,
             raise ValueError("bad Ed25519 key encoding")
         Ed25519PublicKey.from_public_bytes(public).verify(
             signature, canonical_review_payload(statement))
-    except (ValueError, TypeError, KeyError, Exception) as exc:
+    except Exception as exc:
         raise UntrustedReviewer("reviewer signature invalid") from exc
     return True
