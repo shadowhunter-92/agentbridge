@@ -192,3 +192,18 @@ load and accepted latency/error budgets. Independent external security
 review and customer consent are additional release gates.
 
 **Unrestricted production NO-GO.** PR #34 stays draft.
+
+
+## October 12 follow-up: production readback privilege check
+
+Commit `c0dc454` adds a production-mode credential boundary in the PostgreSQL
+readback adapter. Before reading evidence, it rejects elevated PostgreSQL
+observer logins and direct INSERT/UPDATE/DELETE/TRUNCATE access to the effect
+table. The check is defense in depth; credential administration, database
+ownership/DDL grants, network separation, observer custody and real target
+verification still require independent qualification. A disposable PostgreSQL
+regression test was added in `27ecae3`.
+
+**Verification:** the previous branch head passed CI #346 (10/10 jobs). CI
+#348 was launched for these changes; record its final conclusion separately
+before claiming they passed. No production release authorization is implied.
