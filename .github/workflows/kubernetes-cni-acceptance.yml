@@ -15,7 +15,7 @@ jobs:
         with:
           version: v0.33.0
           config: deploy/kubernetes/kind-calico-ci.yaml
-          wait: 120s
+          wait: 0s
       - name: Install pinned Calico CNI manifest
         run: |
           curl -fL --retry 3 --max-time 90 \
