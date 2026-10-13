@@ -195,6 +195,8 @@ class SqliteStore(GovernanceStore):
         def _enable_wal():
             self._db.execute("PRAGMA journal_mode=WAL")
         _enable_wal()
+        # Compatible with main's bounded WAL startup retry; retain the R4
+        # resilience helper and preserve the same fail-closed retry scope.
         self._init_schema()
 
     def _init_schema(self):
