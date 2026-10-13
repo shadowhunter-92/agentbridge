@@ -1,319 +1,191 @@
-> **October 2026 engineering review:** Production readiness is not established. See [Internal Release Gates](docs/INTERNAL_RELEASE_GATES_2026.md) and [Protocol Compatibility](docs/PROTOCOL_COMPATIBILITY_2026.md). The official deployment and independent assessment gates are still open.
+# AgentBridge
 
-# AgentBridge — the Meta-Bridge
+**Protocol interoperability and governed execution for AI agents.**
 
-[![CI](https://github.com/shadowhunter-92/agentbridge/actions/workflows/ci.yml/badge.svg)](https://github.com/shadowhunter-92/agentbridge/actions/workflows/ci.yml)
-![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)
-[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
+[![CI](https://github.com/shadowhunter-92/agentbridge/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/shadowhunter-92/agentbridge/actions/workflows/ci.yml)
+[![Python 3.11–3.12](https://img.shields.io/badge/Python-3.11%20%7C%203.12-3776AB)](https://www.python.org/)
+[![Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Status: experimental alpha](https://img.shields.io/badge/status-experimental%20alpha-orange)](SECURITY.md)
 
-**One neutral mesh every agent speaks through: translate, route, verify, govern.**
-Any protocol in, any protocol out — with identity, budgets, and a tamper-evident audit trail
-built into the call path.
+AgentBridge is an open-source Python project for translating selected AI-agent
+tool-call formats and applying controls such as agent identity, authorization,
+budgets, approvals and audit history. The long-term goal is a portable trust
+layer that works **alongside** existing agent frameworks and gateways—not
+another all-in-one agent platform.
 
-![AgentBridge demo](demo.gif)
+> **Release status: experimental alpha (October 2026).** The default `main`
+> branch contains the original protocol/governance prototype. Production-gate
+> engineering, portable evidence verification and additional failure tests are
+> under review in [draft PR #34](https://github.com/shadowhunter-92/agentbridge/pull/34),
+> **not yet released or merged**. Do not expose consequential customer actions,
+> production credentials or financial systems to an unreviewed deployment.
+> [Current scope](docs/ROADMAP.md) · [Security policy](SECURITY.md) ·
+> [Release gates](https://github.com/shadowhunter-92/agentbridge/blob/release/r4-internal-gates-2026-10/docs/RC_INTERNAL_COMPLETION_AND_NOGO.md)
 
-*The whole product in 12 seconds: an unknown agent blocked, six protocols reaching one live MCP tool through the mesh, budget tracked, tamper-evident audit chain verified. Reproduce with `python examples/demo_story.py`.*
+![Demonstration of a bounded AgentBridge workflow](demo.gif)
 
-> **Release status (October 2026): ALPHA / RELEASE-CANDIDATE ENGINEERING ONLY.**
-> Protocol adapter examples and SDK checks are **not equivalent to complete current MCP/A2A
-> conformance**. The governance implementation has draft hardening work in PRs #27–#31
-> and a consolidated review branch; there is **no certified production release**.
-> Tests run in GitHub Actions, including a disposable PostgreSQL service; consult the
-> latest commit's checks rather than relying on historical test counts. Unknown-outcome
-> operation settlement is a developing capability, not evidence that a remote action
-> occurred. Independent security review, actual failure drills, and external pilots
-> have not been completed. Production audit truncation remains disabled.
-> See [Release Gates](docs/HARDENING_RELEASE_GATES.md) and
-> [Operator Drills](docs/PRODUCTION_OPERATOR_DRILLS.md).
+## Why AgentBridge?
 
-> **Name note:** this project (`github.com/shadowhunter-92/agentbridge`) is a Python
-> **protocol-translation + governance mesh**. It is unrelated to other products that may share
-> the "AgentBridge" name (e.g. connector-gateway SaaS at other domains). This repo is the
-> source of truth for *this* AgentBridge.
+AI-agent frameworks can call tools, but organizations also need to answer:
 
-## Table of contents
-[What it does](#what-it-does) · [Quick start](#quick-start) · [Talk to agents yourself](#talk-to-agents-yourself-any-protocol) · [Protocol support matrix](#protocol-support-matrix) · [Architecture](#architecture) · [Security model](#security-model) · [Framework integrations](#framework-integrations-langchain--crewai--autogen--llamaindex) · [Enterprise governance](#enterprise-governance) · [Editions & pricing](#editions--pricing-direction) · [Docs](#docs)
+- **Who** requested an action, and with which authority?
+- **Exactly what** parameters, target and cost were authorized?
+- **What happened** if the connection dropped after execution?
+- **What evidence** can an independent reviewer actually verify?
 
-## What it does
-- **N-protocol mesh (any-to-any):** MCP (Anthropic), A2A (Google/LF), ACP (IBM/LF), OpenAI
-  function-calling, Gemini function-calling, AGNTCY ACP. One canonical model → adding a protocol
-  is one adapter, not N² mappings. Every adapter is validated against the protocol's **real
-  official SDK**.
-- **In-line proxy:** the bridge actually sits *between* live agents on different protocols, not
-  just translating (see `examples/`).
-- **Governance plane (the moat):** Ed25519 agent identities (DIDs), per-agent spend/rate budgets,
-  human-in-the-loop approvals for sensitive capabilities, and a hash-chained tamper-evident audit
-  trail — all **enforced in the call path** and **durable** (SQLite; Postgres-swappable).
-- **Enterprise governance:** a declarative policy engine (cost caps, business-hours, route/
-  capability rules), RBAC for operators, OIDC/JWT operator SSO, and signed audit checkpoints
-  (see `docs/ENTERPRISE.md`).
-- **Drop-in MCP server:** point Claude Desktop / an IDE / a gateway at it to reach other protocols.
-- **Framework integrations:** one helper lets LangChain / CrewAI / AutoGen / LlamaIndex agents
-  reach a tool/agent on *any* protocol — they all emit OpenAI-shaped tool calls (see
-  `docs/INTEGRATIONS.md`).
+The protocol mesh provides a useful starting point. The evolving Trust and
+Evidence components aim to address the more difficult authorization, ambiguous
+outcome, reconciliation and auditability questions. Those guarantees remain
+**scope- and destination-dependent**, not universal.
+
+## At a glance
+
+| Capability | Default branch | Release review |
+| --- | --- | --- |
+| Canonical tool-call translation across six adapter families | Prototype | More explicit unsupported-feature handling |
+| Agent signatures, budgets, policies and approval controls | Implemented in selected paths | Durable and adversarial hardening |
+| SQLite / PostgreSQL support | Included | Recovery, concurrency and fencing drills |
+| Separately signed action receipt + readback verification | Not a released guarantee | Tested in bounded sandbox / PostgreSQL paths |
+| Production network isolation, HA and full MCP/A2A conformance | **Not qualified** | **Still not qualified** |
+| Enterprise managed service or formal certification | Not available | Not available |
+
+**Protocol families:** MCP, A2A, BeeAI ACP, OpenAI tool calling, Gemini tool
+calling and AGNTCY ACP. A 6 × 6 basic call translation matrix does **not**
+imply all sessions, streaming, async tasks, extensions or current-version
+transports are interoperable. See [protocol details](docs/PROTOCOL_SUPPORT.md)
+and the [review compatibility contract](https://github.com/shadowhunter-92/agentbridge/blob/release/r4-internal-gates-2026-10/docs/PROTOCOL_COMPATIBILITY_2026.md).
 
 ## Quick start
 
+**Requires Python 3.11 or 3.12.** Use a new virtual environment and synthetic
+or non-sensitive data for the examples.
+
 ```bash
-python -m venv .venv && .venv/Scripts/pip install -r requirements.txt   # (Windows; use bin/ on *nix)
+git clone https://github.com/shadowhunter-92/agentbridge.git
+cd agentbridge
+python -m venv .venv
+
+# Activate your virtual environment first:
+# macOS/Linux: source .venv/bin/activate
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+
+python -m pip install -e .
+python examples/quickstart.py
+python examples/demo_story.py
 ```
 
-**Governance is optional.** If you just want one agent/protocol to talk to another, use the
-mesh directly — no keys, no budgets, no setup:
+To execute the local test suite:
+
+```bash
+python -m pip install -e ".[test]"
+python -m pytest tests/ -q
+```
+
+Some PostgreSQL tests require an **explicit disposable test database** and are
+skipped without it. Never point test or recovery drills at production data.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup.
+
+### Translate a tool call
 
 ```python
-from src.protocols import default_registry as reg
+from src.protocols import default_registry
 from src.protocols.canonical import CanonicalCall
 
-call = reg.get("openai").from_canonical_call(CanonicalCall("add", {"a": 2, "b": 3}))
-reg.translate_call(call, "openai", "mcp")     # -> a real MCP tools/call. That's it.
+call = default_registry.get("openai").from_canonical_call(
+    CanonicalCall("add", {"a": 2, "b": 3})
+)
+translated = default_registry.translate_call(call, "openai", "mcp")
+print(translated)
 ```
 
-```bash
-.venv/Scripts/python examples/quickstart.py   # translate + bridge to a LIVE tool, zero governance
-```
-
-Add identity, budgets, and a tamper-evident audit trail **only when you want them**:
-
-```bash
-# Run the meta-bridge control plane (mesh + governance) — CLI or uvicorn
-python -m src serve                        # = uvicorn src.api.control_plane:app
-#   docs at /docs · status dashboard at /dashboard · health at /health
-#   set AGENTBRIDGE_ADMIN_KEY for operator endpoints; AGENTBRIDGE_DB=/path.db (or a postgres:// URL)
-
-# Or with Docker (healthcheck on /health, persistent SQLite volume)
-docker compose up
-
-# Or run it as a drop-in MCP server (stdio)
-python -m src mcp                          # = python -m src.serve.mcp_gateway
-
-# Other CLI commands
-python -m src --version
-python -m src translate --from openai --to mcp   # show a one-off any-to-any translation
-
-# Live demos (real agents on both ends)
-.venv/Scripts/python examples/live_nprotocol_proxy.py   # OpenAI/ACP -> live MCP, MCP -> live ACP
-.venv/Scripts/python examples/live_governed_proxy.py    # identity + budget + audit in action
-.venv/Scripts/python examples/policy_guardrails_demo.py # policy BLOCKS risky calls + provable audit trail
-
-# Tests
-.venv/Scripts/python -m pytest tests/ -q                # 153 passing; 159 with a Postgres DB (6 PG tests skip without one)
-```
-
-## Talk to agents yourself (any protocol)
-
-Yes — you can use AgentBridge to reach an agent/tool that speaks a *different* protocol than
-you do. That's the whole point. Give it a call in any protocol's shape; it translates and (if
-you want) governs, then delivers to the live target and hands the result back:
-
-```python
-import asyncio
-from src.integrations import bridge_tool_call
-from src.proxy import transport
-
-# You "speak" OpenAI tool-calls; the tool lives behind MCP. Reach it anyway:
-async def main():
-    result = await bridge_tool_call(
-        "add", {"a": 2, "b": 3}, to="mcp",
-        invoke=lambda w: transport.call_mcp_tool(
-            "python", ["examples/mcp_server_agent.py"], w["params"]["name"], w["params"]["arguments"]),
-    )
-    print(result)        # -> OpenAI-shaped tool result: "5"
-
-asyncio.run(main())
-```
-
-Swap `to="mcp"` for `a2a`, `acp`, `gemini`, or `agntcy` to reach an agent on that protocol.
-
-**Human client (discover + talk, from the CLI).** Point it at any agent, see what it can do,
-and call it — across protocols:
-
-```bash
-# Discover what an agent offers (MCP tools / A2A AgentCard):
-python -m src.serve.agent_client discover --mcp "python examples/mcp_server_agent.py"
-python -m src.serve.agent_client discover --a2a http://localhost:9100
-
-# Call / talk to it:
-python -m src.serve.agent_client call --mcp "python examples/mcp_server_agent.py" --tool add --args '{"a":2,"b":3}'
-python -m src.serve.agent_client talk --a2a http://localhost:9100 --message "hello"
-```
-
-Reaching real third-party tools (GitHub, Slack, Notion, …) works the same way — you point the
-bridge at the tool's existing **MCP server**, no connector to build. See
-[`docs/CONNECTORS.md`](docs/CONNECTORS.md) and the worked GitHub example
-(`examples/github_mcp_bridge.py`).
-
-## Protocol support matrix
-
-| Protocol | Owner | Adapter | Conformance vs real SDK | Any-to-any | Live agent |
-|----------|-------|:-------:|:-----------------------:|:----------:|:----------:|
-| **MCP** | Anthropic | ✅ | ✅ `mcp` 1.27 (`CallToolRequestParams`) | ✅ | ✅ FastMCP server (stdio) |
-| **A2A** | Google / LF | ✅ | ✅ `a2a-sdk` 0.3 (`Task`, `Message`) | ✅ | ✅ uvicorn agent + AgentCard |
-| **ACP** | IBM / BeeAI / LF | ✅ | ✅ `acp-sdk` 1.0 (`Run`, `Message`) | ✅ | ✅ REST `/runs` agent |
-| **OpenAI function-calling** | OpenAI | ✅ | ✅ `openai` 2.x (`ChatCompletionMessageToolCall`) | ✅ | ✅ routed to live MCP/ACP |
-| **Gemini function-calling** | Google | ✅ | ✅ `google-genai` (`FunctionCall`) | ✅ | ✅ routed to live MCP |
-| **AGNTCY ACP** | Cisco | ✅ | ✅ `agntcy-acp` (`RunCreateStateless`) | ✅ | ✅ routed to live MCP |
-| **ANP** | — | ⛔ deferred → governance plane | — | — | — |
-
-**6 call protocols, 6×6 = 36 any-to-any pairs, all green.** Adding a 7th is one adapter file +
-one registry line + one conformance test. Full detail: `docs/PROTOCOL_SUPPORT.md`. ANP is an
-identity/discovery layer, not a call protocol — it informs the governance plane, not an adapter
-(see `docs/PROTOCOL_SUPPORT.md`).
+This example translates a **basic tool-call shape**. It does not prove remote
+execution, authorization or full protocol lifecycle fidelity.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph clients [Agents / clients - any protocol]
-        C1[MCP client]
-        C2[A2A / ACP agent]
-        C3[OpenAI / Gemini / AGNTCY]
-    end
-    subgraph bridge [AgentBridge]
-        direction TB
-        G[Governance gateway<br/>identity · budget · approval · audit]
-        M[Canonical mesh<br/>any-to-any translation]
-        G --> M
-    end
-    subgraph targets [Target agents / tools - any protocol]
-        T1[live MCP tool]
-        T2[live A2A / ACP agent]
-    end
-    C1 & C2 & C3 -->|signed call| G
-    M -->|translated + governed| T1 & T2
-    OP[Operator] -->|admin API| G
+    A["Agent or application"] --> B["Identity / policy / approvals"]
+    B --> C["Canonical protocol adapters"]
+    C --> D["Approved target / tool"]
+    B --> E["Budget + operation state"]
+    D --> F["Outcome evidence / reconciliation"]
+    E --> F
+    F --> G["Audit + independent verification"]
 ```
 
-Every call enters the **governance gateway** (verify identity → reserve budget → check
-approval), is translated through the **canonical mesh** (any protocol → any protocol), is
-delivered to the target agent, then committed and written to a tamper-evident audit log.
+The translation mesh is already useful on its own. The security-critical
+execution and evidence path is being qualified incrementally. A signed receipt
+is a statement from its signer, **not automatic proof of a remote side effect**.
 
-- `src/protocols/` — canonical hub + per-protocol adapters (the mesh)
-- `src/governance/` — identity, audit, budgets, approvals, policy, gateway, persistence (the moat)
-- `src/proxy/` — real transport clients + in-line proxy
-- `src/api/control_plane.py` — the shipped HTTP API (mesh + governed routing, authenticated)
-- `src/serve/mcp_gateway.py` — drop-in MCP server packaging
+## One foundation, four proposed offerings
 
-**Deployment topology:** run it as a drop-in **MCP server** (per-developer), as a central
-**control-plane API** (team), or inline as a **proxy** between agents. See `docs/DEPLOYMENT.md`.
-Performance overhead is measured in `docs/BENCHMARKS.md`.
+| Offering | Intended role | Stage |
+| --- | --- | --- |
+| **AgentBridge OSS** | Open-source adapters, examples and reusable SDK | Prototype; portable SDK in draft review |
+| **AgentBridge Trust** | Identity, policy, approvals and safe execution | Engineering and hardening |
+| **AgentBridge Evidence** | Receipts, independent observation and audit verification | Bounded technical demonstrations |
+| **AgentBridge Enterprise** | Managed policies, deployment, support and governance | Commercial hypothesis, **not shipped** |
 
-## Security model
-- **Operator endpoints** require an admin key (`X-Admin-Key`) or — with OIDC configured —
-  an IdP bearer token; every endpoint is **RBAC-enforced** (admin/operator/viewer).
-- **Agent endpoints** require Ed25519 **signed requests** (`X-Agent-Id`/`X-Nonce`/`X-Signature`)
-  with nonce replay protection. Identities can be revoked.
-- **Per-IP rate limiting** on `/control/*` (blunts admin-key brute force; `AGENTBRIDGE_RATE_LIMIT`).
-- Audit is hash-chained and tamper-evident; export via `/control/audit/export`.
+These are **product directions**, not four available paid products. Independent
+adoption and willingness to pay have not yet been established.
 
-### Security reviews for the MCP ecosystem
-Beyond AgentBridge's own model above, we also do external security reviews for other
-MCP-server maintainers — static + design review against the OWASP Top-10 for Agentic
-Applications, MCP-specific red-team patterns, a full report with severity-rated findings.
+## Documentation
 
-The maintainer also contributes security tooling upstream: two detection templates merged into
-[ProjectDiscovery's nuclei-templates](https://github.com/projectdiscovery/nuclei-templates) — one
-for exposed Anthropic API keys, one for leaked Claude Code config (`.claude/settings.json`,
-`.mcp.json`). Security here is the practice, not the marketing.
+| Start here | What it covers |
+| --- | --- |
+| [Quick API reference](docs/API_REFERENCE.md) | Control plane interfaces |
+| [Integrations](docs/INTEGRATIONS.md) | Framework examples |
+| [Protocol support](docs/PROTOCOL_SUPPORT.md) | Adapter mapping and limitations |
+| [Deployment](docs/DEPLOYMENT.md) | Developer setup and deployment considerations |
+| [Roadmap](docs/ROADMAP.md) | Scope and known limitations |
+| [OSS evaluator kit](https://github.com/shadowhunter-92/agentbridge/blob/release/r4-internal-gates-2026-10/docs/OSS_EVALUATION_KIT.md) | **Draft-branch** synthetic/read-only assessment |
+| [Production gate register](https://github.com/shadowhunter-92/agentbridge/blob/release/r4-internal-gates-2026-10/docs/RC_INTERNAL_COMPLETION_AND_NOGO.md) | Review evidence and remaining blockers |
+| [Security policy](SECURITY.md) | Responsible vulnerability disclosure |
+| [Contributing](CONTRIBUTING.md) | Local setup, PRs, review expectations |
 
-> "This is easily the most useful thing that has happened to the project since I started it."
-> — Arthur Jhonathas, maintainer of [mcp-gmail-manager](https://github.com/arthjhon/mcp-gmail-manager),
-> on the review that shipped as [v0.3.1](https://github.com/arthjhon/mcp-gmail-manager/blob/main/audits/v0.3.0-external-audit.md)
-> (0 Critical / 0 High / 2 Medium / 2 Low — all four fixed same-day).
+## Get involved
 
-Want a review of your own MCP server? [Open an issue](https://github.com/shadowhunter-92/agentbridge/issues) to start the conversation.
+We especially welcome feedback from engineers building agents that **change
+external state**: payments, procurement, deployments, customer records or
+other operational systems. What breaks during retries? How do you verify that
+an action happened? What does your existing gateway already solve?
 
-## Persistence & multi-worker
-Chosen from `AGENTBRIDGE_DB`: unset → in-memory; a file path → SQLite (single node);
-a `postgres://` URL → Postgres (multi-instance; `pip install "psycopg[binary]"`).
+- Try the **basic local examples** on `main`, or request access to the
+  synthetic evaluator workflow in draft PR #34.
+- [Report a reproducible bug](https://github.com/shadowhunter-92/agentbridge/issues/new/choose).
+- [Request a developer evaluation](https://github.com/shadowhunter-92/agentbridge/issues/new)
+  (no credentials, private logs or customer data in public issues).
+- [Propose an improvement](CONTRIBUTING.md), ideally with a bounded failing test.
 
-The audit-chain append and budget reserve/commit are **atomic store-side operations** (SQLite
-`BEGIN IMMEDIATE` / Postgres advisory locks), so **multiple workers/replicas are safe when they
-share a durable store** — the chain can't fork and budgets can't double-spend
-(`tests/test_concurrency.py` proves it across separate connections + threads). Use the in-memory
-store for single-worker/dev only. See `docs/ENTERPRISE.md` → *Concurrency & scaling*.
+Independent evaluations and comparisons are more useful than GitHub-star counts.
+We have **not** claimed external integrations or paying customers without
+verifiable evidence.
 
-## Framework integrations (LangChain / CrewAI / AutoGen / LlamaIndex)
+## Security and license
 
-These frameworks all emit OpenAI-shaped tool calls, so **one helper** lets any of them reach a
-tool/agent on *any* protocol through the bridge — zero new dependencies:
+AgentBridge **does not guarantee exactly-once external execution**, complete
+MCP/A2A standards conformance, independent custody of production signing keys,
+or readiness to run unsupervised high-impact actions. Review
+[SECURITY.md](SECURITY.md) before testing privileged functionality and **do
+not post vulnerabilities or secrets in public issues**.
 
-```python
-from src.integrations import bridge_tool_call
-# inside a LangChain/CrewAI/AutoGen tool:
-result = await bridge_tool_call("add", {"a": 2, "b": 3}, to="mcp", invoke=your_transport)
-```
+Licensed under the [Apache License 2.0](LICENSE). See [AI assistance
+disclosure](AI_DISCLOSURE.md) for development transparency.
 
-Per-framework wrapping recipes (LangChain `StructuredTool`, CrewAI `@tool`, AutoGen function,
-LlamaIndex `FunctionTool`) are in `docs/INTEGRATIONS.md`.
+This repository is the authoritative source for **AgentBridge by
+`shadowhunter-92`**; it is not affiliated with unrelated projects using the
+same name.
 
-## Enterprise governance
+## Engineering integration candidate (not released)
 
-Real, tested controls enterprises ask for — all live over the control-plane HTTP API:
+This branch combines the current public-facing alpha documentation with the
+R4 engineering implementation. Its readiness depends on checks on **this
+exact integration commit** and independent operational acceptance; a branch
+merge does not constitute certification.
 
-- **Declarative policy engine** — per-call cost caps, approval-above-cost, capability allow/deny,
-  business-hours-only, blocked protocol routes (`POST /control/policy/rules`).
-- **RBAC** — `admin` / `operator` / `viewer` roles → permissions, enforced per endpoint.
-- **OIDC / JWT operator SSO** — verify an IdP token (Okta/Azure AD/Auth0/Keycloak), role claim
-  → RBAC role; replaces the shared admin key.
-- **Signed audit checkpoints** — third-party-verifiable proof the audit log wasn't truncated;
-  JSONL export feeds SIEMs (Splunk/Datadog/S3).
-
-Full usage + code: `docs/ENTERPRISE.md`. (Honestly *not* shipped as code: managed hosting and
-SOC 2 — those are operations and an audit process, not a library feature.)
-
-![Guardrails demo](guardrails.gif)
-
-*Governance in the call path: a policy **blocks** a forbidden capability, an over-budget call, and
-a needs-approval call — then a hash-chained, integrity-verified audit trail of every allow/deny.
-This is what EU AI Act Article 12 (automatic event logging for high-risk AI, from Aug 2026) looks
-like at runtime. Reproduce with `python examples/policy_guardrails_demo.py`.*
-
-▶ **Watch the 54-second explainer** (motion graphics + voiceover):
-[shadowhunter-92.github.io/agentbridge/media/explainer.html](https://shadowhunter-92.github.io/agentbridge/media/explainer.html)
-— source: [`media/explainer.html`](media/explainer.html).
-
-## Editions & pricing (direction)
-
-Open-core: the mesh + basic governance are free and self-hostable (Apache 2.0). Monetization is
-hosted governance/compliance, not the translation (which is commoditizing). Indicative tiers
-(hypotheses to validate with customers, not live products):
-
-| Edition | Who | What | Price (hypothesis) |
-|---------|-----|------|--------------------|
-| **OSS core** | builders | mesh + basic governance + drop-in MCP server, self-host | $0 |
-| **Pro / Team** | startups | hosted control plane, dashboard, persistence, support | ~$99–499/mo |
-| **Business** | scale-ups | RBAC/SSO, cost analytics, alerts, SLA | ~$1k–5k/mo |
-| **Compliance** | regulated (finance/health/HR) | EU-AI-Act audit pack, signed export, DPA | ~$2k–10k+/mo |
-
-Detail + the demand-gated roadmap: `docs/ROADMAP.md`.
-
-## Docs
-- `docs/DEPLOYMENT.md` — how to run it, configure it, and the honest production checklist
-- `docs/API_REFERENCE.md` — the control-plane HTTP endpoints
-- `docs/INTEGRATIONS.md` — wire LangChain / CrewAI / AutoGen / LlamaIndex to any protocol
-- `docs/CONNECTORS.md` — reach GitHub / Slack / Notion / … via their MCP servers (no connectors to build)
-- `docs/ENTERPRISE.md` — policy engine v2, RBAC, OIDC SSO, signed audit checkpoints
-- `docs/ROADMAP.md` — what's done, known limitations, and what's deferred (honest)
-- `docs/PROTOCOL_SUPPORT.md` — the protocol support matrix + conformance approach
-- `docs/LIVE_AGENT_TESTING.md` — how the bridge is tested against real, running agents
-- `docs/PROTOBUF_A2A.md` — notes on A2A's JSON-RPC vs protobuf wire formats
-- `docs/BENCHMARKS.md` — measured in-process overhead (reproduce with `tools/benchmark.py`)
-- `CONTRIBUTING.md` — setup, ground rules, and the add-a-protocol recipe
-- `AI_DISCLOSURE.md` — transparency on AI-assisted development
-
-## License
-Apache 2.0
-
-
-## Release safety and current status (October 2026)
-
-> **Status: experimental alpha. NOT production certified.** Do not connect consequential customer actions or payment systems without independent security acceptance and a supervised pilot.
-
-The current review integration line is `release/r4-internal-gates-2026-10` in draft PR #34 (not the default branch; not merged). It incorporates the P0/R1–R3 engineering work, but release gates remain open. The core includes six protocol adapters, controlled targets, Ed25519 request authentication, human approval, SQL-backed operation replay safeguards, and offline audit verification. These are supported features only within the tested behavior and are not blanket protocol conformance or exactly-once execution.
-
-**Unresolved release gates:** a real independently operated destination readback and trust custody; immutable third-party witness retention; production network enforcement and mTLS/workload identity acceptance; PostgreSQL partition/fencing/PITR and schema-migration certification; official MCP/A2A protocol-version conformance; locked and independently signed releases with clean complete-image vulnerability scans; production-load SLOs; independent penetration testing and consented external pilots. The R4 draft has tested synthetic readback, SQL restore/fenced-replica drills, independently signed evidence verification and restricted Docker egress, but these do not establish full production acceptance.
-
-Read [Release gates](docs/HARDENING_RELEASE_GATES.md), [Staging/operator drills](docs/PRODUCTION_OPERATOR_DRILLS.md), and [External review and pilot plan](docs/EXTERNAL_REVIEW_AND_PILOTS.md) before deploying or proposing a security-sensitive integration.
-
-For a first external evaluation, use read-only or synthetic actions in a disposable environment, with no secrets or customer data. Report reproducible failures in GitHub Issues without posting credentials.
+See [engineering release register](docs/RC_INTERNAL_COMPLETION_AND_NOGO.md),
+[recovery/operator drills](docs/PRODUCTION_OPERATOR_DRILLS.md),
+[limited protocol contract](docs/PROTOCOL_COMPATIBILITY_2026.md),
+[release procedure](docs/RELEASE_PROCEDURE_2026.md), and
+[external evaluator kit](docs/OSS_EVALUATION_KIT.md).
