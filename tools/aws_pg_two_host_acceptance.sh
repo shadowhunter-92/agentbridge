@@ -27,10 +27,11 @@ setup_source() {
   "$root/venv/bin/pip" -q install "psycopg[binary]" cryptography >/opt/ab-logs/python.log 2>&1
   if [ ! -d "$root/source/.git" ]; then git clone -q https://github.com/shadowhunter-92/agentbridge.git "$root/source"; fi
   cd "$root/source"
+  git fetch -q origin integration/r4-main-reconciliation-2026-10
   git checkout -q "$AB_SOURCE_SHA"
   test "$(git rev-parse HEAD)" = "$AB_SOURCE_SHA"
   "$root/venv/bin/pip" -q install -e "$root/source" >>/opt/ab-logs/python.log 2>&1
-  chmod 755 "$root/venv" "$root/source"
+  chmod -R a+rX "$root/venv" "$root/source"
   echo "SOURCE_PIN_VERIFIED=$AB_SOURCE_SHA"
 }
 admin() { runuser -u postgres -- psql -v ON_ERROR_STOP=1 -X "$@"; }
