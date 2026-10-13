@@ -1,0 +1,44 @@
+name: Kubernetes CNI boundary acceptance (disposable)
+on:
+  push:
+    branches: [integration/r4-main-reconciliation-2026-10]
+  pull_request:
+    branches: [main]
+jobs:
+  calico-policy-enforcement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install two-node kind cluster without default CNI
+        uses: helm/kind-action@v1.15.1
+        with:
+          version: v0.33.0
+          config: deploy/kubernetes/kind-calico-ci.yaml
+          wait: 120s
+      - name: Install pinned Calico CNI manifest
+        run: |
+          curl -fL --retry 3 --max-time 90 \
+            https://raw.githubusercontent.com/projectcalico/calico/v3.33.0/manifests/calico.yaml \
+            -o /tmp/calico-ci.yaml
+          kubectl apply -f /tmp/calico-ci.yaml
+          kubectl -n kube-system rollout status daemonset/calico-node --timeout=240s
+          kubectl wait --for=condition=Ready nodes --all --timeout=240s
+          kubectl -n kube-system get pods -o wide
+      - name: Run pod-label-specific, negative and positive egress checks
+        run: bash tools/kubernetes_cni_acceptance.sh
+      - name: Retain evidence and diagnostics
+        if: always()
+        run: |
+          mkdir -p evidence
+          kubectl get nodes -o wide > evidence/nodes.txt 2>&1 || true
+          kubectl get pods -A -o wide > evidence/pods.txt 2>&1 || true
+          kubectl -n agentbridge get networkpolicies -o yaml > evidence/networkpolicies.yaml 2>&1 || true
+          kubectl -n agentbridge describe pods > evidence/pod-descriptions.txt 2>&1 || true
+      - name: Upload cluster evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: disposable-calico-policy-acceptance
+          path: evidence/
+          if-no-files-found: warn
