@@ -86,3 +86,33 @@ conformance, independent physical-outcome proof or enterprise certification.
 
 Track outside feedback as GitHub issues only with permission; redact
 credentials, organization-sensitive logs and private operational details.
+
+## October 2026 independent installation checklist (integration candidate)
+
+Use **PR #41's reviewed commit SHA**, not a floating release branch or a
+version-number-only reference. The exact candidate must pass CI first. Start
+from a clean checkout with Python 3.11 or 3.12.
+
+```bash
+python -m venv .venv
+# Activate it: macOS/Linux source .venv/bin/activate
+# Windows PowerShell .venv\Scripts\Activate.ps1
+python -m pip install -e ".[test]"
+python -m examples.verify_synthetic_action_evidence
+python -m pytest tests/test_trust_sdk_evidence.py tests/test_fenced_sqlite_destination.py -q
+```
+
+No live service, API key, production database or cloud credential is required.
+Record the exact commit, platform, Python/pip versions, elapsed setup minutes,
+stdout/exit codes (with secrets redacted), and 1–5 ratings for documentation,
+installation, conceptual clarity and perceived usefulness.
+
+**Expected negative test:** a modified claimed outcome is rejected; an unknown
+remote outcome is not magically resolved. `external_production_truth_verified`
+must be false in the demo.
+
+The internal integration candidate's Python 3.11/3.12 job passed on
+`6fab0dd798e2e625d8aa33af4f718a75ba0b7455` in CI #366. That is
+internal evidence and **not** independent installation evidence. In a
+fresh external installation, a submitted report (not an invitation, stars
+or a CI badge) is required to close the evaluator milestone.
