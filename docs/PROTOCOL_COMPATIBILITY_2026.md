@@ -56,3 +56,7 @@ export AGENTBRIDGE_EGRESS_PROXY_URL='http://approved-egress-proxy:3128'
 The client cannot supply its own proxy or add targets; alternate local origins, URL credentials, arbitrary paths, query strings, IP literals and unknown destinations fail before transport. **An allowlist and configured proxy are not sufficient proof of workload identity, DNS/IP re-resolution safety or non-bypassable CNI egress.** Operators must independently verify the proxy and cluster network boundary. The developer CLI `AgentClient` remains an explicitly non-governed direct transport tool and is **not** approved for consequential actions.
 
 The narrow A2A adapter now rejects unknown JSON-RPC procedures and malformed lifecycle statuses, rather than treating them as new actions. Its allowed legacy method subset is `tasks/send` only, not current A2A 1.0 full conformance.
+
+## Non-executable A2A lifecycle model (experimental)
+
+`src/protocols/task_lifecycle.py` adds a typed snapshot and monotonic transition model separate from `CanonicalCall`. Its transitions deny stale sequence numbers, terminal-task resurrection and unknown states. Snapshots are **not** executable instructions; parsing them never issues tool calls. This does **not** implement A2A streaming, notification delivery, server-owned sequencing, task persistence, stateful resumption, subscriptions or full A2A conformance. The caller must enforce durable atomic sequence transitions and authorize external effects separately. Run `python -m pytest tests/test_task_lifecycle.py -q` to evaluate this bounded contract.
