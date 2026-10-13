@@ -23,4 +23,5 @@ jobs:
       - name: Run full synthetic workflow and negative cases
         run: |
           python -m examples.trust_evidence_end_to_end
+          python -m tools.benchmark_trust_evidence --count 12
           python -m pytest tests/test_trust_evidence_end_to_end.py tests/test_evidence_sdk_adversarial_contract.py tests/test_observer_rotation_transitions.py -q
