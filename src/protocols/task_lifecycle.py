@@ -28,7 +28,7 @@ class TaskState(str, Enum):
 _TERMINAL = frozenset((TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELED, TaskState.REJECTED))
 _TRANSITIONS: dict[TaskState, frozenset[TaskState]] = {
     TaskState.SUBMITTED: frozenset((TaskState.WORKING, TaskState.INPUT_REQUIRED,
-                                  TaskState.AUTH_REQUIRED, TaskState.FAILED,
+                                  TaskState.AUTH_REQUIRED, TaskState.COMPLETED, TaskState.FAILED,
                                   TaskState.CANCELED, TaskState.REJECTED)),
     TaskState.WORKING: frozenset((TaskState.INPUT_REQUIRED, TaskState.AUTH_REQUIRED,
                                 TaskState.COMPLETED, TaskState.FAILED,
@@ -48,7 +48,7 @@ class LifecycleRejected(ValueError):
 
 
 def _identifier(value: str, label: str) -> str:
-    if not isinstance(value, str) or not (1 <= len(value) <= 128) or value.strip() != value:
+    if not isinstance(value, str) or not (1 <= len(value) <= 128) or not value.strip() or value.strip() != value:
         raise LifecycleRejected(f"{label} must be a bounded nonempty identifier")
     return value
 
