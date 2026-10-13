@@ -19,4 +19,4 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install -e ".[test]"
-      - run: python -m pytest tests/test_inline_proxy_failclosed_protocols.py tests/test_inline_proxy.py tests/test_protocols_conformance.py tests/test_a2a_lifecycle_fail_closed.py tests/test_mcp_unsupported_methods.py -q
+      - run: python -m pytest tests/test_inline_proxy_failclosed_protocols.py tests/test_inline_proxy.py tests/test_protocols_conformance.py tests/test_a2a_lifecycle_fail_closed.py tests/test_task_lifecycle.py tests/test_mcp_unsupported_methods.py -q
