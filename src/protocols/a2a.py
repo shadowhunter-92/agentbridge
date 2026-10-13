@@ -22,6 +22,8 @@ class A2aAdapter(ProtocolAdapter):
         # Fail closed: A2A control/lifecycle/notification procedures MUST NOT be
         # silently reinterpreted as new executable capability calls.
         method = wire.get("method")
+        if method in ("tasks/cancel", "tasks/resubscribe", "tasks/get"):
+            raise ValueError("A2A lifecycle methods are not canonical action calls")
         if method is not None and method != "tasks/send":
             raise ValueError("unsupported A2A method: only tasks/send tool actions")
         # Accept either a raw task, or a JSON-RPC envelope {params:{task:{...}}}.
