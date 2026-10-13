@@ -51,12 +51,16 @@ All security-critical behavior must fail closed on invalid identity, unexpected 
 
 ## Engineering workflow
 
-Contribute from your own fork or a narrowly scoped branch. The default `main` branch is the public prototype. Large production-hardening work remains in draft [PR #34](https://github.com/shadowhunter-92/agentbridge/pull/34); do not assume it is shipped. CI passing is necessary but not equivalent to security certification.
+Contribute from your own fork or a narrowly scoped branch. The default `main` branch is the public prototype. The current reconciled engineering candidate is draft [PR #41](https://github.com/shadowhunter-92/agentbridge/pull/41), incorporating R4 and main. It is not merged or production-approved. Any license, copyright, security-sensitive protocol, release or GitHub Actions change must receive explicit owner review; the CODEOWNERS file requires a matching enforced branch ruleset to be effective. CI passing is necessary but not equivalent to security certification.
 
 ## Developer evaluations
 
-Independent engineering feedback is welcome **now** for synthetic and read-only workflows. See [OSS evaluator kit](https://github.com/shadowhunter-92/agentbridge/blob/release/r4-internal-gates-2026-10/docs/OSS_EVALUATION_KIT.md). Share installation time, existing-stack comparison, error cases and reproducible evidence. Do not connect the alpha to unsupervised consequential customer actions.
+Independent engineering feedback is welcome **now** for synthetic and read-only workflows. See [OSS evaluator kit](https://github.com/shadowhunter-92/agentbridge/blob/integration/r4-main-reconciliation-2026-10/docs/OSS_EVALUATION_KIT.md). Share installation time, existing-stack comparison, error cases and reproducible evidence. Do not connect the alpha to unsupervised consequential customer actions.
 
 Maintainers may ask for changes or decline proposals that expand unsupported protocol/security claims without end-to-end evidence.
 
 Thank you for helping build dependable, interoperable agent infrastructure.
+
+## Intellectual property and contributions
+
+Contributions to currently Apache-2.0-covered files remain subject to the applicable repository license and inbound contribution rules. Do not submit third-party code without appropriate rights, attribution and license compatibility. Do not imply that submitting a PR automatically transfers copyright to the maintainer. Proprietary or dual-license arrangements require a separate written agreement. See [code protection and IP policy](docs/CODE_PROTECTION_AND_IP_POLICY_2026.md).

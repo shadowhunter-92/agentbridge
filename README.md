@@ -24,6 +24,10 @@ another all-in-one agent platform.
 
 ![Demonstration of a bounded AgentBridge workflow](demo.gif)
 
+## Protecting the code and release boundaries
+
+This code is published under Apache 2.0; the existing license grants remain in force. Security-critical changes require review and must not imply certification. See [code/IP safeguards](docs/CODE_PROTECTION_AND_IP_POLICY_2026.md), [four-product execution criteria](docs/FOUR_PRODUCT_EXECUTION_GATES_2026.md), and the [security policy](SECURITY.md). The reconciled R4 engineering work is under review in [draft PR #41](https://github.com/shadowhunter-92/agentbridge/pull/41), not shipped on `main`.
+
 ## Why AgentBridge?
 
 AI-agent frameworks can call tools, but organizations also need to answer:
