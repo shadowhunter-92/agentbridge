@@ -47,7 +47,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Build standalone evaluator wheel
         run: |
-          python -m pip install build
+          python -m pip install build setuptools wheel
           python -m build --wheel --no-isolation
       - name: Install wheel in a fresh venv and run outside checkout
         run: |
