@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, release/r4-internal-gates-2026-10]
+    branches: [main, release/r4-internal-gates-2026-10, integration/r4-main-reconciliation-2026-10]
   pull_request:
     branches: [main]
 
