@@ -30,9 +30,13 @@ def test_legal_sequence_and_terminal_no_resurrection():
             current.transition(state, sequence=seq)
 
 
-def test_immediate_completion():
+def test_immediate_completion_rejected_until_working():
     t = TaskLifecycle("t", "c", "a2a")
-    assert t.transition(TaskState.COMPLETED, sequence=1).terminal
+    with pytest.raises(LifecycleRejected):
+        t.transition(TaskState.COMPLETED, sequence=1)
+    assert t.transition(TaskState.WORKING, sequence=1).transition(
+        TaskState.COMPLETED, sequence=2
+    ).terminal
 
 
 @pytest.mark.parametrize("seq", [0, -1, 1, True, 1.5, "2"])
