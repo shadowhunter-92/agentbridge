@@ -28,7 +28,7 @@ class TaskState(str, Enum):
 _TERMINAL = frozenset((TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELED, TaskState.REJECTED))
 _TRANSITIONS: dict[TaskState, frozenset[TaskState]] = {
     TaskState.SUBMITTED: frozenset((TaskState.WORKING, TaskState.INPUT_REQUIRED,
-                                  TaskState.AUTH_REQUIRED, TaskState.COMPLETED, TaskState.FAILED,
+                                  TaskState.AUTH_REQUIRED, TaskState.FAILED,
                                   TaskState.CANCELED, TaskState.REJECTED)),
     TaskState.WORKING: frozenset((TaskState.INPUT_REQUIRED, TaskState.AUTH_REQUIRED,
                                 TaskState.COMPLETED, TaskState.FAILED,
