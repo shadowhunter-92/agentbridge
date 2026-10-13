@@ -22,10 +22,10 @@ store_secret() {
     --value "$2" --overwrite >/dev/null
 }
 setup_source() {
-  dnf -y install postgresql16-server postgresql16 postgresql16-contrib git python3-pip openssl >/opt/ab-logs/packages.log 2>&1
-  python3 -m venv "$root/venv"
+  dnf -y install postgresql16-server postgresql16 postgresql16-contrib git python3.11 python3.11-pip openssl >/opt/ab-logs/packages.log 2>&1
+  python3.11 -m venv "$root/venv"
   "$root/venv/bin/pip" -q install "psycopg[binary]" cryptography >/opt/ab-logs/python.log 2>&1
-  git clone -q https://github.com/shadowhunter-92/agentbridge.git "$root/source"
+  if [ ! -d "$root/source/.git" ]; then git clone -q https://github.com/shadowhunter-92/agentbridge.git "$root/source"; fi
   cd "$root/source"
   git checkout -q "$AB_SOURCE_SHA"
   test "$(git rev-parse HEAD)" = "$AB_SOURCE_SHA"
@@ -37,7 +37,7 @@ admin() { runuser -u postgres -- psql -v ON_ERROR_STOP=1 -X "$@"; }
 case "$mode" in
   primary-init)
     setup_source
-    postgresql-setup --initdb >/opt/ab-logs/initdb.log 2>&1
+    if [ ! -f /var/lib/pgsql/data/PG_VERSION ]; then postgresql-setup --initdb >/opt/ab-logs/initdb.log 2>&1; fi
     openssl req -x509 -nodes -newkey rsa:3072 -days 1 \
       -subj "/CN=agentbridge-lab" \
       -keyout /var/lib/pgsql/data/server.key -out /var/lib/pgsql/data/server.crt \
