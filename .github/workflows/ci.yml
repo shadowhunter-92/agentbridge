@@ -34,6 +34,29 @@ jobs:
         # Postgres integration tests skip automatically unless AGENTBRIDGE_TEST_PG is set.
         # Coverage prints to the CI log; the Codecov badge additionally needs a codecov.io account.
 
+  evaluator-clean-wheel:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build standalone evaluator wheel
+        run: |
+          python -m pip install build
+          python -m build --wheel --no-isolation
+      - name: Install wheel in a fresh venv and run outside checkout
+        run: |
+          python -m venv /tmp/agentbridge-external-evaluator
+          /tmp/agentbridge-external-evaluator/bin/python -m pip install dist/*.whl
+          ( cd /tmp && /tmp/agentbridge-external-evaluator/bin/python -c "from src.governance.trust_sdk import verify_action_evidence; from src.governance.sandbox_readback import SandboxTarget; print('fresh-wheel-sdk-import: pass')" )
+          /tmp/agentbridge-external-evaluator/bin/agentbridge --version
+          /tmp/agentbridge-external-evaluator/bin/python -m pip check
+
   postgres-integration:
     runs-on: ubuntu-latest
     services:
