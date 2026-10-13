@@ -29,7 +29,7 @@ def _approved_remote_target(base_url: str) -> str:
     """
     import os
     from urllib.parse import urlsplit
-    from ..api.trusted_targets import SecurityConfigurationError
+    import ipaddress
 
     raw = os.environ.get("AGENTBRIDGE_MCP_TARGET_ALLOWLIST_JSON", "[]")
     try:
@@ -52,6 +52,15 @@ def _approved_remote_target(base_url: str) -> str:
         raise ValueError("invalid MCP target port") from exc
     if port not in (None, 443) or parsed.hostname.endswith("."):
         raise ValueError("nonstandard or ambiguous remote MCP target")
+    hostname = parsed.hostname.lower()
+    if hostname in ("localhost",) or hostname.endswith(".localhost"):
+        raise ValueError("loopback MCP target prohibited")
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("IP-literal MCP target prohibited")
     # Require the operator-controlled outbound proxy even in evaluation,
     # to prevent direct client network paths from bypassing the egress plane.
     proxy_url = os.environ.get("AGENTBRIDGE_EGRESS_PROXY_URL")
