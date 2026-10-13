@@ -43,3 +43,16 @@ Every supported protocol upgrade needs a pinned SDK family, a live reference
 server/client test, expected error paths and explicit mapping of behaviors
 that cannot be preserved across source/destination protocols. Test of model
 parsing alone is not a protocol certificate.
+
+## Standalone MCP gateway outbound execution gate (October 13 security update)
+
+The drop-in `src.serve.mcp_gateway` exposes two outbound tools (`bridge_call_a2a`, `bridge_call_acp`). These tools now **deny remote execution by default** and require the deployment operator to set `AGENTBRIDGE_MCP_TARGET_ALLOWLIST_JSON` to a JSON list of exactly approved HTTPS origins and `AGENTBRIDGE_EGRESS_PROXY_URL` to the independently restricted outbound proxy. Example for a synthetic approved test only:
+
+```bash
+export AGENTBRIDGE_MCP_TARGET_ALLOWLIST_JSON='["https://trusted-agent.example"]'
+export AGENTBRIDGE_EGRESS_PROXY_URL='http://approved-egress-proxy:3128'
+```
+
+The client cannot supply its own proxy or add targets; alternate local origins, URL credentials, arbitrary paths, query strings, IP literals and unknown destinations fail before transport. **An allowlist and configured proxy are not sufficient proof of workload identity, DNS/IP re-resolution safety or non-bypassable CNI egress.** Operators must independently verify the proxy and cluster network boundary. The developer CLI `AgentClient` remains an explicitly non-governed direct transport tool and is **not** approved for consequential actions.
+
+The narrow A2A adapter now rejects unknown JSON-RPC procedures and malformed lifecycle statuses, rather than treating them as new actions. Its allowed legacy method subset is `tasks/send` only, not current A2A 1.0 full conformance.
