@@ -10,6 +10,7 @@ mode="$1"
 : "$AB_SOURCE_SHA"
 root=/opt/agentbridge-qualification
 mkdir -p "$root" /opt/ab-logs
+  chmod 755 "$root"
 cd "$root"
 export AWS_DEFAULT_REGION=us-east-1
 fetch_secret() {
@@ -29,6 +30,7 @@ setup_source() {
   git checkout -q "$AB_SOURCE_SHA"
   test "$(git rev-parse HEAD)" = "$AB_SOURCE_SHA"
   "$root/venv/bin/pip" -q install -e "$root/source" >>/opt/ab-logs/python.log 2>&1
+  chmod 755 "$root/venv" "$root/source"
   echo "SOURCE_PIN_VERIFIED=$AB_SOURCE_SHA"
 }
 admin() { runuser -u postgres -- psql -v ON_ERROR_STOP=1 -X "$@"; }
