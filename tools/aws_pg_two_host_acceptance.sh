@@ -83,12 +83,16 @@ CONF
   standby-init)
     setup_source
     replication_secret="$(fetch_secret replication)"
-    export PGPASSWORD="$replication_secret"
+    install -m 600 -o postgres -g postgres /dev/null /var/lib/pgsql/.pgpass
+    printf "%s:5432:replication:abreplica:%s\\n" "$AB_PRIMARY_IP" "$replication_secret" > /var/lib/pgsql/.pgpass
+    chown postgres:postgres /var/lib/pgsql/.pgpass
+    chmod 600 /var/lib/pgsql/.pgpass
+    export PGPASSFILE=/var/lib/pgsql/.pgpass
     install -d -o postgres -g postgres -m 700 /var/lib/pgsql/data
     runuser -u postgres -- pg_basebackup \
       -d "host=$AB_PRIMARY_IP port=5432 user=abreplica sslmode=require" \
       -D /var/lib/pgsql/data -R -X stream -P >/opt/ab-logs/basebackup.log 2>&1
-    unset replication_secret PGPASSWORD
+    unset replication_secret PGPASSFILE
     systemctl enable --now postgresql
     runuser -u postgres -- psql -X -tAc 'SELECT pg_is_in_recovery();' | grep -qx t
     useradd -r -s /bin/bash abobserver || true
