@@ -36,7 +36,7 @@ class FencedSqliteTarget:
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA busy_timeout=10000")
         self.db.execute(
-            "CREATE TABLE IF NOT EXISTS sqlite_destination_fences "
+            "CREATE TABLE IF NOT EXISTS ab_destination_fences "
             "(scope TEXT PRIMARY KEY, owner TEXT NOT NULL, epoch INTEGER NOT NULL, "
             "expires_seconds INTEGER NOT NULL)"
         )
@@ -67,14 +67,14 @@ class FencedSqliteTarget:
         try:
             now = self.db.execute("SELECT CAST(strftime('%s','now') AS INTEGER)").fetchone()[0]
             row = self.db.execute(
-                "SELECT epoch,expires_seconds FROM sqlite_destination_fences WHERE scope=?",
+                "SELECT epoch,expires_seconds FROM ab_destination_fences WHERE scope=?",
                 (scope,),
             ).fetchone()
             if row is not None and row["expires_seconds"] > now:
                 raise SqliteFenceDenied("an authoritative destination owner is already live")
             epoch = (row["epoch"] + 1) if row else 1
             self.db.execute(
-                "INSERT INTO sqlite_destination_fences(scope,owner,epoch,expires_seconds) "
+                "INSERT INTO ab_destination_fences(scope,owner,epoch,expires_seconds) "
                 "VALUES(?,?,?,?) ON CONFLICT(scope) DO UPDATE SET "
                 "owner=excluded.owner,epoch=excluded.epoch,"
                 "expires_seconds=excluded.expires_seconds",
@@ -100,7 +100,7 @@ class FencedSqliteTarget:
             row = self.db.execute(
                 "SELECT owner,epoch,expires_seconds, "
                 "CAST(strftime('%s','now') AS INTEGER) AS now_seconds "
-                "FROM sqlite_destination_fences WHERE scope=?",
+                "FROM ab_destination_fences WHERE scope=?",
                 (scope,),
             ).fetchone()
             if (row is None or row["owner"] != owner or row["epoch"] != epoch
