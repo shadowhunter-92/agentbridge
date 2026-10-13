@@ -19,16 +19,25 @@ class A2aAdapter(ProtocolAdapter):
 
     def to_canonical_call(self, wire: Dict[str, Any]) -> CanonicalCall:
         require_mapping(wire, self.name)
+        # Fail closed: A2A control/lifecycle/notification procedures MUST NOT be
+        # silently reinterpreted as new executable capability calls.
+        method = wire.get("method")
+        if method in ("tasks/cancel", "tasks/resubscribe", "tasks/get"):
+            raise ValueError("A2A lifecycle methods are not canonical action calls")
+        if method is not None and method != "tasks/send":
+            raise ValueError("unsupported A2A method: only tasks/send tool actions")
         # Accept either a raw task, or a JSON-RPC envelope {params:{task:{...}}}.
         task = wire
         if "params" in wire and isinstance(wire["params"], dict) and "task" in wire["params"]:
             task = wire["params"]["task"]
+        if not isinstance(task, dict):
+            raise ValueError("A2A task must be an object")
+        if "status" in task and not isinstance(task["status"], dict):
+            raise ValueError("A2A lifecycle status must be an object")
         if isinstance(task.get("status"), dict):
-            state=task["status"].get("state")
+            state = task["status"].get("state")
             if state not in (None, "submitted"):
                 raise ValueError("A2A lifecycle state not supported as new action")
-        if wire.get("method") in ("tasks/cancel", "tasks/resubscribe", "tasks/get"):
-            raise ValueError("A2A lifecycle methods are not canonical action calls")
         capability, arguments, text = "", {}, None
         for msg in self._messages(task):
             for part in msg.get("parts", []):

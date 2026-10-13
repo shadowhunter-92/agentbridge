@@ -60,3 +60,9 @@ merging/closing; do not silently remove them for cosmetic cleanliness.
 Prioritize reproduced installations, independent integration feedback, fixes,
 real-world use, responsiveness and maintainability. Neither GitHub stars nor
 the number of branches establishes trust or commercial demand.
+
+## October 13 live inventory update
+
+The earlier branch-status table is a historical snapshot, **not** a current list of active targets. The currently preferred integration candidate is `integration/r4-main-reconciliation-2026-10` (draft PR #41), incorporating R4 and the main security cleanup. The current branch, open PR and unique-history inventory is in [the repository-wide audit](REPOSITORY_WIDE_AUDIT_AND_EXECUTION_2026-10.md). PR #34's release branch is an ancestor of integration; it remains open for historical reference rather than being an independent production acceptance. Never delete it while PR #34 references it. A prior draft public-refresh PR #39 has since been closed/merged or otherwise removed from the open PR list; verify actual PR state before acting on historical instructions.
+
+**IMPORTANT:** PR #41 is deliberately engineering-alpha; main release merging and branch deletion require a security review and exact-head checks, not just ancestry. Security/feature branches that were squash-merged may still show unique commits even when their changes are incorporated.
