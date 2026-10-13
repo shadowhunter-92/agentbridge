@@ -44,3 +44,7 @@ On October 13, five individual interview invitations were sent to published prof
 **Internal P1:** extract relevant changes from `prod/readiness-pass` selectively with tests; run comparable HTTP+auth+DB+target concurrency and bounded load shed; pin protocol transport test matrix and document unsupported features; improve outdated docs; maintain branch/CI reconciliation.
 **External P0:** third-party destination owner and independently administered observer with revocation/retention; qualified mTLS/CNI environment and operator; independent security report. **External commercial:** three returned SDK reports, five completed interview notes (including budget owners) and a signed supervised pilot.
 **Decision:** engineering-alpha **BUILD**, financial-grade production **NO-GO**.
+
+## Exact legacy branch file reconciliation
+
+Eight audited files are byte-identical between the current integration branch and prod/readiness-pass: auth_oidc.py, cli.py, resilience.py, observability/__init__.py, observability/logging.py, protocols/registry.py, test_concurrency.py and test_production_readiness.py. Other store, policy, control, configuration and documentation files differ. Therefore five historically unique commits do not imply five missing features. Preserve the branch pending targeted review; never blindly cherry-pick its older governance implementation onto the newer hardened branch.
