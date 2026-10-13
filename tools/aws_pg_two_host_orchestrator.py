@@ -45,10 +45,12 @@ def validate(a):
         if not INSTANCE.fullmatch(value):
             raise ValueError("invalid EC2 instance ID")
     for value in (a.primary_ip, a.standby_ip):
-        if ipaddress.ip_address(value).version != 4:
+        address = ipaddress.ip_address(value)
+        if address.version != 4 or not address.is_private:
             raise ValueError("private IPv4 addresses required for this lab")
-        if not ipaddress.ip_address(value).is_private:
-            raise ValueError("lab host address must be private")
+        if (address.is_loopback or address.is_link_local or address.is_multicast
+                or address.is_reserved):
+            raise ValueError("usable private VPC address required")
     if a.primary_ip == a.standby_ip:
         raise ValueError("different host IPs required")
     if a.region != "us-east-1":
@@ -162,7 +164,10 @@ def run(a):
         "all_phases_passed": False,
     }
     try:
+        deadline = time.monotonic() + (28 * 60)
         for phase, actor in PHASES:
+            if time.monotonic() >= deadline:
+                raise TimeoutError("global staging trial deadline exceeded")
             host = a.primary_id if actor == "primary" else a.standby_id
             cmd = ssm.send_command(
                 InstanceIds=[host], DocumentName="AWS-RunShellScript",
