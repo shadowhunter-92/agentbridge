@@ -41,3 +41,5 @@ jobs:
             | tee /tmp/dry-run.json
           grep -q '"aws_called": false' /tmp/dry-run.json
           grep -q '"instances_created": false' /tmp/dry-run.json
+      - name: Reject unsafe lab parameters and validate exact phase ordering
+        run: python -m unittest discover -s tests -p test_aws_two_host_orchestrator_static.py -v
