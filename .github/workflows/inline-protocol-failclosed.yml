@@ -1,0 +1,22 @@
+name: Inline protocol fail-closed acceptance
+on:
+  push:
+    branches: [hardening/protocol-failclosed-competitive-research-2026-10]
+  pull_request:
+    branches: [integration/r4-main-reconciliation-2026-10, main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install -e ".[test]"
+      - run: python -m pytest tests/test_inline_proxy_failclosed_protocols.py tests/test_inline_proxy.py tests/test_protocols_conformance.py tests/test_a2a_lifecycle_fail_closed.py tests/test_mcp_unsupported_methods.py -q
