@@ -1,0 +1,88 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "AgentBridge zero-cost AWS staging audit role only (read-only inventory, no cloud resources)",
+  "Parameters": {
+    "GithubOidcProviderArn": {
+      "Type": "String",
+      "Description": "ARN of an existing, explicitly approved token.actions.githubusercontent.com IAM OIDC provider",
+      "AllowedPattern": "^arn:aws[a-zA-Z-]*:iam::[0-9]{12}:oidc-provider/token\\.actions\\.githubusercontent\\.com$"
+    }
+  },
+  "Resources": {
+    "AgentBridgeStagingAuditRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "Description": "Read-only inventory exclusively for AgentBridge's audited integration branch via GitHub OIDC",
+        "MaxSessionDuration": 3600,
+        "Path": "/agentbridge/",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Ref": "GithubOidcProviderArn"
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:shadowhunter-92/agentbridge:ref:refs/heads/integration/r4-main-reconciliation-2026-10"
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "ReadOnlyInfrastructureInventory",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "eks:ListClusters",
+                    "eks:DescribeCluster",
+                    "rds:DescribeDBInstances",
+                    "ec2:DescribeVpcs",
+                    "ec2:DescribeSubnets",
+                    "ec2:DescribeSecurityGroups"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "AgentBridge"
+          },
+          {
+            "Key": "Stage",
+            "Value": "audit-only"
+          },
+          {
+            "Key": "BudgetUSD",
+            "Value": "0"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "AuditRoleArn": {
+      "Description": "Store only the ARN (not AWS keys) as GitHub repo variable AWS_STAGING_AUDIT_ROLE_ARN",
+      "Value": {
+        "Fn::GetAtt": [
+          "AgentBridgeStagingAuditRole",
+          "Arn"
+        ]
+      }
+    }
+  }
+}
