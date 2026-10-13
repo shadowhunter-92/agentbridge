@@ -108,7 +108,20 @@ probe() {
   fi
 }
 printf 'test,pod,host,port,expected,observed\n' > evidence/network-results.csv
-# Prove the forbidden service is actually listening before checking enforcement.
+# The control connection must first become available before we attribute
+# subsequent negative results to policy enforcement, rather than boot races.
+ready=0
+for attempt in $(seq 1 18); do
+  if kubectl -n agentbridge exec unselected-control -- python -c 'import socket;socket.create_connection(("forbidden-target",8080),timeout=2).close()' >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
+  sleep 2
+done
+if [ "$ready" != "1" ]; then
+  echo "FAIL: control service never became reachable" >&2
+  exit 1
+fi
 probe unselected-control forbidden-target 8080 allow control_can_reach_forbidden
 probe restricted-worker allowed-proxy 3128 allow worker_can_reach_allowlisted_proxy
 probe restricted-worker forbidden-target 8080 deny worker_cannot_reach_other_destination
