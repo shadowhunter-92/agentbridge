@@ -1,0 +1,25 @@
+name: AWS two-host harness static safety
+on:
+  push:
+    branches: [integration/r4-main-reconciliation-2026-10]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Parse phases without execution
+        run: bash -n tools/aws_pg_two_host_acceptance.sh
+      - name: Check no embedded database credential literals
+        run: |
+          if grep -En '(PASSWORD [\x27\x22][^$]|PGPASSWORD=[\x27\x22][^$])' tools/aws_pg_two_host_acceptance.sh; then
+            echo "Static credential check failed"; exit 1
+          fi
+      - name: Enforce explicit phases and pinned source
+        run: |
+          grep -q 'AB_SOURCE_SHA' tools/aws_pg_two_host_acceptance.sh
+          grep -q 'STALE_OLD_LEADER_DENIED' tools/aws_pg_two_host_acceptance.sh
+          grep -q 'PHYSICAL_REPLICA_PROMOTED' tools/aws_pg_two_host_acceptance.sh
