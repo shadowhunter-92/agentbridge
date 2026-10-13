@@ -116,3 +116,7 @@ The internal integration candidate's Python 3.11/3.12 job passed on
 internal evidence and **not** independent installation evidence. In a
 fresh external installation, a submitted report (not an invitation, stars
 or a CI badge) is required to close the evaluator milestone.
+
+## Independent feedback submission
+
+Use [`docs/INDEPENDENT_EVALUATOR_REPORT_TEMPLATE.md`](INDEPENDENT_EVALUATOR_REPORT_TEMPLATE.md) for a structured report. Submit it through [the open evaluator invitation](https://github.com/shadowhunter-92/agentbridge/issues/36) only with your consent. A qualifying result needs an external participant, exact commit, fresh-environment output, explicit limitations and reproducible feedback; internal CI alone never counts toward three external integrations.
