@@ -1,10 +1,11 @@
-# Proposed mandatory review ownership. Effective only when GitHub branch rules
-# enforce code-owner review. Do not interpret this file alone as protection.
+# Ownership routing for sensitive source, documentation and releases.
+# CODEOWNERS is advisory until branch rules require an independent code-owner approval.
 * @shadowhunter-92
 /src/governance/ @shadowhunter-92
 /src/api/ @shadowhunter-92
 /src/proxy/ @shadowhunter-92
 /.github/workflows/ @shadowhunter-92
+/.github/CODEOWNERS @shadowhunter-92
 /infra/ @shadowhunter-92
 /LICENSE @shadowhunter-92
 /NOTICE @shadowhunter-92
