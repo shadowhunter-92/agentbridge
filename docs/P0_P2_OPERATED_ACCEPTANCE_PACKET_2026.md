@@ -20,3 +20,28 @@
 For each gate: exact commit SHA, deployed image digest, environment and permissions, independent observer/operator identities, test procedure, expected failure and success conditions, timestamped machine-readable results, logs/metrics with secrets redacted, reviewer signature, observed risks, disposition and rollback plan.
 
 **Classification:** code available / CI verified / deployed staging verified / independently reviewed / production accepted are distinct states. Never skip states in the release register.
+
+## October 13 — live ephemeral Kubernetes/Calico evidence
+
+**Fact:** [GitHub Actions run #6](https://github.com/shadowhunter-92/agentbridge/actions/runs/38358713825) passed on commit `0d2232ade436ad86ccede04deecf51a144bc204a`. A second successful run #5 on the same commit retained artifact `disposable-calico-policy-acceptance`.
+
+- Real two-node kind cluster on an Ubuntu GitHub-hosted runner, default CNI disabled, Calico `v3.33.0` installed.
+- AgentBridge worker Pod selected by `app.kubernetes.io/name=agentbridge-worker`.
+- Positive controls: unselected Pod reached the forbidden service; selected worker reached the allowlisted proxy on TCP/3128.
+- Enforced denials: selected worker to the forbidden service TCP/8080; to unallowlisted TCP/8080 at the proxy; to metadata IPv4 `169.254.169.254:80`; and to direct public IPv4 `1.1.1.1:443`.
+- Machine-readable results, applied NetworkPolicies, Pod descriptions and cluster diagnostics uploaded.
+- Test source: `tools/kubernetes_cni_acceptance.sh`, `deploy/kubernetes/kind-calico-ci.yaml`, `.github/workflows/kubernetes-cni-acceptance.yml`.
+
+**Interpretation:** one actual NetworkPolicy/CNI enforcement environment passed; this is stronger than YAML lint or Docker-only isolation. **Not accepted** as a production Kubernetes deployment, authenticated mTLS workload identity, DNS exfiltration control, IPv6 escape qualification, real cloud metadata test or customer-target isolation. The CNI production gate therefore remains OPEN.
+
+## Required operated environment for the next phase
+
+To continue P0–P2 operational acceptance, provision an isolated, dedicated
+staging account/project with a managed Kubernetes cluster or independently
+operated equivalent, PostgreSQL primary and standby, externally controlled
+observer identity and signer, private artifact registry, and a separate test
+destination controlled by its operator. Grant the reviewer least-privilege
+access, not root production credentials. Define allowed network test targets,
+an approved fault-injection window, cost ceiling, recovery owner and disposal
+process before deployment. No access or approval to this environment is
+present in GitHub Actions ephemeral runs.
