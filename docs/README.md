@@ -83,3 +83,4 @@ not an execution authority.
 | [Trust → Evidence integrated evaluator sprint — October 2026](TRUST_EVIDENCE_E2E_SPRINT_2026.md) |
 | [Local continuation status](LOCAL_CONTINUATION_STATE_2026-10-13.md) |
 | [Consolidated audit publication](PUBLICATION_STATUS_2026-10-14.md) |
+| [Branch reconciliation and preservation](BRANCH_RECONCILIATION_2026-10-14.md) |

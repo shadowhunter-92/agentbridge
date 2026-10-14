@@ -38,7 +38,7 @@ class FencedSqliteTarget:
         self.db.execute(
             "CREATE TABLE IF NOT EXISTS ab_destination_fences "
             "(scope TEXT PRIMARY KEY, owner TEXT NOT NULL, epoch INTEGER NOT NULL, "
-            "expires_seconds INTEGER NOT NULL)"
+            "expires_seconds REAL NOT NULL)"
         )
         # Reuse the sandbox observer's read-only, signed readback contract.
         self.db.execute(
@@ -65,7 +65,7 @@ class FencedSqliteTarget:
             raise ValueError("bounded integer TTL required")
         self.db.execute("BEGIN IMMEDIATE")
         try:
-            now = self.db.execute("SELECT CAST(strftime('%s','now') AS INTEGER)").fetchone()[0]
+            now = self.db.execute("SELECT (julianday('now') - 2440587.5) * 86400.0").fetchone()[0]
             row = self.db.execute(
                 "SELECT epoch,expires_seconds FROM ab_destination_fences WHERE scope=?",
                 (scope,),
@@ -99,7 +99,7 @@ class FencedSqliteTarget:
         try:
             row = self.db.execute(
                 "SELECT owner,epoch,expires_seconds, "
-                "CAST(strftime('%s','now') AS INTEGER) AS now_seconds "
+                "(julianday('now') - 2440587.5) * 86400.0 AS now_seconds "
                 "FROM ab_destination_fences WHERE scope=?",
                 (scope,),
             ).fetchone()
