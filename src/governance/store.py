@@ -19,7 +19,9 @@ import json
 import os
 import sqlite3
 import threading
+import uuid
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
 
 from .resilience import retry_transient
@@ -336,45 +338,33 @@ class SqliteStore(GovernanceStore):
     def append_audit_chained(self, build_entry):
         @retry_transient(max_attempts=4, base_delay=0.01, max_delay=0.5)
         def _go():
-            with self._lock:
-                self._db.execute("BEGIN IMMEDIATE")          # write lock -> serialize across procs
-                try:
-                    row = self._db.execute(
-                        "SELECT seq, entry FROM audit ORDER BY seq DESC LIMIT 1").fetchone()
-                    if row:
-                        last = json.loads(row["entry"])
-                        seq, prev_hash = last["seq"] + 1, last["entry_hash"]
-                    else:
-                        seq, prev_hash = 0, self.GENESIS
-                    entry = build_entry(seq, prev_hash)
-                    self._db.execute("INSERT INTO audit(seq, entry) VALUES(?,?)",
-                                     (entry["seq"], json.dumps(entry)))
-                    self._db.execute("COMMIT")
-                    return entry
-                except Exception:
-                    self._db.execute("ROLLBACK")
-                    raise
+            with sql_atomic(self):
+                row = self._db.execute(
+                    "SELECT seq, entry FROM audit ORDER BY seq DESC LIMIT 1").fetchone()
+                if row:
+                    last = json.loads(row["entry"])
+                    seq, prev_hash = last["seq"] + 1, last["entry_hash"]
+                else:
+                    seq, prev_hash = 0, self.GENESIS
+                entry = build_entry(seq, prev_hash)
+                self._db.execute("INSERT INTO audit(seq, entry) VALUES(?,?)",
+                                 (entry["seq"], json.dumps(entry)))
+                return entry
         return _go()
 
     def mutate_budget(self, agent_id, mutator):
         @retry_transient(max_attempts=4, base_delay=0.01, max_delay=0.5)
         def _go():
-            with self._lock:
-                self._db.execute("BEGIN IMMEDIATE")
-                try:
-                    row = self._db.execute("SELECT state FROM budgets WHERE agent_id=?",
-                                           (agent_id,)).fetchone()
-                    state = json.loads(row["state"]) if row else {}
-                    result = mutator(state)
-                    self._db.execute(
-                        "INSERT INTO budgets(agent_id, state) VALUES(?,?) "
-                        "ON CONFLICT(agent_id) DO UPDATE SET state=excluded.state",
-                        (agent_id, json.dumps(state)))
-                    self._db.execute("COMMIT")
-                    return result
-                except Exception:
-                    self._db.execute("ROLLBACK")
-                    raise
+            with sql_atomic(self):
+                row = self._db.execute("SELECT state FROM budgets WHERE agent_id=?",
+                                       (agent_id,)).fetchone()
+                state = json.loads(row["state"]) if row else {}
+                result = mutator(state)
+                self._db.execute(
+                    "INSERT INTO budgets(agent_id, state) VALUES(?,?) "
+                    "ON CONFLICT(agent_id) DO UPDATE SET state=excluded.state",
+                    (agent_id, json.dumps(state)))
+                return result
         return _go()
 
     # --- approvals (atomic status update so multi-worker approve/deny is race-free) ---
@@ -721,6 +711,34 @@ class PostgresStore(GovernanceStore):
     def close(self) -> None:
         with self._lock:
             self._db.close()
+
+
+
+@contextmanager
+def sql_atomic(store):
+    """One SQL commit, with savepoints for existing component operations.
+
+    The caller must use one store instance for all participants. This boundary
+    covers local SQL state only; it cannot roll back a remote destination effect.
+    """
+    if not isinstance(store, (SqliteStore, PostgresStore)):
+        raise ValueError("one durable SQL store required for atomic governance")
+    with store._lock:
+        if isinstance(store, PostgresStore):
+            with store._db.transaction():
+                yield
+            return
+        nested = store._db.in_transaction
+        name = "ab_atomic_" + uuid.uuid4().hex
+        store._db.execute("SAVEPOINT " + name if nested else "BEGIN IMMEDIATE")
+        try:
+            yield
+            store._db.execute("RELEASE SAVEPOINT " + name if nested else "COMMIT")
+        except BaseException:
+            store._db.execute("ROLLBACK TO SAVEPOINT " + name if nested else "ROLLBACK")
+            if nested:
+                store._db.execute("RELEASE SAVEPOINT " + name)
+            raise
 
 
 def make_store(db: Optional[str]) -> GovernanceStore:

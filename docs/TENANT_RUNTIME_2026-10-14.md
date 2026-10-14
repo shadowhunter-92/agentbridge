@@ -98,10 +98,14 @@ and role confusion, replay/signature tampering, delegation revocation, operator
 exports, real HTTP routing, body/header bounds, alternate legacy entry points,
 async cancellation, duplicate admission and original production target gates.
 
-Not complete: historical assignment/rollback tooling, durable fleet quotas and
+Offline historical assignment and conservative rollback have a separate qualified procedure: [tenant migration](TENANT_MIGRATION_2026-10-14.md). Rolling and large-database migration remain unqualified.
+
+Not complete: durable fleet quotas and
 retention, tenant-aware reconciliation/evidence/background services, actual async
 task execution/cancellation, MCP/A2A tenant network projections, workload identity,
 qualified destination-atomic effects and observer readback, full-path performance,
 trusted release qualification and independent acceptance. The generic production
 target restriction remains in force, including standalone remote MCP tools. No
 main merge, deployment, release publication or external contact occurs here.
+
+Shared-SQL success settlement and pre-invocation abort now commit budget, operation state and audit together; see [atomic outcome accounting](ATOMIC_GOVERNANCE_STATE_2026-10-14.md). Admission transactions and aggregate quotas remain subsequent work.

@@ -1,30 +1,22 @@
-"""
-Tamper-evident audit log.
+"""Hash-linked audit records with explicit trust and retention limits.
 
-Every governed call appends an entry whose hash chains to the previous entry's hash
-(like a mini blockchain). Any later edit/deletion breaks the chain, which
-`verify_integrity()` detects. This is the "audit trail" enterprises pay for.
+Durable stores serialize chained appends across workers. A self-consistent chain
+detects edits within its retained history; it is not WORM storage or independent
+proof of a destination effect. A signed checkpoint authenticates its signer's
+statement, not independent custody or authorization to delete history.
 
-Retention model (production-ready):
-  - The chain is hash-linked, so deleting an entry in the middle breaks verification.
-    We solve this with SIGNED CHECKPOINTS: a checkpoint signs (seq, head_hash) at a
-    point in time. After a checkpoint is recorded, entries BEFORE the checkpoint seq
-    can be truncated safely — anyone with the checkpoint signature can verify the
-    chain was intact at the checkpoint, and the remaining chain is verifiable from
-    the checkpoint head forward.
-  - `truncate_before(seq)`: removes entries with seq < N. Refuses if a legal hold
-    is active. The remaining chain stays internally verifiable — `verify_chain` /
-    `verify_durable` tolerate a chain that legitimately starts at seq>0; the signed
-    checkpoint is what proves the truncation point was authorized. Returns the count removed.
-  - `set_legal_hold(bool)`: when True, truncate_before refuses to remove anything.
-    Useful during investigations.
+Production truncation remains disabled pending qualified external anchoring.
+Controlled nonproduction truncation checks local and durable legal holds and
+requires the retained suffix to be interpreted against preserved checkpoints.
+Use AuditTrustStore for cross-process holds; an in-memory flag is process-local.
 """
 
 import hashlib
-import os
 import json
+import os
 import threading
-from dataclasses import dataclass, field, asdict
+from contextlib import nullcontext
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -89,7 +81,10 @@ class AuditLog:
             entry.entry_hash = entry.compute_hash()
             return asdict(entry)
 
-        with self._lock:
+        # Durable stores serialize the chain themselves. An extra audit lock
+        # would invert the store -> component order of an outer SQL transaction.
+        guard = self._lock if isinstance(self.store, InMemoryStore) else nullcontext()
+        with guard:
             rec = self.store.append_audit_chained(build)
             entry = AuditEntry(**rec)
             if isinstance(self.store, InMemoryStore):
@@ -187,8 +182,8 @@ class AuditLog:
     @staticmethod
     def verify_checkpoint(checkpoint: Dict[str, Any]) -> bool:
         """Verify a signed checkpoint's Ed25519 signature over (seq, head_hash)."""
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
         from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
         try:
             pub = Ed25519PublicKey.from_public_bytes(bytes.fromhex(checkpoint["public_key_hex"]))
             payload = AuditLog._checkpoint_payload(checkpoint["seq"], checkpoint["head_hash"])

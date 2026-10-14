@@ -1,14 +1,14 @@
-"""
-GovernanceGateway — governance enforced IN the call path of the meta-bridge mesh.
+"""Governance admission and conservative outcome accounting.
 
-For every cross-protocol call:
-    authorize (identity + capability + approval + budget)
-      -> denied: audit(deny); if approval needed, open a pending request; raise.
-      -> allowed: RESERVE budget -> translate (any->any) -> invoke target
-                  -> success: COMMIT budget, consume approval grant, audit(allow)
-                  -> failure: RELEASE budget, audit(error), re-raise.
+Authorization, budget reservation, required approval consumption and operation
+claim precede invocation. An uncertain post-dispatch outcome retains UNKNOWN
+and reserved exposure; it is never automatically replayed. A pre-invocation
+abort releases its owned reservation and marks its claim failed.
 
-Atomic reserve/commit closes the TOCTOU race. Protocol-agnostic — the moat in action.
+For one shared SQL store, definite-success settlement and pre-invocation abort
+commit budget, operation state and chained audit together. A remote effect is
+outside that local transaction. Legacy embeddings with separate/in-memory
+participants retain their weaker accounting contract.
 """
 
 import asyncio
@@ -18,6 +18,7 @@ import logging
 import os
 import threading
 import time
+from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any, Awaitable, Callable, Dict, Optional
 
@@ -26,11 +27,12 @@ from ..protocols import default_registry
 from ..protocols.registry import ProtocolRegistry
 from .approvals import ApprovalQueue
 from .audit import AuditEntry, AuditLog
-from .budget import BudgetManager
+from .budget import BudgetManager, _checked_cost
 from .identity import IdentityRegistry
 from .operation_ledger import OperationConflict, OperationLedger
 from .policy import Decision, PolicyEngine
 from .request_auth import canonical_payload
+from .store import PostgresStore, SqliteStore, sql_atomic
 
 
 class GovernanceError(PermissionError):
@@ -75,6 +77,30 @@ class GovernanceGateway:
             if any(component is not None and component.store is not self.identities.store
                    for component in (self.budgets, self.approvals, self.audit)):
                 raise ValueError("all tenant governance components must share the same bound store")
+
+    @contextmanager
+    def _atomic_state(self, admission):
+        store = self.identities.store
+        participants = (self.budgets, self.approvals, self.audit, admission.ledger)
+        if isinstance(store, (SqliteStore, PostgresStore)) and all(
+                component is None or component.store is store for component in participants):
+            with sql_atomic(store):
+                if admission.ledger is not None:
+                    # Reconciliation locks operation -> budget -> audit. Match
+                    # that order and never overwrite an already settled result.
+                    query = "SELECT state FROM agent_operations WHERE agent_id=? AND operation_id=?"
+                    if isinstance(store, PostgresStore):
+                        query = query.replace("?", "%s") + " FOR UPDATE"
+                    row = store._db.execute(query, (admission.agent_id, admission.operation_id)).fetchone()
+                    if not row or row["state"] != "unknown":
+                        raise OperationConflict("operation missing or already settled; inspect its durable outcome")
+                yield
+            return
+        if self.authority is not None:
+            raise ValueError("tenant settlement requires one shared durable SQL store")
+        # Caller-owned legacy embeddings with separate/in-memory participants
+        # keep their explicitly weaker local-state contract.
+        yield
 
     def _operation_ledger(self):
         # The ledger caches no operation/authorization state. Cache only its
@@ -161,20 +187,29 @@ class GovernanceGateway:
                 if task.cancelled():
                     raise
 
-    def _audit_admission(self, admission, decision, reason, cost=0.0):
+    def _audit_admission(self, admission, decision, reason, cost=0.0, *, observe=True):
         self.audit.record(actor=admission.actor, action="route_call",
                           source_protocol=admission.src, target_protocol=admission.dst,
                           capability=admission.capability, decision=decision,
                           reason=reason, cost=cost)
-        update_audit_count(self.audit.count())
-        record_call(admission.src, admission.dst, admission.capability,
-                    decision, time.monotonic()-admission.started)
+        if observe:
+            self._observe_admission(admission, decision)
+
+    def _observe_admission(self, admission, decision):
+        try:
+            update_audit_count(self.audit.count())
+            record_call(admission.src, admission.dst, admission.capability,
+                        decision, time.monotonic()-admission.started)
+        except Exception:
+            logging.getLogger(__name__).exception("governance telemetry unavailable after durable audit")
 
     def _abort_admission(self, admission):
-        self.budgets.release(admission.agent_id, admission.token)
-        if admission.ledger is not None:
-            admission.ledger.finish(admission.agent_id, admission.operation_id, "failed")
-        self._audit_admission(admission, "error", "request canceled before invocation")
+        with self._atomic_state(admission):
+            self.budgets.release(admission.agent_id, admission.token)
+            if admission.ledger is not None:
+                admission.ledger.finish(admission.agent_id, admission.operation_id, "failed")
+            self._audit_admission(admission, "error", "request canceled before invocation", observe=False)
+        self._observe_admission(admission, "error")
 
     def _invocation_failed(self, admission, exc):
         uncertain = admission.ledger is not None
@@ -184,11 +219,13 @@ class GovernanceGateway:
                               str(exc)[:200] or type(exc).__name__)
 
     def _settle(self, admission):
-        if not self.budgets.commit(admission.agent_id, admission.token):
-            raise RuntimeError("budget reservation missing after invocation; reconcile outcome")
-        if admission.ledger is not None:
-            admission.ledger.finish(admission.agent_id, admission.operation_id, "succeeded")
-        self._audit_admission(admission, "allow", admission.decision.reason, admission.cost)
+        with self._atomic_state(admission):
+            if not self.budgets.commit(admission.agent_id, admission.token):
+                raise RuntimeError("budget reservation missing after invocation; reconcile outcome")
+            if admission.ledger is not None:
+                admission.ledger.finish(admission.agent_id, admission.operation_id, "succeeded")
+            self._audit_admission(admission, "allow", admission.decision.reason, admission.cost, observe=False)
+        self._observe_admission(admission, "allow")
         try:
             budget = self.budgets.get(admission.agent_id)
             update_budget_gauge(admission.agent_id, budget.spent, budget.remaining())
@@ -220,6 +257,9 @@ class GovernanceGateway:
         if self.authority is None:
             from ..authority_mode import require_legacy_authority
             require_legacy_authority()
+        # Canonicalize the same validated value used by budget arithmetic.
+        # Equivalent integer/float operator costs must share an operation scope.
+        cost = _checked_cost(cost)
         audit_actor = agent_id
         if self.authority is not None:
             from .authority import AuthorityDenied
