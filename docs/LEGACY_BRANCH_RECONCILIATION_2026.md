@@ -44,22 +44,3 @@ modules with the older versions. Existing readiness, OIDC/RBAC, durable approval
 audit/hold and concurrency suites plus new regressions passed in the local full
 candidate runs. The branch remains preserved for owner acceptance of this
 selective supersession; no unique commit was discarded or blindly merged.
-
-## Local functional cross-check
-
-The consolidated candidate preserves observability, OIDC/JWKS, persistent
-approval requests, configuration validation, transient-only retries and graceful
-shutdown from the historical checklist. It adds JWKS removal/cooldown tests,
-cross-worker identity revocation, nonblocking shutdown/authentication, durable
-request-scoped grants and stricter production retention boundaries. Current
-production retention stays disabled at the ad-hoc HTTP surface; this is an
-intentional safety restriction, not a missing legacy feature to restore blindly.
-
-The legacy shared deadline/barrier remains, but both SQLite and PostgreSQL worker
-harnesses now propagate exceptions. SQLite audit contention is increased from
-four to eight writers, instead of accepting the weakening in 779e81e. Source
-comparison found no legacy feature that requires replacing newer governance
-modules with the older versions. Existing readiness, OIDC/RBAC, durable approval,
-audit/hold and concurrency suites plus new regressions passed in the local full
-candidate runs. The branch remains preserved for owner acceptance of this
-selective supersession; no unique commit was discarded or blindly merged.
