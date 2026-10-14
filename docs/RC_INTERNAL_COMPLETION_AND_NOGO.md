@@ -1,5 +1,10 @@
 # R4 release candidate: internal completion evidence and unresolved gates
 
+> **Historical checkpoint.** This record applies to its stated commits and test
+> environment. PRs #51, #52 and #41 subsequently merged; main baseline is
+> `483bc98234ced2b876a6b296a1e1fd292747942c`. See the
+> [current handoff register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md) for ongoing work.
+
 **Status: ALPHA; unrestricted production NO-GO.**
 This is the operating register for draft PR #34. Passing CI is not
 a substitute for real deployment assurance, customer consent or review.

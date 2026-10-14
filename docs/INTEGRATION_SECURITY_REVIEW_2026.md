@@ -1,5 +1,10 @@
 # Security-boundary integration audit — 13 October 2026
 
+> **Historical checkpoint.** This record applies to its stated commits and test
+> environment. PRs #51, #52 and #41 subsequently merged; main baseline is
+> `483bc98234ced2b876a6b296a1e1fd292747942c`. See the
+> [current handoff register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md) for ongoing work.
+
 **Review class:** source inspection + exact-commit CI observation; **not** a penetration test, independent attestation, production certification, or comprehensive security approval.
 
 ## Boundaries reviewed

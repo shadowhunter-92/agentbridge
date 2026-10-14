@@ -50,10 +50,10 @@ Python 3.11 or higher. Tested on 3.11 and 3.12.
 **Yes.** Use the `bridge_tool_call` helper from `src/integrations/`:
 
 ```python
-from src.integrations import bridge_tool_call
+from src.integrations import translate_tool_call
 
-# LangChain agent calls this like a normal tool
-result = bridge_tool_call(tool_name, arguments, target_protocol="mcp")
+# Pure tool-call translation; no network execution or governance
+target_wire = translate_tool_call("add", {"a": 2, "b": 3}, to="mcp")
 ```
 
 See `docs/INTEGRATIONS.md` for details.
@@ -78,30 +78,30 @@ The governance plane is the set of features that control *who* can call *what*, 
 
 ```python
 from src.protocols import default_registry
-registry.translate("mcp", "a2a", wire_data)
+translated = default_registry.translate_call(wire_data, "mcp", "a2a")
 ```
 
 ### Q: How do I set a budget?
 
 ```bash
 # Via the API (as admin)
-curl -X POST http://localhost:8000/ops/budgets \
+curl -X PUT http://localhost:8000/control/budgets/agent_42 \
   -H "X-Admin-Key: $AGENTBRIDGE_ADMIN_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"agent_id": "agent_42", "daily_limit": 10.0}'
+  -d '{"spend_limit": 10.0, "rate_limit": 100}'
 ```
 
 ### Q: How do I see the audit log?
 
 ```bash
 # Via the API (as admin)
-curl http://localhost:8000/ops/audit \
+curl http://localhost:8000/control/audit \
   -H "X-Admin-Key: $AGENTBRIDGE_ADMIN_KEY"
 ```
 
 Or inspect the SQLite file directly:
 ```bash
-sqlite3 agentbridge.db "SELECT * FROM audit_log;"
+sqlite3 agentbridge.db "SELECT * FROM audit;"
 ```
 
 ---
@@ -112,7 +112,7 @@ sqlite3 agentbridge.db "SELECT * FROM audit_log;"
 
 AgentBridge is designed for long-running processes (FastAPI + uvicorn). For AWS Lambda, you'd need to:
 1. Use an ASGI adapter like `mangum`
-2. Use a persistent store (DynamoDB or RDS) instead of SQLite
+2. Use a supported PostgreSQL backend instead of local SQLite; a DynamoDB backend is not implemented
 3. Consider cold-start latency
 
 This is not currently a first-class deployment target, but it could work with adaptation.
@@ -124,8 +124,8 @@ This is not currently a first-class deployment target, but it could work with ad
 ### Q: How many workers can I run?
 
 - **In-memory store:** Single worker only — per-process, so the audit chain would fork across processes
-- **SQLite:** Multiple workers — safe on a shared DB file via atomic `BEGIN IMMEDIATE` + WAL (`tests/test_concurrency.py` proves it)
-- **Postgres:** Multiple workers/replicas — atomic operations + advisory locks
+- **SQLite:** Tested local workers on one local DB file using `BEGIN IMMEDIATE` and WAL; this does not qualify shared network filesystems or distributed HA
+- **Postgres:** Tested shared-database workers using atomic operations and advisory locks; automated split-brain-safe HA is not qualified
 
 ### Q: Does it work behind a reverse proxy?
 
@@ -135,22 +135,15 @@ This is not currently a first-class deployment target, but it could work with ad
 
 ## Performance
 
-### Q: How fast is the translation?
+### Q: What performance has been qualified?
 
-- **Translation only:** ~5–30 microseconds
-- **Full governed + audited call:** ~0.4 milliseconds (sub-millisecond)
-
-Run `make benchmark` to see numbers on your machine.
-
-### Q: What's the overhead of governance?
-
-For a typical call, the governance overhead is:
-- Identity verification: ~0.1 ms
-- Budget reserve/commit: ~0.1 ms
-- Audit log append: ~0.1 ms
-- Policy check: ~0.05 ms
-
-Total: ~0.35 ms, which is negligible for most use cases.
+The repository contains synthetic translation, SQL concurrency and bounded
+Trust/Evidence benchmarks. Their environments and workloads differ; their
+numbers are not a full HTTP-to-destination-to-authoritative-readback service SLO.
+Run the documented benchmarks on the exact commit and record latency tails,
+errors, throughput and resources. Sustained production-shaped overload and
+failure acceptance remain open. See [performance baseline](PERFORMANCE_BASELINE_2026.md)
+and [handoff register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md).
 
 ---
 
@@ -161,7 +154,7 @@ Total: ~0.35 ms, which is negligible for most use cases.
 The MCP SDK is rapidly evolving. Make sure you have the correct version:
 
 ```bash
-pip install "mcp>=1.27.0"
+python -m pip install -r requirements-protocols.txt
 ```
 
 If you have an older version, uninstall and reinstall.

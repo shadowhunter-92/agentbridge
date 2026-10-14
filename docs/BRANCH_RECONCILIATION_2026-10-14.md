@@ -1,5 +1,10 @@
 # Branch reconciliation — October 14, 2026
 
+> **Historical checkpoint.** This record applies to its stated commits and test
+> environment. PRs #51, #52 and #41 subsequently merged; main baseline is
+> `483bc98234ced2b876a6b296a1e1fd292747942c`. See the
+> [current handoff register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md) for ongoing work.
+
 The owner requested comparison and merging without losing work. A verified
 pre-consolidation Git bundle and exact ref manifest were saved locally first.
 All 27 remote heads in this inventory are retained in the consolidation ancestry;

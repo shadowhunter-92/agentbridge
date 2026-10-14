@@ -6,7 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to report a bug! Please fill out the sections below.
+        For suspected vulnerabilities, follow SECURITY.md and report privately. Do not post secrets, customer data, private logs or exploitable details here.
+        For ordinary bugs, please fill out the sections below.
 
   - type: textarea
     id: description
@@ -44,5 +45,5 @@ body:
     id: logs
     attributes:
       label: Logs or error messages
-      description: Paste any relevant error messages or logs.
+      description: Paste only redacted, non-sensitive error messages or logs.
       render: shell

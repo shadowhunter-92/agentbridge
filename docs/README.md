@@ -1,6 +1,7 @@
 # Documentation index
 
-Start with [execution plan](EXECUTION_PLAN_2026-10-14.md),
+Start with [current handoff register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md),
+[execution plan](EXECUTION_PLAN_2026-10-14.md),
 [publication and remaining work](PUBLICATION_STATUS_2026-10-14.md),
 [current acceptance](CURRENT_STATUS_2026-10-13.md),
 [supported roadmap](ROADMAP.md), [protocol scope](PROTOCOL_COMPATIBILITY_2026.md),
@@ -16,7 +17,7 @@ For repository decisions use [branch audit](BRANCH_REVIEW_2026-10-13.md),
 [external claim checks](RESEARCH_CLAIM_CHECK_2026-10-13.md).
 
 Dated sprint and AWS reports are historical evidence for their stated SHAs.
-The current acceptance register supersedes their pending-PR and test-count
+The current handoff register supersedes their pending-PR and test-count
 statements; no historical experiment is promoted to production qualification.
 Source layout: `src/protocols` for wire contracts and task status; `src/governance`
 for authorization/evidence/SQL; `src/api` for HTTP controls; `src/proxy` for
@@ -87,3 +88,4 @@ not an execution authority.
 | [Branch reconciliation and preservation](BRANCH_RECONCILIATION_2026-10-14.md) |
 | [Execution plan and acceptance gates](EXECUTION_PLAN_2026-10-14.md) |
 | [Authenticated A2A status streaming](A2A_STATUS_STREAMING.md) |
+| [Current handoff acceptance register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md) |

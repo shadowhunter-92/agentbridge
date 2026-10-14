@@ -22,7 +22,9 @@ commits; their test counts and pending-PR statements are not current status.
 ## Internal engineering still requiring qualification
 
 1. Reference transport interoperability for each advertised SDK/version and
-   supported behavior; network streaming and push delivery remain unsupported.
+   supported behavior. The opt-in A2A 0.3 observer streams existing task status;
+   it does not execute new tasks, cancel remote effects or provide push delivery.
+   MCP HTTP client qualification is bounded; full lifecycle fidelity remains open.
 2. Non-bypassable enforcement at one real external destination, beyond the
    participating PostgreSQL/SQLite examples.
 3. Operated workload identity and egress tests covering DNS, IPv6 and direct

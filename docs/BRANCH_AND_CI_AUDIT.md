@@ -1,5 +1,10 @@
 # Branch reconciliation, historical CI, and merge gates
 
+> **Historical checkpoint.** This record applies to its stated commits and test
+> environment. PRs #51, #52 and #41 subsequently merged; main baseline is
+> `483bc98234ced2b876a6b296a1e1fd292747942c`. See the
+> [current handoff register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md) for ongoing work.
+
 **Updated: October 11, 2026. Status: engineering review, NOT production-ready.**
 
 ## What was reconciled

@@ -13,18 +13,18 @@ budgets, approvals and audit history. The long-term goal is a portable trust
 layer that works **alongside** existing agent frameworks and gateways—not
 another all-in-one agent platform.
 
-> **Engineering alpha; production NO-GO.** This local checkout consolidates the
-> latest integration work and tested local fixes. As of the October 13 audit,
-> public `main` remains behind [draft PR #41](https://github.com/shadowhunter-92/agentbridge/pull/41).
-> PR #34 is closed as superseded. No local audit changes have been published.
-> [Current acceptance](docs/CURRENT_STATUS_2026-10-13.md) ·
+> **Engineering alpha; production NO-GO.** The reviewed audit fixes and integration
+> merged through PRs #51, #52 and #41. The maintained baseline is
+> `483bc98234ced2b876a6b296a1e1fd292747942c` (October 14, 2026).
+> Source integration does not establish a signed package release or production acceptance.
+> [Current handoff register](docs/HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md) ·
 > [Documentation index](docs/README.md) · [Security policy](SECURITY.md)
 
 ![Demonstration of a bounded AgentBridge workflow](demo.gif)
 
 ## Protecting the code and release boundaries
 
-This code is published under Apache 2.0; the existing license grants remain in force. Security-critical changes require review and must not imply certification. See [code/IP safeguards](docs/CODE_PROTECTION_AND_IP_POLICY_2026.md), [four-product execution criteria](docs/FOUR_PRODUCT_EXECUTION_GATES_2026.md), and the [security policy](SECURITY.md). The reconciled R4 engineering work is under review in [draft PR #41](https://github.com/shadowhunter-92/agentbridge/pull/41), not shipped on `main`.
+This code is published under Apache 2.0; the existing license grants remain in force. Security-critical changes require review and must not imply certification. See [code/IP safeguards](docs/CODE_PROTECTION_AND_IP_POLICY_2026.md), [four-product execution criteria](docs/FOUR_PRODUCT_EXECUTION_GATES_2026.md), and the [security policy](SECURITY.md). The reconciled R4 engineering work and reviewed fixes are incorporated in `main` through [PR #41](https://github.com/shadowhunter-92/agentbridge/pull/41). Production acceptance remains open.
 
 ## Why AgentBridge?
 
@@ -42,12 +42,12 @@ outcome, reconciliation and auditability questions. Those guarantees remain
 
 ## At a glance
 
-| Capability | Default branch | Release review |
+| Capability | Maintained baseline | Qualification remaining |
 | --- | --- | --- |
-| Canonical tool-call translation across six adapter families | Prototype | More explicit unsupported-feature handling |
+| Canonical tool-call translation across six adapter families | Limited subset with explicit unsupported-feature rejection | Full protocol lifecycle/version matrix |
 | Agent signatures, budgets, policies and approval controls | Implemented in selected paths | Durable and adversarial hardening |
 | SQLite / PostgreSQL support | Included | Recovery, concurrency and fencing drills |
-| Separately signed action receipt + readback verification | Not a released guarantee | Tested in bounded sandbox / PostgreSQL paths |
+| Separately signed action receipt + readback verification | Tested in bounded sandbox / PostgreSQL paths | Independent administration and real destination acceptance |
 | Production network isolation, HA and full MCP/A2A conformance | **Not qualified** | **Still not qualified** |
 | Enterprise managed service or formal certification | Not available | Not available |
 
@@ -141,7 +141,7 @@ adoption and willingness to pay have not yet been established.
 | [Protocol support](docs/PROTOCOL_SUPPORT.md) | Adapter mapping and limitations |
 | [Deployment](docs/DEPLOYMENT.md) | Developer setup and deployment considerations |
 | [Roadmap](docs/ROADMAP.md) | Scope and known limitations |
-| [OSS evaluator kit](docs/OSS_EVALUATION_KIT.md) | **Draft-branch** synthetic/read-only assessment |
+| [OSS evaluator kit](docs/OSS_EVALUATION_KIT.md) | Pinned synthetic/read-only assessment |
 | [Production gate register](docs/RC_INTERNAL_COMPLETION_AND_NOGO.md) | Review evidence and remaining blockers |
 | [Security policy](SECURITY.md) | Responsible vulnerability disclosure |
 | [Contributing](CONTRIBUTING.md) | Local setup, PRs, review expectations |
@@ -153,8 +153,7 @@ external state**: payments, procurement, deployments, customer records or
 other operational systems. What breaks during retries? How do you verify that
 an action happened? What does your existing gateway already solve?
 
-- Try the **basic local examples** on `main`, or request access to the
-  synthetic evaluator workflow in draft PR #41.
+- Try the **basic local examples** and pinned synthetic evaluator workflow on `main`.
 - [Report a reproducible bug](https://github.com/shadowhunter-92/agentbridge/issues/new/choose).
 - [Request a developer evaluation](https://github.com/shadowhunter-92/agentbridge/issues/new)
   (no credentials, private logs or customer data in public issues).
@@ -179,12 +178,11 @@ This repository is the authoritative source for **AgentBridge by
 `shadowhunter-92`**; it is not affiliated with unrelated projects using the
 same name.
 
-## Engineering integration candidate (not released)
+## Maintained engineering alpha
 
-This branch combines the current public-facing alpha documentation with the
-R4 engineering implementation. Its readiness depends on checks on **this
-exact integration commit** and independent operational acceptance; a branch
-merge does not constitute certification.
+The maintained source combines the alpha documentation, R4 implementation and
+reviewed audit fixes. Readiness depends on checks on the **exact selected commit**
+and independent operational acceptance; a source merge does not constitute certification.
 
 See [engineering release register](docs/RC_INTERNAL_COMPLETION_AND_NOGO.md),
 [recovery/operator drills](docs/PRODUCTION_OPERATOR_DRILLS.md),
@@ -198,4 +196,4 @@ From this qualified local checkout, run `python -m examples.qualify_trust_eviden
 for the controller-signed Trust/Evidence workflow. The optional durable task SDK
 is documented in [task lifecycle](docs/DURABLE_TASK_LIFECYCLE.md).
 Run `python tools/check_documentation.py` to check local Markdown targets.
-Test and branch evidence is indexed in the [current acceptance register](docs/CURRENT_STATUS_2026-10-13.md).
+Test and branch evidence is indexed in the [handoff acceptance register](docs/HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md).

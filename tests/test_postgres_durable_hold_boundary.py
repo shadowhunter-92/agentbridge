@@ -7,7 +7,8 @@ import pytest
 
 @pytest.mark.skipif(not os.getenv("AGENTBRIDGE_TEST_PG"),
                     reason="requires disposable PostgreSQL test service")
-def test_pg_hold_blocks_direct_retention_across_connections(monkeypatch):
+@pytest.mark.parametrize("environment", ["prod", "production"])
+def test_pg_hold_blocks_direct_retention_across_connections(monkeypatch, environment):
     from src.governance.store import PostgresStore
     from src.governance.audit_trust import AuditTrustStore
     from src.governance.audit import AuditLog
@@ -22,7 +23,7 @@ def test_pg_hold_blocks_direct_retention_across_connections(monkeypatch):
         trusted.set_hold(hold, True)
         with pytest.raises(PermissionError, match="durable legal hold"):
             b.truncate_audit_before(1)
-        monkeypatch.setenv("AGENTBRIDGE_ENV", "production")
+        monkeypatch.setenv("AGENTBRIDGE_ENV", environment)
         with pytest.raises(PermissionError, match="production audit retention"):
             b.truncate_audit_before(1)
     finally:

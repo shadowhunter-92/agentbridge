@@ -6,7 +6,7 @@ evaluation, not an authorized production use.
 
 ## 1. Install a fixed review commit
 
-Download the source for a reviewed PR #34 commit and create a Python 3.11/3.12
+Download the source for the reviewed main commit `483bc98234ced2b876a6b296a1e1fd292747942c` and create a Python 3.11/3.12
 virtual environment. Install the local wheel using the built artifact from
 the CI release-review check. Run `agentbridge --version`, import
 `src.governance.trust_sdk.verify_action_evidence`, and run:
@@ -21,7 +21,7 @@ Never copy signing secrets into issues, logs or evaluation forms.
 
 ## Fast, reproducible offline example
 
-From a checked-out, pinned draft commit in a fresh Python 3.11/3.12
+From a checked-out, pinned reviewed commit in a fresh Python 3.11/3.12
 environment, after installing the project dependencies:
 
 ```bash
@@ -89,8 +89,8 @@ credentials, organization-sensitive logs and private operational details.
 
 ## October 2026 independent installation checklist (integration candidate)
 
-Use **PR #41's reviewed commit SHA**, not a floating release branch or a
-version-number-only reference. The exact candidate must pass CI first. Start
+Use **main commit `483bc98234ced2b876a6b296a1e1fd292747942c`**, not a floating
+release branch or a version-number-only reference. PR #41 has merged. The exact candidate must pass CI first. Start
 from a clean checkout with Python 3.11 or 3.12.
 
 ```bash

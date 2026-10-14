@@ -107,7 +107,13 @@ def span(name: str, attributes: Optional[Dict[str, Any]] = None) -> Iterator[Any
 
 try:
     from prometheus_client import (
-        Counter, Histogram, Gauge, Info, CollectorRegistry, CONTENT_TYPE_LATEST, generate_latest,
+        CONTENT_TYPE_LATEST,
+        CollectorRegistry,
+        Counter,
+        Gauge,
+        Histogram,
+        Info,
+        generate_latest,
     )
     _PROM_AVAILABLE = True
 except ImportError:  # pragma: no cover - prometheus_client is a hard dependency in pyproject
@@ -230,15 +236,45 @@ def render_metrics() -> tuple[bytes, str]:
     return generate_latest(_REGISTRY), CONTENT_TYPE_LATEST
 
 
+# Metrics are process-lifetime objects. Caller values must have finite domains,
+# including on denied/error paths and direct embedding calls. Custom adapter
+# names aggregate into <other>; this does not restrict their execution registry.
+_METRIC_PROTOCOLS = frozenset({"mcp", "a2a", "acp", "openai", "gemini", "agntcy"})
+_METRIC_DECISIONS = frozenset({"allow", "deny", "error", "unknown"})
+_CAPABILITY_LABEL_LIMIT = 128
+_capability_labels: set[str] = set()
+_capability_label_lock = threading.Lock()
+
+
+def _protocol_label(value: str) -> str:
+    return value if isinstance(value, str) and value in _METRIC_PROTOCOLS else "<other>"
+
+
+def _capability_label(value: str) -> str:
+    if not value:
+        return "<none>"
+    if not isinstance(value, str) or len(value) > 128:
+        return "<other>"
+    with _capability_label_lock:
+        if value in _capability_labels:
+            return value
+        if len(_capability_labels) >= _CAPABILITY_LABEL_LIMIT:
+            return "<other>"
+        _capability_labels.add(value)
+        return value
+
+
 def record_call(src: str, dst: str, capability: str, decision: str, duration_s: float) -> None:
-    """Called by the governance gateway after each route_call attempt."""
+    """Record bounded labels; unknown/overflow values aggregate into <other>."""
+    src, dst = _protocol_label(src), _protocol_label(dst)
+    decision = decision if isinstance(decision, str) and decision in _METRIC_DECISIONS else "<other>"
     CALLS_TOTAL.labels(src_protocol=src, dst_protocol=dst,
-                       capability=capability or "<none>", decision=decision).inc()
+                       capability=_capability_label(capability), decision=decision).inc()
     CALL_DURATION.labels(src_protocol=src, dst_protocol=dst).observe(duration_s)
 
 
 def record_translate(src: str, dst: str, duration_s: float) -> None:
-    TRANSLATE_DURATION.labels(src_protocol=src, dst_protocol=dst).observe(duration_s)
+    TRANSLATE_DURATION.labels(src_protocol=_protocol_label(src), dst_protocol=_protocol_label(dst)).observe(duration_s)
 
 
 def update_audit_count(n: int) -> None:

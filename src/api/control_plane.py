@@ -516,7 +516,7 @@ def export_audit(_role: str = Depends(operator_guard("audit:export"))):
 
 @app.post("/control/audit/checkpoint")
 def create_audit_checkpoint(_role: str = Depends(operator_guard("audit:export"))):
-    if os.getenv("AGENTBRIDGE_ENV", "").lower() == "production":
+    if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
         raise HTTPException(503, "durable trusted audit checkpoint signer not configured; checkpoint creation disabled")
     """Sign the current audit head so a third party can later prove the log wasn't
     truncated before this point. We sign with the server's admin-key-derived identity
@@ -534,7 +534,7 @@ def create_audit_checkpoint(_role: str = Depends(operator_guard("audit:export"))
 @app.post("/control/audit/retention")
 def set_audit_retention(body: dict,
                         _role: str = Depends(operator_guard("audit:export"))):
-    if os.getenv("AGENTBRIDGE_ENV", "").lower() == "production":
+    if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
         raise HTTPException(503, "audit retention and legal holds require durable policy and verified checkpoints")
     """Truncate the audit log up to a given seq, or toggle legal hold.
 
@@ -632,6 +632,8 @@ async def governed_route(request: Request):
     if "target" in body:
         raise HTTPException(400, "agent-selected target configurations are prohibited; use target_id")
     try:
+        # Reject unknown destinations before policy, approvals or telemetry.
+        registry.get(dst)
         canonical = registry.get(src).to_canonical_call(wire)
         cost = effective_call_cost(body.get("cost", 1.0), canonical.capability)
         target = resolve_target(body.get("target_id"), dst, canonical.capability,

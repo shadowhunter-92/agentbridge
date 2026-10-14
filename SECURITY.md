@@ -4,7 +4,7 @@
 
 ## Supported scope and versions
 
-The public `main` branch and draft integration PR #41 have different capabilities. No version has completed the production acceptance process. The `pyproject.toml` package version alone is not proof of a published, supported, signed release. Quote the exact Git commit SHA, Python version and supported protocol subset in reports.
+The reviewed integration PR #41 and audit fixes are incorporated in `main` at `483bc98234ced2b876a6b296a1e1fd292747942c`. Historical branch reports describe their own revisions. No version has completed the production acceptance process. The `pyproject.toml` package version alone is not proof of a published, supported, signed release. Quote the exact Git commit SHA, Python version and supported protocol subset in reports.
 
 ## Reporting vulnerabilities privately
 
