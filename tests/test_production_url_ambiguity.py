@@ -41,6 +41,6 @@ def test_ambiguous_proxy_denied(proxy):
 
 
 def test_valid_explicit_proxy_and_target():
-    invocation = resolve_target("one", "a2a", "read",
-                                env=config("https://example.com"), agent_id="agent")
-    assert invocation["proxy_url"] == "http://egress.example.com:3128"
+    with pytest.raises(SecurityConfigurationError, match="destination-atomic"):
+        resolve_target("one", "a2a", "read",
+                       env=config("https://example.com"), agent_id="agent")

@@ -1,5 +1,10 @@
 # AgentBridge
 
+> **Production target restriction:** HTTP named-target execution is disabled for
+> generic MCP/A2A/ACP transports in `prod` and `production` until destination-atomic
+> authority/fencing is qualified. Translation and nonproduction synthetic evaluation
+> remain available. See [destination contract](docs/PRODUCTION_TARGET_QUALIFICATION_2026-10-14.md).
+
 **Protocol interoperability and governed execution for AI agents.**
 
 [![CI](https://github.com/shadowhunter-92/agentbridge/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/shadowhunter-92/agentbridge/actions/workflows/ci.yml)

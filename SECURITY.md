@@ -1,5 +1,10 @@
 # AgentBridge Security Policy
 
+> **Production target restriction:** HTTP named-target execution is disabled for
+> generic MCP/A2A/ACP transports in `prod` and `production` until destination-atomic
+> authority/fencing is qualified. Translation and nonproduction synthetic evaluation
+> remain available. See [destination contract](docs/PRODUCTION_TARGET_QUALIFICATION_2026-10-14.md).
+
 **Status: experimental engineering alpha.** No released build is certified for consequential customer actions, financial transactions, or regulated operations. Do not rely on internal CI as an independent audit.
 
 ## Supported scope and versions

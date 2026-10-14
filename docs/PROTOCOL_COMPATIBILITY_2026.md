@@ -1,5 +1,10 @@
 # AgentBridge protocol compatibility contract — October 2026
 
+> **Production target restriction:** HTTP named-target execution is disabled for
+> generic MCP/A2A/ACP transports in `prod` and `production` until destination-atomic
+> authority/fencing is qualified. Translation and nonproduction synthetic evaluation
+> remain available. See [destination contract](PRODUCTION_TARGET_QUALIFICATION_2026-10-14.md).
+
 **Status: limited validated wire-shape subset; NOT complete protocol conformance.**
 
 The adapter tests exercise message/tool-call translation, schema parsing and a 6 x 6

@@ -5,9 +5,9 @@ capability allowlist are owned by the deployment administrator.
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import math
-import ipaddress
 import os
 from dataclasses import dataclass
 from typing import Any, Mapping
@@ -68,6 +68,23 @@ def effective_call_cost(value: Any, capability: str,
     return validate_cost(schedule[capability])
 
 
+
+def _qualified_invocation(invocation: dict[str, Any], env: Mapping[str, str]) -> dict[str, Any]:
+    """Generic transport selection is not a destination enforcement contract.
+
+    No currently registered HTTP target kind atomically binds authorization,
+    monotonic fencing and the committed effect at its destination. Operator
+    metadata cannot self-certify that missing runtime behavior. Keep these
+    paths available only for explicitly nonproduction evaluation.
+    """
+    if env.get("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+        raise SecurityConfigurationError(
+            "production target execution requires destination-atomic authorization and fencing; "
+            "generic transports are unqualified"
+        )
+    return invocation
+
+
 def resolve_target(target_id: Any, protocol: str, capability: str,
                    *, env: Mapping[str, str] | None = None,
                    agent_id: str | None = None) -> dict[str, Any] | None:
@@ -112,7 +129,7 @@ def resolve_target(target_id: Any, protocol: str, capability: str,
         if not isinstance(command, str) or not command.strip() or not isinstance(args, list) or not all(
                 isinstance(arg, str) for arg in args):
             raise SecurityConfigurationError("invalid administrator-defined executable or arguments")
-        return {"kind": kind, "command": command, "args": list(args)}
+        return _qualified_invocation({"kind": kind, "command": command, "args": list(args)}, env)
 
     address = record.get("base_url")
     if not isinstance(address, str):
@@ -172,4 +189,4 @@ def resolve_target(target_id: Any, protocol: str, capability: str,
         if not isinstance(name, str) or not name:
             raise SecurityConfigurationError("invalid agent_name")
         invocation["agent_name"] = name
-    return invocation
+    return _qualified_invocation(invocation, env)
