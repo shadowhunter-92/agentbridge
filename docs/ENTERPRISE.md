@@ -53,7 +53,9 @@ require("viewer", "identities:write")   # raises AccessDenied
 
 ## 3. OIDC / JWT operator auth (SSO)
 
-Replace the shared admin key with per-operator SSO. Operators present a JWT from your IdP
+Add per-operator SSO alongside the administrator-key path. A matching `X-Admin-Key`
+still grants administrator access; enabling OIDC does not create an SSO-only service.
+Production still requires a stable configured administrator key. Operators present a JWT from your IdP
 (Okta, Azure AD, Auth0, Keycloak); the signature is verified and a role claim maps to an
 RBAC role. Code: `src/api/auth_oidc.py` (requires `pyjwt`, imported lazily).
 

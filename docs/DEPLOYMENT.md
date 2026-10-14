@@ -137,3 +137,11 @@ refresh; a brief global refresh cooldown bounds unknown-kid traffic. Expired
 keys fail closed during issuer outages. Authentication I/O runs off the event
 loop. Configure issuer keys, TLS and retention according to your deployment's
 security requirements.
+
+## Bounded routing telemetry
+
+Unknown protocol identifiers are rejected before governance admission. The shared
+metric consumer maps custom/unknown protocol names and unknown decisions to
+`<other>`; custom execution registries remain usable. Capability metrics retain
+at most 128 distinct names of at most 128 characters per process, then aggregate
+overflow into `<other>`. These metric limits are not tenant or execution quotas.

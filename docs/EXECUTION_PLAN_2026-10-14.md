@@ -1,5 +1,10 @@
 # AgentBridge execution plan — October 14, 2026
 
+> The [handoff register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md) is the current
+> requirement and priority authority. Milestone P0–P5 names below are development
+> phases, distinct from the security release priorities P0/P1/P2. Protocol PR #53
+> is CI-verified for its bounded subset; broader conformance remains open.
+
 The next work is sequenced by acceptance gates, not an unsupported production
 date. Keep the shared OSS/Trust/Evidence kernel coherent; do not fork four
 incompatible implementations or label unfinished internal engineering external.

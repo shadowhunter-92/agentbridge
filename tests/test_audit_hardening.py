@@ -26,8 +26,9 @@ def test_audit_view_refreshes_from_other_worker(tmp_path: Path):
         b.close()
 
 
-def test_production_disallows_ephemeral_audit_checkpoint_and_retention(monkeypatch):
-    monkeypatch.setenv("AGENTBRIDGE_ENV", "production")
+@pytest.mark.parametrize("environment", ["prod", "production"])
+def test_production_disallows_ephemeral_audit_checkpoint_and_retention(monkeypatch, environment):
+    monkeypatch.setenv("AGENTBRIDGE_ENV", environment)
     from src.api.control_plane import app, ADMIN_KEY
     client = TestClient(app)
     h = {"X-Admin-Key": ADMIN_KEY}

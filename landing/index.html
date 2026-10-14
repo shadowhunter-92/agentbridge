@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>AgentBridge — Make every agent call provable</title>
-<meta name="description" content="The neutral governance &amp; audit layer for multi-agent systems. Translate across MCP, A2A, ACP, OpenAI, Gemini &amp; AGNTCY — with identity, budgets, and a tamper-evident audit trail. Any protocol. Any cloud. EU AI Act-ready." />
-<meta property="og:title" content="AgentBridge — Make every agent call provable" />
-<meta property="og:description" content="Neutral governance + tamper-evident audit for AI agents, across every protocol. EU AI Act-ready." />
+<title>AgentBridge — auditable agent workflows</title>
+<meta name="description" content="Experimental open-source alpha for selected protocol translations, governed execution paths and signed evidence verification. Synthetic evaluation only; production acceptance remains open." />
+<meta property="og:title" content="AgentBridge — auditable agent workflows" />
+<meta property="og:description" content="A bounded engineering alpha for selected protocol translations, governance and evidence verification. No compliance certification or production acceptance." />
 <meta property="og:type" content="website" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -197,7 +197,7 @@
     <div class="nav-links reveal d2">
       <a href="#demo">Demo</a>
       <a href="#problem">Problem</a>
-      <a href="#eu">EU AI Act</a>
+      <a href="#eu">Acceptance gates</a>
       <a href="#neutral">Why neutral</a>
     </div>
     <div class="nav-ctas reveal d2">
@@ -209,9 +209,9 @@
   <!-- HERO -->
   <header class="hero">
     <div>
-      <div class="eyebrow reveal d1"><span class="pulse"></span>The EU AI Act starts Aug 2, 2026</div>
-      <h1 class="reveal d2">Your agents are about to be <em>regulated.</em></h1>
-      <p class="lede reveal d3">AgentBridge is the <strong>neutral governance &amp; audit layer</strong> for multi-agent systems. Translate across MCP, A2A, ACP, OpenAI, Gemini &amp; AGNTCY — and give every call a <strong>verified identity, a budget, and a tamper-evident audit trail.</strong> Any protocol. Any cloud.</p>
+      <div class="eyebrow reveal d1"><span class="pulse"></span>Experimental engineering alpha</div>
+      <h1 class="reveal d2">Understand what your agents <em>authorized.</em></h1>
+      <p class="lede reveal d3">AgentBridge explores a <strong>portable governance &amp; evidence layer</strong> alongside existing agent frameworks. Translate selected tool-call shapes and apply <strong>identity, approval, budget and audit controls</strong> on explicitly governed paths. Use synthetic or read-only workflows while the production gates remain open.</p>
 
       <form class="waitlist reveal d4" id="wl1" action="https://formspree.io/f/xpqepnrl" method="POST">
         <input type="email" name="email" placeholder="you@company.com" required aria-label="Email" />
@@ -226,24 +226,24 @@
         <span class="lbl">One mesh:</span>
         <span class="chip">MCP</span><span class="chip">A2A</span><span class="chip">ACP</span>
         <span class="chip">OpenAI</span><span class="chip">Gemini</span><span class="chip">AGNTCY</span>
-        <span class="chip"><b>+ any next</b></span>
+        <span class="chip"><b>bounded subsets</b></span>
       </div>
     </div>
 
     <!-- audit ledger visual -->
     <div class="audit reveal d4" aria-hidden="true">
       <div class="audit-head">
-        <div class="audit-title"><b>audit.log</b> · tamper-evident</div>
+        <div class="audit-title"><b>audit.log</b> · illustrative</div>
         <div class="badge" id="badge"><span id="badge-mark">✓</span> <span id="badge-text">integrity verified</span></div>
       </div>
       <div class="ledger" id="ledger">
         <div class="row"><div class="node"></div><div class="decision allow">ALLOW</div><div class="route"><b>openai</b> → mcp · add</div><div class="hash">9451a7…</div></div>
-        <div class="row" id="trow"><div class="node"></div><div class="decision allow">ALLOW</div><div class="route"><b>a2a</b> → acp · transfer</div><div class="hash">0f625c…</div></div>
+        <div class="row" id="trow"><div class="node"></div><div class="decision allow">ALLOW</div><div class="route"><b>a2a</b> → acp · synthetic-write</div><div class="hash">0f625c…</div></div>
         <div class="row"><div class="node"></div><div class="decision deny">DENY</div><div class="route"><b>gemini</b> → mcp · delete</div><div class="hash">ef37a9…</div></div>
         <div class="row"><div class="node"></div><div class="decision allow">ALLOW</div><div class="route"><b>acp</b> → mcp · add</div><div class="hash">23e4da…</div></div>
       </div>
       <div class="audit-foot">
-        <div class="audit-cap">Each entry hashes the previous one. Edit a record — the chain breaks.</div>
+        <div class="audit-cap">Illustrative hashes. Detecting database rollback also requires independently trusted anchors.</div>
         <button class="tamper-btn" id="tamper" type="button">Tamper with a record →</button>
       </div>
     </div>
@@ -254,12 +254,12 @@
 <section id="demo">
   <div class="wrap">
     <div class="kicker">See it run</div>
-    <h2 class="sec-title">The whole product in twelve seconds.</h2>
-    <p class="sec-sub">One unknown agent blocked. Six protocols — OpenAI, Gemini, ACP, AGNTCY, A2A, MCP — all reaching the same live MCP tool through the mesh. Budget tracked. Audit chain hashed, verified, tamper-evident.</p>
+    <h2 class="sec-title">A bounded synthetic demonstration.</h2>
+    <p class="sec-sub">The repository includes a synthetic local MCP demo with identity, budget and audit examples. Selected tool-call translations across six adapter families do not establish full protocol lifecycle conformance or external destination safety.</p>
     <div class="demo-wrap">
       <img src="demo.gif" alt="AgentBridge demo: an unknown agent is blocked, then six different protocols each reach the same live MCP tool through the governed mesh, with a tamper-evident audit chain verified at the end." loading="lazy" />
     </div>
-    <p class="demo-cap">Real output. Reproduce locally: <b>python examples/demo_story.py</b></p>
+    <p class="demo-cap">Illustrative recording; run the current code for actual output: <b>python examples/demo_story.py</b></p>
   </div>
 </section>
 
@@ -267,12 +267,12 @@
 <section id="problem">
   <div class="wrap">
     <div class="kicker">The problem</div>
-    <h2 class="sec-title">Agents talk in different dialects — and nobody's watching the conversation.</h2>
-    <p class="sec-sub">Every protocol speaks differently, so teams hand-wire each pair. And once agents start calling each other and your tools, there's no cost control and no record of who did what — right as regulators start asking.</p>
+    <h2 class="sec-title">Protocol translation and action accountability are different problems.</h2>
+    <p class="sec-sub">Existing frameworks and gateways already provide useful controls. AgentBridge investigates a narrower question: can an authorized action remain recoverable and auditable when a connection fails after execution?</p>
     <div class="cards">
       <div class="card"><div class="num">01 — fragmentation</div><h3>Six protocols, no common ground</h3><p>MCP, A2A, ACP, OpenAI &amp; Gemini function-calling, AGNTCY — each a different shape. Bridges built "from the spec" quietly break on real agents.</p></div>
-      <div class="card"><div class="num">02 — no control</div><h3>Agents spend with no leash</h3><p>Once agents call tools and each other, there's no budget, no approval gate, no identity behind the call. Costs and blast radius are unbounded.</p></div>
-      <div class="card"><div class="num">03 — no proof</div><h3>No audit when it matters</h3><p>When something goes wrong — or an auditor asks — there's no tamper-evident record of what each agent did. The EU AI Act now requires one.</p></div>
+      <div class="card"><div class="num">02 — no control</div><h3>Agents spend with no leash</h3><p>Controls depend on the execution path. Direct SDK calls require their own destination trust, identity and spending enforcement.</p></div>
+      <div class="card"><div class="num">03 — no proof</div><h3>No audit when it matters</h3><p>A signed statement is not proof of fulfillment. Authoritative readback, independent trust administration and retained audit anchors require separate acceptance.</p></div>
     </div>
   </div>
 </section>
@@ -280,23 +280,23 @@
 <!-- EU AI ACT -->
 <section id="eu">
   <div class="wrap">
-    <div class="kicker">EU AI Act — Aug 2, 2026</div>
-    <h2 class="sec-title">Built for the record-keeping the law now demands.</h2>
-    <p class="sec-sub">High-risk agents (credit, hiring, healthcare, insurance) must log their behavior, keep it, and stay under human oversight. AgentBridge maps to those obligations by design.</p>
+    <div class="kicker">Engineering and external acceptance</div>
+    <h2 class="sec-title">What remains before production acceptance.</h2>
+    <p class="sec-sub">Internal CI exercises bounded reference implementations. Independent security review, destination ownership, network enforcement, recovery and trusted release provenance remain open. No legal compliance or certification is claimed.</p>
     <div class="eu">
-      <div class="eu-cell req"><div class="art">Article 12 · logging</div><div class="req-t">Automatic event logging across the workflow</div><div class="req-d">Timestamped events, not just final outputs.</div></div>
+      <div class="eu-cell req"><div class="art">Audit integrity</div><div class="req-t">Review every enforced path</div><div class="req-d">Uninstrumented paths are not automatically protected.</div></div>
       <div class="eu-cell cap"><span class="tick">✓</span> Per-call, tamper-evident (hash-chained) audit trail</div>
 
-      <div class="eu-cell req"><div class="art">Article 19 · retention</div><div class="req-t">Keep logs ≥ 6 months</div><div class="req-d">Durable, append-only storage.</div></div>
+      <div class="eu-cell req"><div class="art">Retention and custody</div><div class="req-t">Independently administered retention</div><div class="req-d">Durable holds and current independent anchors are required.</div></div>
       <div class="eu-cell cap"><span class="tick">✓</span> Durable persistence, exportable for auditors</div>
 
-      <div class="eu-cell req"><div class="art">Article 14 · oversight</div><div class="req-t">Effective human oversight</div><div class="req-d">Intervene, approve, or stop.</div></div>
+      <div class="eu-cell req"><div class="art">Execution and recovery</div><div class="req-t">Exact action approval and UNKNOWN recovery</div><div class="req-d">Cancellation does not roll back an external effect.</div></div>
       <div class="eu-cell cap"><span class="tick">✓</span> Approval gates · budgets · identity revocation</div>
 
-      <div class="eu-cell req"><div class="art">Traceability · attribution</div><div class="req-t">Know which agent did what</div><div class="req-d">Provable, not guessed.</div></div>
+      <div class="eu-cell req"><div class="art">Trust administration</div><div class="req-t">Verify identity and authoritative outcomes</div><div class="req-d">Separate keys do not establish separate custody.</div></div>
       <div class="eu-cell cap"><span class="tick">✓</span> Cryptographic agent identity (Ed25519 DID)</div>
     </div>
-    <p class="disclaimer">We provide the capabilities that support compliance — we don't make you compliant by ourselves. Not legal advice.</p>
+    <p class="disclaimer">Engineering alpha; unrestricted consequential-action production remains NO-GO. Signatures authenticate claims, not physical or financial fulfillment.</p>
   </div>
 </section>
 
@@ -304,21 +304,21 @@
 <section id="neutral">
   <div class="wrap">
     <div class="kicker">Why neutral</div>
-    <h2 class="sec-title">The Switzerland of agent infrastructure.</h2>
+    <h2 class="sec-title">Designed to work alongside your existing stack.</h2>
     <div class="split">
       <ul class="pos-list">
-        <li><span class="b">[01]</span><span class="t"><b>No cloud lock-in.</b> <span>Runs anywhere. Not tied to Azure, Google, or one vendor's gateway.</span></span></li>
-        <li><span class="b">[02]</span><span class="t"><b>Protocol-agnostic by design.</b> <span>One canonical hub — add a protocol with one adapter, not N² mappings. Validated against each protocol's real SDK.</span></span></li>
-        <li><span class="b">[03]</span><span class="t"><b>Governance across all of them.</b> <span>One identity, budget, and audit model for every protocol — not just MCP.</span></span></li>
-        <li><span class="b">[04]</span><span class="t"><b>Open core.</b> <span>Self-host the mesh for free; pay for hosted governance &amp; compliance.</span></span></li>
+        <li><span class="b">[01]</span><span class="t"><b>No cloud lock-in.</b> <span>Python components and bounded deployment references; each environment needs qualification.</span></span></li>
+        <li><span class="b">[02]</span><span class="t"><b>Protocol-agnostic by design.</b> <span>One canonical tool-call hub with explicit unsupported semantics and a version-pinned reference test subset.</span></span></li>
+        <li><span class="b">[03]</span><span class="t"><b>Governance on enforced paths.</b> <span>One shared governance kernel; direct transports require embedding controls.</span></span></li>
+        <li><span class="b">[04]</span><span class="t"><b>Open core.</b> <span>Apache-2.0 source. Trust, Evidence and Enterprise are proposed offerings; paid demand is unvalidated.</span></span></li>
       </ul>
       <div class="mesh-vis" aria-hidden="true">
         <div class="lane"><span class="src">openai</span><span class="arrow">──▶</span> translate + govern</div>
         <div class="lane"><span class="src">a2a</span><span class="arrow">──▶</span> translate + govern</div>
         <div class="lane"><span class="src">acp</span><span class="arrow">──▶</span> translate + govern</div>
         <div class="hub">▼  AgentBridge mesh  ▼<br/>identity · budget · audit</div>
-        <div class="lane"><span class="src">→ mcp</span> deliver to any target agent</div>
-        <div class="lane"><span class="src">→ gemini</span> &nbsp;·&nbsp; any protocol out</div>
+        <div class="lane"><span class="src">→ mcp</span> deliver to an approved compatible target</div>
+        <div class="lane"><span class="src">→ gemini</span> &nbsp;·&nbsp; supported subset out</div>
       </div>
     </div>
   </div>
@@ -327,7 +327,7 @@
 <!-- FINAL CTA -->
 <section class="final" id="join">
   <div class="wrap">
-    <h2>Make every agent call <em>provable.</em></h2>
+    <h2>Evaluate a bounded agent <em>workflow.</em></h2>
     <p class="lede">Get early access. Tell us what your agents do — we'll build the governance you actually need.</p>
     <form class="waitlist" id="wl2" action="https://formspree.io/f/xpqepnrl" method="POST">
       <input type="email" name="email" placeholder="you@company.com" required aria-label="Email" />
@@ -343,10 +343,10 @@
   <div class="wrap">
     <div class="foot-row">
       <div class="logo"><span class="dot"></span>AgentBridge</div>
-      <div>Translate · route · verify · govern — any protocol, one mesh.</div>
+      <div>Selected translations · enforced governance · bounded evidence verification.</div>
       <div>© 2026 · early access</div>
     </div>
-    <p class="foot-honest">An early-stage project. We translate and govern agent calls across six protocols today, with a tamper-evident audit trail aligned to the EU AI Act. We're talking to early users to build the right thing — if multi-agent governance is a pain for you, we want to hear it.</p>
+    <p class="foot-honest">An experimental engineering alpha. Three independent evaluator reports, five qualified buyer interviews and independent security acceptance remain goals. Invitations are not completed evaluations or paid pilots. No production readiness or legal compliance is claimed.</p>
   </div>
 </footer>
 

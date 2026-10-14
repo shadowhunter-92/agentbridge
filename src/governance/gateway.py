@@ -72,6 +72,9 @@ class GovernanceGateway:
         signed_body: Optional[bytes] = None,
         signed_nonce: Optional[str] = None,
     ) -> Dict[str, Any]:
+        # Library callers receive the same fail-closed protocol admission as HTTP.
+        self.registry.get(src_proto)
+        self.registry.get(dst_proto)
         t0 = time.monotonic()
         with span("gateway.route_call", {
             "agent_id": agent_id, "src": src_proto, "dst": dst_proto, "cost": cost,

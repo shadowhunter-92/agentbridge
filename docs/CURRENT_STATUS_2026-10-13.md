@@ -1,5 +1,10 @@
 # Current acceptance — local audit, October 13, 2026
 
+> **Historical checkpoint.** This record applies to its stated commits and test
+> environment. PRs #51, #52 and #41 subsequently merged; main baseline is
+> `483bc98234ced2b876a6b296a1e1fd292747942c`. See the
+> [current handoff register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md) for ongoing work.
+
 **Engineering alpha; unrestricted consequential-action production NO-GO.**
 Source baseline is integration cc705be8fff535883eee2876c88b0cca4e54da61 plus
 the consolidated fixes. The initial audit was completed locally without online

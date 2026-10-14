@@ -27,7 +27,7 @@ python -m pytest tests/ -q
 python examples/quickstart.py
 ```
 
-The PostgreSQL integration tests require an isolated disposable PostgreSQL database and the `AGENTBRIDGE_TEST_PG` environment variable; without it, those tests skip. For CI-controlled failure drills, follow the explicit scope and opt-in procedures in the draft [operator drill documentation](https://github.com/shadowhunter-92/agentbridge/blob/release/r4-internal-gates-2026-10/docs/PRODUCTION_OPERATOR_DRILLS.md). Never run recovery drills against real customer records.
+The PostgreSQL integration tests require an isolated disposable PostgreSQL database and the `AGENTBRIDGE_TEST_PG` environment variable; without it, those tests skip. For CI-controlled failure drills, follow the explicit scope and opt-in procedures in the [operator drill documentation](docs/PRODUCTION_OPERATOR_DRILLS.md). Never run recovery drills against real customer records.
 
 ## Good first contributions
 
@@ -35,7 +35,7 @@ The PostgreSQL integration tests require an isolated disposable PostgreSQL datab
 2. Add precise negative tests for malformed/unsupported protocol messages.
 3. Document a reproducible interoperability limitation using a pinned SDK.
 4. Improve validation, error messages, typing, accessibility and troubleshooting.
-5. Test the **draft** Trust/Evidence SDK with synthetic state and report measured setup effort.
+5. Test the **alpha** Trust/Evidence SDK with synthetic state and report measured setup effort.
 
 ## Pull request checklist
 
@@ -51,11 +51,11 @@ All security-critical behavior must fail closed on invalid identity, unexpected 
 
 ## Engineering workflow
 
-Contribute from your own fork or a narrowly scoped branch. The default `main` branch is the public prototype. The current reconciled engineering candidate is draft [PR #41](https://github.com/shadowhunter-92/agentbridge/pull/41), incorporating R4 and main. It is not merged or production-approved. Any license, copyright, security-sensitive protocol, release or GitHub Actions change must receive explicit owner review; the CODEOWNERS file requires a matching enforced branch ruleset to be effective. CI passing is necessary but not equivalent to security certification.
+Contribute from your own fork or a narrowly scoped branch. The default `main` branch includes the reviewed engineering alpha from [PR #41](https://github.com/shadowhunter-92/agentbridge/pull/41) and audit fixes. It is not production-approved. Use an exact reviewed commit and the current handoff register. Any license, copyright, security-sensitive protocol, release or GitHub Actions change must receive explicit owner review; the CODEOWNERS file requires a matching enforced branch ruleset to be effective. CI passing is necessary but not equivalent to security certification.
 
 ## Developer evaluations
 
-Independent engineering feedback is welcome **now** for synthetic and read-only workflows. See [OSS evaluator kit](https://github.com/shadowhunter-92/agentbridge/blob/integration/r4-main-reconciliation-2026-10/docs/OSS_EVALUATION_KIT.md). Share installation time, existing-stack comparison, error cases and reproducible evidence. Do not connect the alpha to unsupervised consequential customer actions.
+Independent engineering feedback is welcome **now** for synthetic and read-only workflows. See [OSS evaluator kit](docs/OSS_EVALUATION_KIT.md). Share installation time, existing-stack comparison, error cases and reproducible evidence. Do not connect the alpha to unsupervised consequential customer actions.
 
 Maintainers may ask for changes or decline proposals that expand unsupported protocol/security claims without end-to-end evidence.
 

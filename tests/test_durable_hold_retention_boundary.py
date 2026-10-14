@@ -5,7 +5,8 @@ from src.governance.audit import AuditLog
 from src.governance.audit_trust import AuditTrustStore
 
 
-def test_durable_hold_blocks_other_connection_and_direct_store(tmp_path, monkeypatch):
+@pytest.mark.parametrize("environment", ["prod", "production"])
+def test_durable_hold_blocks_other_connection_and_direct_store(tmp_path, monkeypatch, environment):
     a = SqliteStore(str(tmp_path / "audit.db"))
     b = SqliteStore(str(tmp_path / "audit.db"))
     try:
@@ -18,7 +19,7 @@ def test_durable_hold_blocks_other_connection_and_direct_store(tmp_path, monkeyp
         with pytest.raises(PermissionError, match="durable legal hold"):
             b.truncate_audit_before(1)
         assert len(a.load_audit()) == 3
-        monkeypatch.setenv("AGENTBRIDGE_ENV", "production")
+        monkeypatch.setenv("AGENTBRIDGE_ENV", environment)
         trust.set_hold("case-1", False)
         with pytest.raises(PermissionError, match="production audit retention"):
             b.truncate_audit_before(1)

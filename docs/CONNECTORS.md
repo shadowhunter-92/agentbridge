@@ -1,64 +1,38 @@
-# Connectors — reach any tool, without building connectors
+# Connectors and supported protocol servers
 
-A common question: "does AgentBridge have a GitHub / Slack / Notion connector?" The honest,
-architectural answer is that **you don't build connectors for AgentBridge — you point it at the
-tool's existing protocol server.** That's the whole advantage of being a *bridge* instead of a
-*connector catalog*.
+AgentBridge translates a documented subset of tool-call shapes. It can connect
+to a compatible, operator-approved protocol server through an explicitly selected
+transport. Compatibility, authentication and permissions must be verified for
+that server and its pinned SDK/version; a protocol name alone is not qualification.
 
-## The model
+## Bounded local example
 
-Most real tools now ship an **MCP server** (and increasingly an **A2A agent**). AgentBridge
-already speaks MCP, A2A, ACP, OpenAI, Gemini and AGNTCY — so it routes a call from *any* of
-those to the tool's server, and (optionally) governs it with identity / budget / audit.
+Install the project with its MCP extra and run `python examples/quickstart.py`.
+That example translates an OpenAI-shaped call and invokes the bundled synthetic
+MCP `add` tool over stdio. It does not need third-party credentials.
 
-```
-Your agent (any protocol) ──▶ AgentBridge (translate + govern) ──▶ Tool's MCP/A2A server ──▶ Tool
-```
+`AgentClient`, `InlineProxy`, `bridge_tool_call` and direct transport helpers are
+developer/embedding interfaces. They do not automatically enforce the HTTP
+gateway's signed-agent identity, approvals, budgets or audit policy. The embedding
+application owns their destination selection and security controls.
 
-No per-tool adapter code. No OAuth refresh logic to maintain. When the tool updates its MCP
-server, you get the update for free.
+## Governed execution
 
-## Worked example: GitHub
+The supported HTTP governance path is `/control/route`, using a signed agent
+request and an operator-configured `target_id`. Production configuration also
+requires agent/target permissions, capability and cost policy, durable operation
+identity and the documented network boundary. Raw agent-selected target
+configurations are rejected. Governance covers only that enforced path.
 
-GitHub ships an MCP server. Reaching it through AgentBridge — discover its tools, call it
-directly, or bridge an OpenAI-shaped call to it, governed — is `examples/github_mcp_bridge.py`:
+The standalone stdio MCP gateway has a separate outbound origin allowlist and
+proxy gate. Enabling a bridge tool there does not add governance budget or
+approval checks. External systems still require their own authentication, OAuth
+lifecycle, destination enforcement and authoritative readback integration.
 
-```bash
-set GITHUB_PERSONAL_ACCESS_TOKEN=ghp_xxx
-python examples/github_mcp_bridge.py     # needs Node (the GitHub MCP server runs via npx)
-```
+See [protocol compatibility](PROTOCOL_COMPATIBILITY_2026.md),
+[security policy](../SECURITY.md), [framework integration](INTEGRATIONS.md), and
+[current handoff acceptance](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md).
 
-Or with the human client:
-
-```bash
-python -m src.serve.agent_client discover --mcp "npx -y @modelcontextprotocol/server-github"
-python -m src.serve.agent_client call --mcp "npx -y @modelcontextprotocol/server-github" \
-    --tool search_repositories --args '{"query":"agent governance"}'
-```
-
-## Tools you can reach today (a sample — all via their MCP servers)
-
-| Tool | Server | How |
-|------|--------|-----|
-| **GitHub** | official GitHub MCP server | `npx -y @modelcontextprotocol/server-github` |
-| **Slack** | Slack MCP server | community/official MCP server (stdio/HTTP) |
-| **Notion** | Notion MCP server | official Notion MCP server |
-| **Sentry / Linear / Stripe / Postgres / Filesystem / …** | their MCP servers | point `--mcp` at the server command |
-
-The catalog of public MCP servers is large and growing (see e.g. the `awesome-mcp-servers`
-list); each one is reachable through AgentBridge with governance applied, the moment you point
-the bridge at it.
-
-## When *would* you build a native connector?
-
-Only if a paying customer needs a tool that has **no** MCP/A2A server and you want to ship it
-first-party. Then it goes in `src/serve/` as an MCP-tool the bridge can serve. Until then,
-building and maintaining an OAuth connector catalog (the Composio model) is a different,
-full-time product — not where a neutral bridge's value lies.
-
-## Governance applies to every tool call
-
-Because the call flows through the gateway, the same controls (Ed25519 identity, per-agent
-budget, human-in-the-loop approval, hash-chained audit, policy rules) apply to a GitHub or
-Slack call exactly as they do to any other — see `docs/ENTERPRISE.md`. That is the thing a raw
-connector catalog does not give you.
+No server catalog is a promise that every tool or lifecycle feature works.
+Evaluate each integration with synthetic/read-only state before proposing a
+consented external workflow. Existing Apache-2.0 rights remain unchanged.
