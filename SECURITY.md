@@ -1,68 +1,33 @@
-# Security Policy
+# AgentBridge Security Policy
 
-## Supported Versions
+**Status: experimental engineering alpha.** No released build is certified for consequential customer actions, financial transactions, or regulated operations. Do not rely on internal CI as an independent audit.
 
-| Version | Supported |
-|---------|-----------|
-| 0.1.x   | ✅ Yes    |
-| < 0.1.0 | ❌ No     |
+## Supported scope and versions
 
-## Reporting a Vulnerability
+The public `main` branch and draft integration PR #41 have different capabilities. No version has completed the production acceptance process. The `pyproject.toml` package version alone is not proof of a published, supported, signed release. Quote the exact Git commit SHA, Python version and supported protocol subset in reports.
 
-If you discover a security vulnerability in AgentBridge, please report it responsibly.
+## Reporting vulnerabilities privately
 
-**Do NOT open a public issue.** Instead, please send an email to the maintainers with:
+Do **not** open a public issue, pull request, discussion or comment containing an exploitable vulnerability, credentials, private keys or customer data.
 
-- A description of the vulnerability
-- Steps to reproduce (if applicable)
-- The version affected
-- Any potential impact assessment
+Use GitHub's **Report a vulnerability** option under this repository's Security tab **if private vulnerability reporting is enabled**. If it is not enabled, contact the repository owner via a verified private channel from their GitHub profile to arrange confidential disclosure. Do not send sensitive details to an unverified address.
 
-We will respond within 48 hours and work with you to verify and fix the issue before any public disclosure.
+Provide an affected commit, minimal non-sensitive reproduction, impact and expected behavior. Maintainers will triage as resources allow; no guaranteed 48-hour response or remediation service level is currently offered. Do not perform destructive testing on third-party systems without written permission.
 
-## Security Design Decisions
+## Threat boundaries
 
-AgentBridge makes the following security trade-offs transparently:
+- Authorization, approvals and budget policy apply only to supported and enforced dispatch paths. Uninstrumented SDK calls and third-party targets are not automatically protected.
+- Destination fencing must be enforced **at the real action destination**. The PostgreSQL/SQLite reference implementations do not establish universal exactly-once effects.
+- Ed25519 signatures authenticate the signer's claims. They do not alone prove physical fulfillment, financial settlement, or independent custody.
+- Real-world verification requires independent access to authoritative target state and appropriately controlled keys. The AWS two-host test exercised separate-host signing but not separate organizational administration.
+- Production CNI and workload-authenticated egress, arbitrary third-party destination enforcement, split-brain-safe automated HA, and independent release provenance remain unqualified.
+- TLS must be enforced at an appropriate transport boundary. Enforce trusted-origin outbound traffic, hostname verification and explicit deny policies.
+- Do not commit API keys, database URLs containing credentials, private signing keys, exported secrets, production data or unredacted failure logs.
 
-### Agent Identity
-- Uses **Ed25519** digital signatures for agent identity verification
-- Each agent has a unique DID (Decentralized Identifier)
-- Signatures are verified on every call to `/control/route`
-- Nonce replay protection is implemented
+## Operator safeguards
 
-### Audit Trail
-- Every call is recorded in a **tamper-evident SHA-256 hash chain**
-- The chain append operation is atomic at the store level
-- Audit logs can be exported for external compliance review
-- The chain is verified on read to detect tampering
+Use least-privilege per-service principals, separate write and observer rights, secure key rotation/revocation, durable audit retention and off-system backup. Fail closed on unresolved external outcomes. Isolate synthetic testing from actual payment, employment, medical and other consequential workflows.
 
-### TLS / Transport Security
-- AgentBridge does NOT implement TLS at the application layer
-- TLS is expected to be terminated at a reverse proxy (nginx, Caddy, Cloudflare)
-- For production deployments, always run behind HTTPS
+For the latest engineering acceptance limitations see [integration security review](docs/INTEGRATION_SECURITY_REVIEW_2026.md), [AWS two-host evidence](docs/AWS_TWO_HOST_QUALIFICATION_2026-10-13.md), and [code/IP protection policy](docs/CODE_PROTECTION_AND_IP_POLICY_2026.md).
 
-### Secrets
-- `AGENTBRIDGE_ADMIN_KEY` must be a strong, randomly generated key in production
-- Never commit the admin key to version control
-- Use environment variables or secret management (HashiCorp Vault, AWS Secrets Manager, etc.)
-
-### Known Limitations
-- The approval queue is currently **in-memory** (not store-backed)
-  - For single-instance deployments, this is fine
-  - For multi-instance deployments, traffic must be pinned to one instance
-- The default in-memory store is **per-process** and not suitable for multi-worker deployments
-  - Always set `AGENTBRIDGE_DB` to a SQLite path or postgres:// URL for production
-- OIDC/JWT SSO is supported but optional — if not configured, admin key is the only auth mechanism
-
-## Security Best Practices for Operators
-
-1. **Always set a strong `AGENTBRIDGE_ADMIN_KEY`** in production (use `secrets.token_hex(32)`)
-2. **Always configure a durable database** (`AGENTBRIDGE_DB`) for production
-3. **Always run behind HTTPS** — terminate TLS at a reverse proxy
-4. **Rotate agent keys** periodically — each agent's DID key can be regenerated
-5. **Monitor the audit log** for unusual patterns (high cost, repeated denials, off-hours activity)
-6. **Set up OIDC SSO** for operator access if you have multiple operators
-
-## Acknowledgments
-
-We will publicly acknowledge security researchers who report valid vulnerabilities (with their permission).
+This policy does not promise security certification, regulatory compliance or a fixed incident response SLA.

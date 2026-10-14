@@ -11,6 +11,9 @@ longer enough — the caller must sign with the matching private key.
 
 import hashlib
 import time
+import os
+
+from .durable_replay import claim_nonce
 from typing import Dict, Tuple
 
 from .identity import IdentityRegistry
@@ -48,6 +51,7 @@ class RequestAuthenticator:
     def __init__(self, identities: IdentityRegistry, nonce_ttl: int = 300):
         self.identities = identities
         self.nonces = NonceCache(nonce_ttl)
+        self.nonce_ttl = nonce_ttl
 
     def authenticate(self, agent_id: str, nonce: str, body: bytes,
                      signature_hex: str) -> Tuple[bool, str]:
@@ -55,12 +59,15 @@ class RequestAuthenticator:
             return False, "unknown or revoked identity"
         if not nonce:
             return False, "missing nonce"
-        if not self.nonces.check_and_store(nonce):
-            return False, "nonce replay detected"
         try:
             sig = bytes.fromhex(signature_hex)
         except Exception:
             return False, "malformed signature"
         if not self.identities.verify_signature(agent_id, canonical_payload(agent_id, nonce, body), sig):
             return False, "signature verification failed"
+        if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+            if not claim_nonce(self.identities.store, agent_id, nonce, self.nonce_ttl):
+                return False, "nonce replay detected or nonce timestamp invalid"
+        elif not self.nonces.check_and_store(nonce):
+            return False, "nonce replay detected"
         return True, "authenticated"

@@ -11,7 +11,9 @@ Commands:
 """
 
 import argparse
+import importlib.util
 import json
+import os
 import runpy
 import sys
 
@@ -20,10 +22,22 @@ from . import __version__
 
 def _serve(args):
     import uvicorn
-    uvicorn.run("src.api.control_plane:app", host=args.host, port=args.port, reload=args.reload)
+    # Production-grade defaults: no reload, explicit host/port, graceful drain via
+    # AGENTBRIDGE_SHUTDOWN_GRACE. Reload is opt-in (--reload) for development only.
+    uvicorn.run(
+        "src.api.control_plane:app",
+        host=args.host,
+        port=args.port,
+        reload=args.reload,
+        workers=args.workers if not args.reload else 1,  # reload + workers is incompatible
+        log_level=args.log_level,
+        access_log=False,  # we have our own structured middleware; uvicorn access logs are noisy
+        timeout_graceful_shutdown=int(float(os.getenv("AGENTBRIDGE_SHUTDOWN_GRACE", "10"))),  # uvicorn wants SECONDS
+    )
 
 
 def _mcp(args):
+    _require_mcp()
     # Mirrors `python -m src.serve.mcp_gateway` so we don't assume a specific entrypoint name.
     runpy.run_module("src.serve.mcp_gateway", run_name="__main__")
 
@@ -40,11 +54,18 @@ def _translate(args):
 
 
 def _demo(args):
-    runpy.run_module("examples.demo_story", run_name="__main__")
+    _require_mcp()
+    runpy.run_module("src.demos.demo_story", run_name="__main__")
 
 
 def _quickstart(args):
-    runpy.run_module("examples.quickstart", run_name="__main__")
+    _require_mcp()
+    runpy.run_module("src.demos.quickstart", run_name="__main__")
+
+
+def _require_mcp():
+    if importlib.util.find_spec("mcp") is None:
+        raise SystemExit("This command requires the optional MCP SDK. Install this wheel with its [mcp] extra, or run python -m pip install -e '.[mcp]' from the source checkout.")
 
 
 def main():
@@ -58,7 +79,12 @@ def main():
     sp = sub.add_parser("serve", help="Start the control-plane HTTP API")
     sp.add_argument("--host", default="0.0.0.0")
     sp.add_argument("--port", type=int, default=8000)
-    sp.add_argument("--reload", action="store_true")
+    sp.add_argument("--reload", action="store_true",
+                    help="dev mode: auto-reload on file changes (disables --workers)")
+    sp.add_argument("--workers", type=int, default=1,
+                    help="uvicorn worker processes (requires a durable AGENTBRIDGE_DB)")
+    sp.add_argument("--log-level", default=os.getenv("AGENTBRIDGE_LOG_LEVEL", "info").lower(),
+                    choices=["critical", "error", "warning", "info", "debug", "trace"])
 
     sub.add_parser("mcp", help="Start the drop-in MCP server (stdio)")
     sub.add_parser("demo", help="Run the 60-second demo story")

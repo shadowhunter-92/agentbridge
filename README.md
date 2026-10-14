@@ -13,16 +13,18 @@ budgets, approvals and audit history. The long-term goal is a portable trust
 layer that works **alongside** existing agent frameworks and gateways—not
 another all-in-one agent platform.
 
-> **Release status: experimental alpha (October 2026).** The default `main`
-> branch contains the original protocol/governance prototype. Production-gate
-> engineering, portable evidence verification and additional failure tests are
-> under review in [draft PR #34](https://github.com/shadowhunter-92/agentbridge/pull/34),
-> **not yet released or merged**. Do not expose consequential customer actions,
-> production credentials or financial systems to an unreviewed deployment.
-> [Current scope](docs/ROADMAP.md) · [Security policy](SECURITY.md) ·
-> [Release gates](https://github.com/shadowhunter-92/agentbridge/blob/release/r4-internal-gates-2026-10/docs/RC_INTERNAL_COMPLETION_AND_NOGO.md)
+> **Engineering alpha; production NO-GO.** This local checkout consolidates the
+> latest integration work and tested local fixes. As of the October 13 audit,
+> public `main` remains behind [draft PR #41](https://github.com/shadowhunter-92/agentbridge/pull/41).
+> PR #34 is closed as superseded. No local audit changes have been published.
+> [Current acceptance](docs/CURRENT_STATUS_2026-10-13.md) ·
+> [Documentation index](docs/README.md) · [Security policy](SECURITY.md)
 
 ![Demonstration of a bounded AgentBridge workflow](demo.gif)
+
+## Protecting the code and release boundaries
+
+This code is published under Apache 2.0; the existing license grants remain in force. Security-critical changes require review and must not imply certification. See [code/IP safeguards](docs/CODE_PROTECTION_AND_IP_POLICY_2026.md), [four-product execution criteria](docs/FOUR_PRODUCT_EXECUTION_GATES_2026.md), and the [security policy](SECURITY.md). The reconciled R4 engineering work is under review in [draft PR #41](https://github.com/shadowhunter-92/agentbridge/pull/41), not shipped on `main`.
 
 ## Why AgentBridge?
 
@@ -53,7 +55,7 @@ outcome, reconciliation and auditability questions. Those guarantees remain
 calling and AGNTCY ACP. A 6 × 6 basic call translation matrix does **not**
 imply all sessions, streaming, async tasks, extensions or current-version
 transports are interoperable. See [protocol details](docs/PROTOCOL_SUPPORT.md)
-and the [review compatibility contract](https://github.com/shadowhunter-92/agentbridge/blob/release/r4-internal-gates-2026-10/docs/PROTOCOL_COMPATIBILITY_2026.md).
+and the [review compatibility contract](docs/PROTOCOL_COMPATIBILITY_2026.md).
 
 ## Quick start
 
@@ -69,7 +71,7 @@ python -m venv .venv
 # macOS/Linux: source .venv/bin/activate
 # Windows PowerShell: .venv\Scripts\Activate.ps1
 
-python -m pip install -e .
+python -m pip install -e ".[mcp]"
 python examples/quickstart.py
 python examples/demo_story.py
 ```
@@ -122,7 +124,7 @@ is a statement from its signer, **not automatic proof of a remote side effect**.
 
 | Offering | Intended role | Stage |
 | --- | --- | --- |
-| **AgentBridge OSS** | Open-source adapters, examples and reusable SDK | Prototype; portable SDK in draft review |
+| **AgentBridge OSS** | Open-source adapters, examples and reusable SDK | Engineering alpha; installable verification SDK |
 | **AgentBridge Trust** | Identity, policy, approvals and safe execution | Engineering and hardening |
 | **AgentBridge Evidence** | Receipts, independent observation and audit verification | Bounded technical demonstrations |
 | **AgentBridge Enterprise** | Managed policies, deployment, support and governance | Commercial hypothesis, **not shipped** |
@@ -139,8 +141,8 @@ adoption and willingness to pay have not yet been established.
 | [Protocol support](docs/PROTOCOL_SUPPORT.md) | Adapter mapping and limitations |
 | [Deployment](docs/DEPLOYMENT.md) | Developer setup and deployment considerations |
 | [Roadmap](docs/ROADMAP.md) | Scope and known limitations |
-| [OSS evaluator kit](https://github.com/shadowhunter-92/agentbridge/blob/release/r4-internal-gates-2026-10/docs/OSS_EVALUATION_KIT.md) | **Draft-branch** synthetic/read-only assessment |
-| [Production gate register](https://github.com/shadowhunter-92/agentbridge/blob/release/r4-internal-gates-2026-10/docs/RC_INTERNAL_COMPLETION_AND_NOGO.md) | Review evidence and remaining blockers |
+| [OSS evaluator kit](docs/OSS_EVALUATION_KIT.md) | **Draft-branch** synthetic/read-only assessment |
+| [Production gate register](docs/RC_INTERNAL_COMPLETION_AND_NOGO.md) | Review evidence and remaining blockers |
 | [Security policy](SECURITY.md) | Responsible vulnerability disclosure |
 | [Contributing](CONTRIBUTING.md) | Local setup, PRs, review expectations |
 
@@ -152,7 +154,7 @@ other operational systems. What breaks during retries? How do you verify that
 an action happened? What does your existing gateway already solve?
 
 - Try the **basic local examples** on `main`, or request access to the
-  synthetic evaluator workflow in draft PR #34.
+  synthetic evaluator workflow in draft PR #41.
 - [Report a reproducible bug](https://github.com/shadowhunter-92/agentbridge/issues/new/choose).
 - [Request a developer evaluation](https://github.com/shadowhunter-92/agentbridge/issues/new)
   (no credentials, private logs or customer data in public issues).
@@ -176,3 +178,24 @@ disclosure](AI_DISCLOSURE.md) for development transparency.
 This repository is the authoritative source for **AgentBridge by
 `shadowhunter-92`**; it is not affiliated with unrelated projects using the
 same name.
+
+## Engineering integration candidate (not released)
+
+This branch combines the current public-facing alpha documentation with the
+R4 engineering implementation. Its readiness depends on checks on **this
+exact integration commit** and independent operational acceptance; a branch
+merge does not constitute certification.
+
+See [engineering release register](docs/RC_INTERNAL_COMPLETION_AND_NOGO.md),
+[recovery/operator drills](docs/PRODUCTION_OPERATOR_DRILLS.md),
+[limited protocol contract](docs/PROTOCOL_COMPATIBILITY_2026.md),
+[release procedure](docs/RELEASE_PROCEDURE_2026.md), and
+[external evaluator kit](docs/OSS_EVALUATION_KIT.md).
+
+## Local continuation checks
+
+From this qualified local checkout, run `python -m examples.qualify_trust_evidence`
+for the controller-signed Trust/Evidence workflow. The optional durable task SDK
+is documented in [task lifecycle](docs/DURABLE_TASK_LIFECYCLE.md).
+Run `python tools/check_documentation.py` to check local Markdown targets.
+Test and branch evidence is indexed in the [current acceptance register](docs/CURRENT_STATUS_2026-10-13.md).

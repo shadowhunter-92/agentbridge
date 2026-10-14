@@ -2,9 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, release/r4-internal-gates-2026-10, integration/r4-main-reconciliation-2026-10, security/ip-product-gates-2026-10, audit/consolidated-2026-10-13]
   pull_request:
-    branches: [main]
+    branches: [main, integration/r4-main-reconciliation-2026-10]
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -14,8 +17,8 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -25,5 +28,446 @@ jobs:
           pip install -r requirements.txt
       - name: Run tests
         run: python -m pytest tests/ -q --cov=src --cov-report=term
+      - name: Run offline Trust/Evidence SDK example
+        run: python -m examples.verify_synthetic_action_evidence
+      - name: Qualify controller-signed Trust and Evidence workflow
+        run: python -m examples.qualify_trust_evidence
+      - name: Check local documentation targets
+        run: python tools/check_documentation.py
+      - name: Synthetic local performance observation (not an SLO)
+        run: python tools/benchmark_synthetic.py --count 1000 --workers 4
+      - name: Synthetic concurrent SQL governance smoke load (not production SLO)
+        run: python tools/benchmark_governance.py --count 50 --workers 4
         # Postgres integration tests skip automatically unless AGENTBRIDGE_TEST_PG is set.
         # Coverage prints to the CI log; the Codecov badge additionally needs a codecov.io account.
+
+  evaluator-clean-wheel:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build standalone evaluator wheel
+        run: |
+          python -m pip install build setuptools wheel
+          python -m build --wheel --no-isolation
+      - name: Install wheel in a fresh venv and run outside checkout
+        run: |
+          python -m venv /tmp/agentbridge-external-evaluator
+          /tmp/agentbridge-external-evaluator/bin/python -m pip install dist/*.whl
+          ( cd /tmp && /tmp/agentbridge-external-evaluator/bin/python -c "from src.governance.trust_sdk import verify_action_evidence; from src.governance.sandbox_readback import SandboxTarget; print('fresh-wheel-sdk-import: pass')" )
+          /tmp/agentbridge-external-evaluator/bin/agentbridge --version
+          /tmp/agentbridge-external-evaluator/bin/python -m pip check
+
+  postgres-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: agentbridge_test
+          POSTGRES_USER: agentbridge
+          POSTGRES_PASSWORD: testing-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agentbridge -d agentbridge_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AGENTBRIDGE_TEST_PG: postgresql://agentbridge:testing-only-password@127.0.0.1:5432/agentbridge_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies and Postgres driver
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt "psycopg[binary]"
+      - name: Run real PostgreSQL integration and concurrency tests
+        run: python -m pytest tests/test_postgres_store.py tests/test_postgres_reconciliation.py tests/test_pg_worker_kill_recovery.py tests/test_postgres_durable_hold_boundary.py tests/test_pg_connection_loss_fail_closed.py tests/test_pg_backend_termination_boundaries.py tests/test_pg_authoritative_readback_role.py tests/test_pg_fencing.py tests/test_pg_schema_migrations.py tests/test_fenced_postgres_destination.py tests/test_pg_concurrent_schema_bootstrap.py tests/test_pg_production_observer_privileges.py tests/test_signing_trust_journal.py tests/test_durable_task_lifecycle.py -q
+      - name: Disposable PostgreSQL backup, restore and schema rollback drill
+        env:
+          AGENTBRIDGE_DISPOSABLE_PG_RESTORE_DRILL: "1"
+          AGENTBRIDGE_PG_DRILL_REPORT: postgres-restore-drill.json
+        run: python -m tools.drill_postgres_backup_restore
+      - name: Upload PostgreSQL recovery drill evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agentbridge-postgres-restore-drill
+          path: postgres-restore-drill.json
+          if-no-files-found: warn
+      - name: Measure bounded PostgreSQL governance latency (not a production SLO)
+        run: python tools/benchmark_postgres_governance.py --count 50 --workers 4
+      - name: Extended SQL load and latency evidence (disposable, not production SLO)
+        run: python tools/benchmark_postgres_governance.py --count 250 --workers 8 > postgres-load-evidence.json
+      - name: Validate SQL load artifact structure and counts
+        run: |
+          python -c "import json; d=json.load(open('postgres-load-evidence.json')); assert d['count']==250 and d['workers']==8 and d['throughput_ops_s']>0; assert d['p99_ms']>=d['p95_ms']>=d['p50_ms']>=0"
+      - name: Repeat multi-batch SQL load and enforce disposable resource smoke thresholds
+        run: python -m tools.qualify_postgres_load --batches 3 --count 250 --workers 8 > postgres-sql-smoke-qualification.json
+      - name: Upload SQL smoke qualification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agentbridge-sql-smoke-qualification
+          path: postgres-sql-smoke-qualification.json
+          if-no-files-found: warn
+      - name: Upload PostgreSQL load observations
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agentbridge-postgres-load-observations
+          path: postgres-load-evidence.json
+
+  sustained-sql-soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: agentbridge_test
+          POSTGRES_USER: agentbridge
+          POSTGRES_PASSWORD: testing-only-password
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U agentbridge -d agentbridge_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AGENTBRIDGE_TEST_PG: postgresql://agentbridge:testing-only-password@127.0.0.1:5432/agentbridge_test
+      AGENTBRIDGE_SUSTAINED_CI_SOAK: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - name: Install disposable SQL soak dependencies
+        run: python -m pip install -e . "psycopg[binary]"
+      - name: Qualify 90-second continuous SQL-governance load
+        run: python -m tools.qualify_postgres_soak --duration 90 --workers 8 --count 250 > postgres-soak-report.json
+      - name: Preserve latency, throughput, RSS and CPU evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agentbridge-disposable-sql-soak
+          path: postgres-soak-report.json
+          if-no-files-found: warn
+
+  postgres-tcp-partition-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Disconnect/reconnect disposable PostgreSQL client network
+        env:
+          AGENTBRIDGE_DISPOSABLE_NETWORK_PARTITION: "1"
+          AGENTBRIDGE_NETWORK_PARTITION_REPORT: postgres-network-partition.json
+        run: python -m tools.drill_pg_network_partition
+      - name: Upload partition evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agentbridge-network-partition-drill
+          path: postgres-network-partition.json
+          if-no-files-found: warn
+
+  postgres-stale-leader-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: agentbridge_test
+          POSTGRES_USER: agentbridge
+          POSTGRES_PASSWORD: testing-only-password
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U agentbridge -d agentbridge_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AGENTBRIDGE_TEST_PG: postgresql://agentbridge:testing-only-password@127.0.0.1:5432/agentbridge_test
+      AGENTBRIDGE_DISPOSABLE_STALE_LEADER: "1"
+      AGENTBRIDGE_STALE_LEADER_REPORT: postgres-stale-leader-drill.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - name: Install PostgreSQL drill dependencies
+        run: python -m pip install "psycopg[binary]" -e .
+      - name: Fail over to a new epoch and deny suspended old worker
+        run: python -m tools.drill_pg_stale_leader
+      - name: Upload destination fencing evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agentbridge-stale-leader-drill
+          path: postgres-stale-leader-drill.json
+          if-no-files-found: warn
+
+  postgres-pitr-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Archive WAL and recover PostgreSQL to named restore point
+        env:
+          AGENTBRIDGE_DISPOSABLE_PITR_DRILL: "1"
+          AGENTBRIDGE_PITR_DRILL_REPORT: postgres-pitr-drill.json
+        run: python -m tools.drill_postgres_pitr
+      - name: Upload PITR evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agentbridge-disposable-pitr-drill
+          path: postgres-pitr-drill.json
+          if-no-files-found: warn
+
+  postgres-replica-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - name: Install PostgreSQL drill dependencies
+        run: python -m pip install --upgrade pip "psycopg[binary]" -e .
+      - name: Fence primary and promote streaming replica
+        env:
+          AGENTBRIDGE_DISPOSABLE_REPLICA_DRILL: "1"
+          AGENTBRIDGE_REPLICA_DRILL_REPORT: postgres-replica-drill.json
+        run: python -m tools.drill_postgres_replica_promotion
+      - name: Upload replica drill evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agentbridge-disposable-replica-drill
+          path: postgres-replica-drill.json
+          if-no-files-found: warn
+
+  package-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - name: Compile hash-locked runtime graph for release review
+        run: |
+          python -m pip install "pip-tools>=7,<8"
+          python -m piptools compile --generate-hashes --allow-unsafe \
+            --output-file candidate-runtime.lock pyproject.toml
+          diff -u requirements-runtime.lock candidate-runtime.lock
+          echo 'AGENTBRIDGE_RUNTIME_LOCK_BEGIN'
+          cat candidate-runtime.lock
+          echo 'AGENTBRIDGE_RUNTIME_LOCK_END'
+      - name: Build and validate Python artifacts
+        env:
+          SOURCE_DATE_EPOCH: "1760000000"
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          python -m twine check dist/*
+      - name: Independent wheel rebuild and reproducibility check
+        env:
+          SOURCE_DATE_EPOCH: "1760000000"
+        run: |
+          mkdir -p /tmp/agentbridge-wheel-rebuild
+          SOURCE_DATE_EPOCH=1760000000 python -m build --wheel --outdir /tmp/agentbridge-wheel-rebuild
+          sha256sum dist/*.whl /tmp/agentbridge-wheel-rebuild/*.whl
+          cmp dist/*.whl /tmp/agentbridge-wheel-rebuild/*.whl
+      - name: Verify wheel installation and CLI in clean environment
+        run: |
+          python -m venv /tmp/agentbridge-wheel-check
+          /tmp/agentbridge-wheel-check/bin/python -m pip install --upgrade pip
+          /tmp/agentbridge-wheel-check/bin/pip install --require-hashes -r requirements-runtime.lock
+          /tmp/agentbridge-wheel-check/bin/pip install --no-deps dist/*.whl
+          cd /tmp
+          /tmp/agentbridge-wheel-check/bin/python -c "from src.governance.trust_sdk import verify_action_evidence; from src.governance.sandbox_readback import SandboxReadOnlyObserver; print('SDK import OK')"
+          /tmp/agentbridge-wheel-check/bin/agentbridge --version
+          /tmp/agentbridge-wheel-check/bin/python -m pip check
+      - name: Generate installed-wheel CycloneDX review SBOM
+        run: |
+          /tmp/agentbridge-wheel-check/bin/python tools/build_review_sbom.py > release-review-cyclonedx.json
+          /tmp/agentbridge-wheel-check/bin/python -c "import json; b=json.load(open('release-review-cyclonedx.json')); assert b['specVersion']=='1.5'; assert any(c['name'].lower()=='agentbridge' for c in b['components'])"
+      - name: Test detached release signing and independent manifest verification
+        run: |
+          /tmp/agentbridge-wheel-check/bin/python - <<'PY'
+          import pathlib
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+          from cryptography.hazmat.primitives import serialization
+          key=Ed25519PrivateKey.generate()
+          pathlib.Path("/tmp/review-signing.key").write_bytes(key.private_bytes(
+              serialization.Encoding.Raw,serialization.PrivateFormat.Raw,
+              serialization.NoEncryption()))
+          pathlib.Path("/tmp/review-signing.key").chmod(0o600)
+          pathlib.Path("release-review-ephemeral-pubkey.txt").write_text(
+              key.public_key().public_bytes(serialization.Encoding.Raw,
+                                            serialization.PublicFormat.Raw).hex())
+          PY
+          /tmp/agentbridge-wheel-check/bin/python -m tools.sign_release_manifest \
+            --artifact-dir dist --source-commit "${GITHUB_SHA}" \
+            --private-key-file /tmp/review-signing.key \
+            --output-prefix release-review-test
+          /tmp/agentbridge-wheel-check/bin/python - <<'PY'
+          import json,pathlib
+          from src.governance.release_verification import verify_release
+          manifest=json.loads(pathlib.Path("release-review-test.manifest.json").read_text())
+          signature=pathlib.Path("release-review-test.sig").read_text().strip()
+          pubkey=pathlib.Path("release-review-ephemeral-pubkey.txt").read_text().strip()
+          assert verify_release("dist",manifest,signature,pubkey,
+                                expected_source_commit=manifest["source_commit"])
+          print("Ephemeral CI signing rehearsal verified; NOT a trusted publisher signature")
+          PY
+          rm /tmp/review-signing.key
+      - name: Record review artifact digests and installed dependency inventory
+        run: |
+          sha256sum dist/* > release-review-sha256.txt
+          /tmp/agentbridge-wheel-check/bin/python -m pip freeze --all > release-review-installed-dependencies.txt
+          /tmp/agentbridge-wheel-check/bin/python -m pip inspect --local > release-review-pip-inspect.json
+          printf '%s\\n' "${GITHUB_SHA}" > release-review-source-commit.txt
+      - name: Audit installed wheel dependencies for known vulnerabilities (review evidence)
+        run: |
+          /tmp/agentbridge-wheel-check/bin/python -m pip install pip-audit
+          set +e
+          /tmp/agentbridge-wheel-check/bin/pip-audit --local --format json --output release-review-vulnerabilities.json
+          status=$?
+          set -e
+          printf '%s\\n' "$status" > release-review-vulnerability-exit-code.txt
+          if [ -s release-review-vulnerabilities.json ]; then
+            python -c "import json; d=json.load(open('release-review-vulnerabilities.json')); print('ADVISORY SUMMARY:'); [print(x['name'], x['version'], [v['id'] for v in x.get('vulns', [])]) for x in d.get('dependencies', []) if x.get('vulns')]"
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Dependency audit found advisories or failed; packaging release review is blocked. See artifact."
+            exit "$status"
+          fi
+      - name: Upload release review evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agentbridge-release-review-evidence
+          path: |
+            release-review-sha256.txt
+            release-review-installed-dependencies.txt
+            release-review-pip-inspect.json
+            release-review-source-commit.txt
+            release-review-cyclonedx.json
+            release-review-vulnerabilities.json
+            release-review-vulnerability-exit-code.txt
+            release-review-test.manifest.json
+            release-review-test.sig
+            release-review-ephemeral-pubkey.txt
+          retention-days: 30
+      - name: Build isolated release-review image
+        run: |
+          docker pull python:3.12-alpine3.22
+          docker image inspect --format 'BASE_IMAGE_DIGEST={{index .RepoDigests 0}}' python:3.12-alpine3.22
+          docker build -f Dockerfile.release -t agentbridge:release-review .
+          docker image inspect --format 'REVIEW_IMAGE_ID={{.Id}}' agentbridge:release-review
+
+
+      - name: Verify reviewed image starts against disposable PostgreSQL
+        env:
+          AGENTBRIDGE_DISPOSABLE_IMAGE_QUALIFICATION: "1"
+        run: python -m tools.qualify_release_image --image agentbridge:release-review > release-image-startup.json
+      - name: Preserve image startup evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agentbridge-release-image-startup
+          path: release-image-startup.json
+
+  container-security-review:
+    needs: package-review
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Build reviewed, digest-pinned container image
+        run: docker build -f Dockerfile.release -t agentbridge:release-review .
+      - name: Generate full image CycloneDX SBOM
+        run: |
+          mkdir -p "$HOME/.cache/trivy"
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD":/scan -v "$HOME/.cache/trivy":/root/.cache \
+            aquasec/trivy:0.69.1 image --format cyclonedx \
+            --output /scan/agentbridge-image-sbom.cdx.json agentbridge:release-review
+      - name: Upload image SBOM
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agentbridge-review-image-sbom
+          path: agentbridge-image-sbom.cdx.json
+          if-no-files-found: warn
+      - name: Block on HIGH or CRITICAL container vulnerabilities
+        run: |
+          mkdir -p "$HOME/.cache/trivy"
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD":/scan -v "$HOME/.cache/trivy":/root/.cache \
+            aquasec/trivy:0.69.1 image --format json \
+            --output /scan/agentbridge-image-vulnerabilities.json \
+            --severity HIGH,CRITICAL --exit-code 1 agentbridge:release-review
+      - name: Summarize container vulnerability findings
+        if: always()
+        run: |
+          if [ -s agentbridge-image-vulnerabilities.json ]; then
+            python - <<'PY'
+          import json
+          report=json.load(open("agentbridge-image-vulnerabilities.json"))
+          for result in report.get("Results",[]):
+              for v in result.get("Vulnerabilities") or []:
+                  print("IMAGE_ADVISORY",result.get("Target"),v.get("PkgName"),
+                        v.get("InstalledVersion"),v.get("FixedVersion"),
+                        v.get("VulnerabilityID"),v.get("Severity"))
+          PY
+          fi
+      - name: Upload image vulnerability evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agentbridge-review-image-vulnerabilities
+          path: agentbridge-image-vulnerabilities.json
+          if-no-files-found: warn
+
+
+  egress-isolation-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Build and run isolated worker plus separate outbound proxy
+        run: docker compose -f docker-compose.egress-drill.yml up -d --build
+      - name: Confirm direct internet and metadata access blocked
+        run: docker compose -f docker-compose.egress-drill.yml exec -T worker python -m tools.egress_docker_probe
+      - name: Stop disposable environment
+        if: always()
+        run: docker compose -f docker-compose.egress-drill.yml down --remove-orphans
+
+  windows-test:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements.txt
+      - run: python -m pytest tests/ -q -rs
+      - run: python -m examples.qualify_trust_evidence
+      - run: python tools/check_documentation.py

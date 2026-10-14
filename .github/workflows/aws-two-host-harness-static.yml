@@ -1,0 +1,45 @@
+name: AWS two-host harness static safety
+on:
+  push:
+    branches: [integration/r4-main-reconciliation-2026-10]
+  pull_request:
+    branches: [main, integration/r4-main-reconciliation-2026-10]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Parse phases without execution
+        run: |
+          bash -n tools/aws_pg_two_host_acceptance.sh
+          bash -n tools/aws_pg_upgrade_rollback.sh
+          python -m py_compile tools/aws_pg_two_host_orchestrator.py
+      - name: Check no embedded database credential literals
+        run: |
+          if grep -En '(PASSWORD [\x27\x22][^$]|PGPASSWORD=[\x27\x22][^$])' tools/aws_pg_two_host_acceptance.sh; then
+            echo "Static credential check failed"; exit 1
+          fi
+      - name: Enforce explicit phases and pinned source
+        run: |
+          grep -q 'AB_SOURCE_SHA' tools/aws_pg_two_host_acceptance.sh
+          grep -q 'STALE_OLD_LEADER_DENIED' tools/aws_pg_two_host_acceptance.sh
+          grep -q 'PHYSICAL_REPLICA_PROMOTED' tools/aws_pg_two_host_acceptance.sh
+
+      - name: Safe default AWS orchestration does not contact AWS
+        run: |
+          python tools/aws_pg_two_host_orchestrator.py \
+            --primary-id i-0123456789abcdef0 \
+            --standby-id i-0123456789abcdef1 \
+            --primary-ip 172.31.10.2 \
+            --standby-ip 172.31.11.3 \
+            --parameter-prefix /agentbridge/ephemeral-ci-test \
+            --harness-sha 1111111111111111111111111111111111111111 \
+            --candidate-sha 2222222222222222222222222222222222222222 \
+            --baseline-sha 3333333333333333333333333333333333333333 \
+            | tee /tmp/dry-run.json
+          grep -q '"aws_called": false' /tmp/dry-run.json
+          grep -q '"instances_created": false' /tmp/dry-run.json
+      - name: Reject unsafe lab parameters and validate exact phase ordering
+        run: python -m unittest discover -s tests -p test_aws_two_host_orchestrator_static.py -v

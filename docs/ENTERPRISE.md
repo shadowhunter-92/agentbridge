@@ -1,16 +1,10 @@
-# Enterprise governance
+# Enterprise governance components
 
-Beyond the core mesh + identity/budget/audit, AgentBridge ships the governance controls
-enterprises ask for. All of the below is real, tested code (see
-`tests/test_enterprise_governance.py` for the modules and
-`tests/test_control_plane_rbac.py` for the HTTP wiring). Two items in the "enterprise
-tier" are **not** code — managed hosting and SOC 2 — and are called out honestly at the
-bottom.
-
-**All of it is live over the control plane HTTP API**: operator endpoints accept the admin
-key (role: admin) or an OIDC bearer token (role claim → RBAC), each endpoint enforces a
-permission, and policy rules are manageable via `POST /control/policy/rules` — see
-`docs/API_REFERENCE.md`.
+These are experimental controls in one shared platform, not a released managed
+Enterprise service. Operator administration uses admin-key/OIDC authentication
+and RBAC. Durable approvals, policy and budgets exist; production retention,
+trusted checkpoint custody, tenant service isolation, support and SLA acceptance
+remain separate gates. See [current acceptance](CURRENT_STATUS_2026-10-13.md).
 
 ---
 
@@ -98,7 +92,8 @@ Datadog / S3 on a schedule, and store periodic signed checkpoints alongside it.
 
 ## Concurrency & scaling (read before you deploy)
 
-**Multiple workers are safe — as long as they share a durable store.** The audit hash-chain
+**The tested atomic operations require a shared durable store.** This does not
+qualify every deployment, failure mode or external destination. The audit hash-chain
 append and the budget reserve/commit/release are **atomic, store-side operations**, not
 in-memory read-modify-write:
 
@@ -111,7 +106,7 @@ in-memory read-modify-write:
   reservations), runs the reserve/commit/release mutation, and writes it back, all under the same
   per-agent lock. Two workers can't both pass the cap; reservations are visible across workers.
 
-This is proven, not asserted: `tests/test_concurrency.py` spins up **separate store connections
+The bounded concurrency tests demonstrate these paths: `tests/test_concurrency.py` spins up **separate store connections
 in separate threads** (a faithful stand-in for separate OS processes) hammering the same SQLite
 file, and asserts the chain is gap-free + verifiable and the budget never overspends. A negative
 control in the same file confirms per-process **in-memory** state *would* fork — so the test
@@ -121,10 +116,8 @@ Postgres** (the `pg_advisory_xact_lock` path) in `tests/test_postgres_store.py` 
 
 **The one rule:** set `AGENTBRIDGE_DB` to a shared backend before running multiple workers — a
 SQLite file path (single node, multiple workers) or a `postgres://` URL (multi-node). The default
-`InMemoryStore` is per-process and is for single-worker/dev only. The remaining in-process piece
-is the human-approval queue (`ApprovalQueue`); until it's store-backed, pin approval traffic to
-one instance. (Credit to external code review for surfacing the original in-memory race; it's now
-fixed and regression-tested.)
+`InMemoryStore` is per-process and is for single-worker/dev only. Approvals and declarative policies are store backed in the current control plane.
+Process-local objects and uninstrumented SDK transports do not automatically inherit those controls.
 
 ## Not code — handled honestly
 
@@ -136,3 +129,8 @@ Two parts of the "enterprise tier" cannot be shipped as code in this repo:
 - **SOC 2 Type II / HIPAA:** these are independent audits with human auditors over months, not
   something a codebase can claim. The controls above (RBAC, OIDC, signed audit, retention) are
   the technical evidence such an audit would examine, but certification itself is a process.
+
+
+## Security and compliance qualification (October 2026)
+
+This document describes experimental components, not a certified enterprise release. In particular, in-production destructive audit retention and ad-hoc checkpoint signing are intentionally disabled. Process-local legal-hold controls and ephemeral signing keys are not acceptable compliance controls. Operator reconciliation requires independently verified external evidence before financial settlement. External security review, safe network egress, current protocol conformance and staged recoverability acceptance remain open. Please see `docs/HARDENING_RELEASE_GATES.md`.

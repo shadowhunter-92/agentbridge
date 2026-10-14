@@ -5,6 +5,8 @@ A call is allowed only if the caller is a known, non-revoked identity, is permit
 the requested capability, has any required human approval, and is within budget.
 """
 
+import json
+import os
 from dataclasses import dataclass
 from typing import Dict, Optional, Set
 
@@ -19,6 +21,7 @@ class Decision:
     allowed: bool
     reason: str
     needs_approval: bool = False
+    approval_required: bool = False
 
 
 class PolicyEngine:
@@ -40,7 +43,8 @@ class PolicyEngine:
                   signed_data: Optional[bytes] = None,
                   signature: Optional[bytes] = None,
                   src_protocol: Optional[str] = None,
-                  dst_protocol: Optional[str] = None) -> Decision:
+                  dst_protocol: Optional[str] = None,
+                  request_scope: Optional[str] = None) -> Decision:
         # 1) identity (registered AND not revoked)
         if self.require_verified and not self.identities.is_registered(agent_id):
             return Decision(False, f"unknown or revoked identity '{agent_id}'")
@@ -48,14 +52,30 @@ class PolicyEngine:
             if not self.identities.verify_signature(agent_id, signed_data, signature):
                 return Decision(False, "signature verification failed")
 
-        # 2) capability allowlist (if configured for this agent)
-        allowed = self._capability_allow.get(agent_id)
-        if allowed is not None and capability not in allowed:
-            return Decision(False, f"capability '{capability}' not permitted for '{agent_id}'")
+        # 2) Strict, operator-owned capability allowlist in production. Registered
+        # identities confer authentication only, never blanket authorization.
+        if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+            try:
+                allowlists = json.loads(os.getenv("AGENTBRIDGE_CAPABILITY_ALLOWLIST_JSON", "{}"))
+                if not isinstance(allowlists, dict):
+                    raise ValueError("capability allowlist must be an object")
+                allowed = allowlists.get(agent_id)
+                if not isinstance(allowed, list) or not all(isinstance(x, str) for x in allowed):
+                    return Decision(False, "production capability allowlist missing or invalid")
+            except (ValueError, TypeError):
+                return Decision(False, "production capability allowlist invalid")
+            if capability not in allowed:
+                return Decision(False, f"capability '{capability}' not permitted for '{agent_id}'")
+        else:
+            allowed = self._capability_allow.get(agent_id)
+            if allowed is not None and capability not in allowed:
+                return Decision(False, f"capability '{capability}' not permitted for '{agent_id}'")
 
+        approval_required = False
         # 3) human approval for sensitive capabilities
         if self.approvals and self.approvals.requires_approval(capability):
-            if not self.approvals.is_granted(agent_id, capability):
+            approval_required = True
+            if not self.approvals.is_granted(agent_id, capability, request_scope):
                 return Decision(False, f"approval required for '{capability}'", needs_approval=True)
 
         # 4) declarative policy rules (policy engine v2), if configured
@@ -66,7 +86,8 @@ class PolicyEngine:
             if not r.allowed:
                 return Decision(False, r.reason)
             if r.needs_approval:
-                granted = self.approvals and self.approvals.is_granted(agent_id, capability)
+                approval_required = True
+                granted = self.approvals and self.approvals.is_granted(agent_id, capability, request_scope)
                 if not granted:
                     return Decision(False, r.reason, needs_approval=True)
 
@@ -75,4 +96,4 @@ class PolicyEngine:
         if not ok:
             return Decision(False, why)
 
-        return Decision(True, "authorized")
+        return Decision(True, "authorized", approval_required=approval_required)

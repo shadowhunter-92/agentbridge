@@ -67,3 +67,6 @@ docs/COMPLIANCE_OUTREACH_KIT.md
 # transient local test output
 _final.txt
 _*.txt
+# Private source handoffs, test environments, logs and recovery snapshots.
+/work/
+/outputs/

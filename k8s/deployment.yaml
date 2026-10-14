@@ -5,7 +5,7 @@ metadata:
   labels:
     app: agentbridge
 spec:
-  replicas: 1  # Must be 1 for SQLite; use >1 only with Postgres (AGENTBRIDGE_DB=postgres://...)
+  replicas: 1  # SQLite evaluation only; qualify PostgreSQL before multi-node scaling.
   selector:
     matchLabels:
       app: agentbridge
@@ -45,7 +45,7 @@ spec:
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10
@@ -87,11 +87,4 @@ spec:
     requests:
       storage: 1Gi
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: agentbridge-secrets
-type: Opaque
-stringData:
-  admin-key: "change-me-in-production"
-  # database-url: "postgresql://user:pass@postgres:5432/agentbridge"
+# Provision agentbridge-secrets separately. No default administrator key is shipped.

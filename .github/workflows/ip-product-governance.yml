@@ -1,0 +1,31 @@
+name: IP and product governance checks
+on:
+  push:
+    branches: [security/ip-product-gates-2026-10]
+  pull_request:
+    branches: [main, integration/r4-main-reconciliation-2026-10]
+permissions:
+  contents: read
+jobs:
+  governance-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check ownership and product contract anchors
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          owner = Path('.github/CODEOWNERS').read_text()
+          assert '* @shadowhunter-92' in owner
+          for path in ('SECURITY.md','LICENSE','NOTICE','docs/CODE_PROTECTION_AND_IP_POLICY_2026.md','docs/FOUR_PRODUCT_EXECUTION_GATES_2026.md'):
+              assert Path(path).is_file(), path
+          gates = Path('docs/FOUR_PRODUCT_EXECUTION_GATES_2026.md').read_text()
+          for product in ('OSS', 'Trust', 'Evidence', 'Enterprise'):
+              assert product in gates
+          policy = Path('SECURITY.md').read_text()
+          assert 'Do **not** open a public issue' in policy
+          assert 'experimental engineering alpha' in policy
+          assert 'Apache License' in Path('LICENSE').read_text()
+          print('Governance contract checks PASS; settings enforcement still requires repository owner')
+          PY

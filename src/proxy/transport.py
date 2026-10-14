@@ -32,7 +32,8 @@ async def list_mcp_tools(command: str, args: List[str]) -> List[Dict[str, Any]]:
             for t in listed.tools]
 
 
-async def fetch_a2a_card(base_url: str, timeout: float = 15.0) -> Dict[str, Any]:
+async def fetch_a2a_card(base_url: str, timeout: float = 15.0,
+                         proxy_url: Optional[str] = None) -> Dict[str, Any]:
     """Discovery: fetch a live A2A agent's AgentCard (its name, skills, capabilities).
 
     This is how you find out what a remote A2A agent can do before talking to it.
@@ -40,7 +41,7 @@ async def fetch_a2a_card(base_url: str, timeout: float = 15.0) -> Dict[str, Any]
     import httpx
     from a2a.client import A2ACardResolver
 
-    async with httpx.AsyncClient(timeout=timeout) as hc:
+    async with httpx.AsyncClient(timeout=timeout,proxy=proxy_url,trust_env=False) as hc:
         card = await A2ACardResolver(hc, base_url).get_agent_card()
     return card.model_dump(mode="json", exclude_none=True)
 
@@ -86,6 +87,7 @@ async def send_a2a_message(
     text: str,
     message_id: str = "proxy-msg-1",
     timeout: float = 15.0,
+    proxy_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Send a message to a live A2A agent (HTTP/JSON-RPC) and normalize the reply.
 
@@ -98,7 +100,7 @@ async def send_a2a_message(
     from a2a.types import (SendMessageRequest, MessageSendParams, Message,
                            TextPart, Part, Role)
 
-    async with httpx.AsyncClient(timeout=timeout) as hc:
+    async with httpx.AsyncClient(timeout=timeout,proxy=proxy_url,trust_env=False) as hc:
         card = await A2ACardResolver(hc, base_url).get_agent_card()
         client = A2AClient(hc, agent_card=card)
         msg = Message(
@@ -138,6 +140,7 @@ async def call_acp_agent(
     agent_name: str,
     text: str,
     timeout: float = 15.0,
+    proxy_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Invoke a live ACP agent (REST /runs, sync mode) and normalize the reply.
 
@@ -152,7 +155,7 @@ async def call_acp_agent(
         input=[Message(role="user",
                        parts=[MessagePart(content=text, content_type="text/plain")])],
     )
-    async with httpx.AsyncClient(timeout=timeout) as hc:
+    async with httpx.AsyncClient(timeout=timeout,proxy=proxy_url,trust_env=False) as hc:
         resp = await hc.post(f"{base_url}/runs",
                              json=req.model_dump(mode="json", exclude_none=True))
         resp.raise_for_status()
