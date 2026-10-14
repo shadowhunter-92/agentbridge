@@ -16,3 +16,14 @@
 - The project can demonstrate more than its original prototype but does not
   have generic destination-fencing, independent custody or real CNI/HA proofs.
 - A public version number or a merge is not an operational safety certificate.
+# Local audit publication gate
+
+Publication workflows are prepared locally with source-pinned Actions, named
+`pypi-release` / `container-release` environments and an explicit
+`AGENTBRIDGE_PUBLISH_APPROVED=true` repository-variable gate. They remain inactive
+until the owner configures and authorizes publication. Environment names alone
+do not establish required reviewers. Docker publication selects
+`Dockerfile.release`, matching the CI review recipe; this does not prove identical
+rebuilt image bytes or independent publisher custody. Signed immutable public
+artifacts, protected environments and live upgrade/rollback remain acceptance
+requirements. No release, package or image was published in the local audit.

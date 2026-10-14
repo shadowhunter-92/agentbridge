@@ -18,6 +18,7 @@ auto-fetch, `pyjwt[crypto]` and a JSON HTTP fetcher are also pulled in lazily.
 from __future__ import annotations
 
 import json
+import math
 import threading
 import time
 import urllib.request
@@ -36,6 +37,8 @@ class OidcConfig:
     default_role: str = "viewer"
     # Cache TTL for the JWKS (seconds). Default 15 min — keys rotate rarely.
     jwks_ttl_seconds: int = 900
+    # Bound refresh requests for attacker-chosen unknown key IDs, including failures.
+    jwks_min_refresh_seconds: float = 5.0
     # HTTP timeout for JWKS/discovery fetches.
     fetch_timeout_seconds: float = 5.0
 
@@ -46,11 +49,15 @@ class OidcError(Exception):
 
 class OidcVerifier:
     def __init__(self, config: OidcConfig):
+        for value in (config.jwks_ttl_seconds, config.jwks_min_refresh_seconds, config.fetch_timeout_seconds):
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+                raise ValueError("OIDC cache and timeout intervals must be finite and positive")
         self.config = config
         # JWKS cache: {kid: {key_pem, fetched_at}}; guarded by a lock.
         self._jwks_lock = threading.RLock()
         self._jwks_cache: Dict[str, Dict[str, Any]] = {}
         self._jwks_full_fetch_at: float = 0.0
+        self._jwks_last_attempt_at: Optional[float] = None
         self._discovered_jwks_url: Optional[str] = None
 
     # --- key resolution ----------------------------------------------------------
@@ -60,7 +67,10 @@ class OidcVerifier:
         in minimal installs (pyjwt only)."""
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=self.config.fetch_timeout_seconds) as resp:  # noqa: S310 (trusted IdP URL)
-            return resp.read()
+            payload = resp.read(1024 * 1024 + 1)
+            if len(payload) > 1024 * 1024:
+                raise OidcError("OIDC metadata response exceeds size limit")
+            return payload
 
     def _discover_jwks_url(self) -> Optional[str]:
         """Fetch `<issuer>/.well-known/openid-configuration` and extract `jwks_uri`."""
@@ -87,12 +97,17 @@ class OidcVerifier:
         """Return a public key OBJECT for `kid`, fetching/caching the JWKS on miss or expiry.
         PyJWT's decode() accepts the cryptography key object directly, so we cache the object
         and skip the brittle JWK->PEM round-trip. Raises OidcError if it can't be resolved."""
-        cache_key = kid or "_default"
+        if kid is not None and (not isinstance(kid, str) or not 1 <= len(kid) <= 128):
+            raise OidcError("invalid signing key identifier")
+        cache_key = kid if kid is not None else "_default"
         with self._jwks_lock:
             now = time.monotonic()
             entry = self._jwks_cache.get(cache_key)
             if entry and now - entry["fetched_at"] < self.config.jwks_ttl_seconds:
                 return entry["key"]
+            if self._jwks_last_attempt_at is not None and \
+                    now - self._jwks_last_attempt_at < self.config.jwks_min_refresh_seconds:
+                raise OidcError("signing key unavailable; JWKS refresh temporarily rate limited")
 
             try:
                 from jwt import PyJWK  # type: ignore[attr-defined]
@@ -101,15 +116,26 @@ class OidcVerifier:
                     "JWKS support requires 'pyjwt[crypto]' (pip install 'pyjwt[crypto]')"
                 ) from e
 
+            self._jwks_last_attempt_at = now
             jwks = self._fetch_jwks()  # raises OidcError on fetch/parse failure
-            self._jwks_full_fetch_at = now
-            for jwk in jwks.get("keys", []):
+            if not isinstance(jwks, dict) or not isinstance(jwks.get("keys"), list) or len(jwks["keys"]) > 128:
+                raise OidcError("malformed or oversized JWKS key collection")
+            refreshed = {}
+            fetched_at = time.monotonic()
+            for jwk in jwks["keys"]:
+                if not isinstance(jwk, dict):
+                    continue
                 k = jwk.get("kid") or "_default"
+                if not isinstance(k, str) or not 1 <= len(k) <= 128:
+                    continue
                 try:
-                    self._jwks_cache[k] = {"key": PyJWK(jwk).key, "fetched_at": now}
+                    refreshed[k] = {"key": PyJWK(jwk).key, "fetched_at": fetched_at}
                 except Exception:
                     continue  # skip a malformed JWK; others may still resolve
-
+            # A successfully fetched set replaces the previous trust set. Removed
+            # keys must not remain usable after the configured cache TTL.
+            self._jwks_cache = refreshed
+            self._jwks_full_fetch_at = fetched_at
             entry = self._jwks_cache.get(cache_key)
             if entry:
                 return entry["key"]
@@ -137,15 +163,7 @@ class OidcVerifier:
         except Exception as e:
             raise OidcError(f"malformed token header: {e}") from e
 
-        try:
-            signing_key = self._resolve_signing_key(header)
-        except OidcError:
-            # If JWKS lookup failed because the kid wasn't cached, force a refresh and retry.
-            # (Handles key rotation: the IdP added a new kid since our last fetch.)
-            with self._jwks_lock:
-                self._jwks_cache.clear()
-                self._discovered_jwks_url = None
-            signing_key = self._resolve_signing_key(header)
+        signing_key = self._resolve_signing_key(header)
 
         try:
             return jwt.decode(

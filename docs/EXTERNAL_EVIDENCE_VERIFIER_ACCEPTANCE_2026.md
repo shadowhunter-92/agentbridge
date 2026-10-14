@@ -15,7 +15,9 @@ python -m pip install -e ".[test]"
 python -m pytest tests/test_external_evidence_verifier.py tests/test_bounded_https_destination_contract.py tests/test_evidence_sdk_adversarial_contract.py -q
 ```
 
-For offline verification, provide two files separately: the bundle with `receipt`, `readback`, `expected` and `observer_key_id`; and the owner-approved, externally pinned trust policy with `destination_public_key_hex` plus `observers` entries containing `key_id`, `public_key_hex` and `state` (active/staged/revoked). Then run `python -m tools.verify_external_evidence --bundle BUNDLE.json --trust TRUST.json`. Do not accept trust configuration copied uncritically from the evidence producer.
+For offline verification, independently provision the trust policy and expected action. The evidence bundle contains `receipt`, `readback`, `expected` and `observer_key_id`. The trust policy contains `destination_public_key_hex` and `observers` entries (`key_id`, `public_key_hex`, `state`). The separately retained expected action contains `agent_id`, `operation_id`, `fingerprint`, `outcome` and `external_reference`; it must exactly match the bundle. Never take either the trust roots or the expected action from the evidence producer without independent review.
+
+After installing the wheel, run `agentbridge-verify-evidence --bundle BUNDLE.json --trust TRUST.json --expected EXPECTED.json` from any directory. The source-checkout compatibility command is `python -m tools.verify_external_evidence` with the same flags. Each input is bounded to 1 MiB. The library's legacy `verify_bundle` call remains usable, but only reports externally expected action verification when the separate `expected_action` argument is supplied.
 
 ## Remaining external proof
 

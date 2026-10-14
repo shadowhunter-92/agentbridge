@@ -1,5 +1,5 @@
 # AgentBridge — Meta-Bridge Control Plane
-# Production-ready, multi-stage Docker build
+# Development/evaluation build. Published review images use Dockerfile.release.
 
 # Stage 1: Builder
 FROM python:3.12-slim AS builder

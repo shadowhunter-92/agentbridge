@@ -13,6 +13,8 @@ discipline that production services need.
 from __future__ import annotations
 
 import logging
+import importlib.util
+import json
 import math
 import os
 import re
@@ -53,6 +55,9 @@ def validate_config(fail_fast: bool = True) -> List[ConfigIssue]:
     slow_log = os.getenv("AGENTBRIDGE_SLOW_LOG_SECONDS", "2.0")
 
     # --- errors (block startup) -------------------------------------------------
+
+    if admin_key.strip().lower() in {"change-me-in-production", "changeme", "change-me", "admin", "password"}:
+        issues.append(ConfigIssue("error", "known placeholder administrator credentials are prohibited"))
 
     if env in ("prod", "production"):
         if not admin_key:
@@ -108,6 +113,22 @@ def validate_config(fail_fast: bool = True) -> List[ConfigIssue]:
                 "AGENTBRIDGE_DB is a postgres:// URL but psycopg is not installed. "
                 "Run: pip install 'psycopg[binary]'"
             ))
+
+    configured_targets = os.getenv("AGENTBRIDGE_TARGETS_JSON")
+    if configured_targets:
+        try:
+            targets = json.loads(configured_targets)
+            if not isinstance(targets, dict):
+                raise ValueError("target configuration must be an object")
+            modules = {"mcp_stdio": "mcp", "a2a_http": "a2a", "acp_http": "acp_sdk"}
+            for target in targets.values():
+                if not isinstance(target, dict):
+                    raise ValueError("target record must be an object")
+                module = modules.get(target.get("kind"))
+                if module and importlib.util.find_spec(module) is None:
+                    issues.append(ConfigIssue("error", f"configured {target.get('kind')} target requires the optional [transports] SDK dependencies"))
+        except (ValueError, TypeError):
+            issues.append(ConfigIssue("error", "invalid AGENTBRIDGE_TARGETS_JSON structure"))
 
     if oidc_issuer and not re.match(r"^https?://", oidc_issuer):
         issues.append(ConfigIssue(

@@ -21,5 +21,12 @@ Store confidential commercial source in a separately access-controlled private r
 ## Incident protocol
 Suspected token or key leak: revoke/rotate in the actual provider, examine audit logs and exposure window, invalidate impacted evidence signatures as appropriate, and document notification decisions. Removing a committed secret without rotation is insufficient. Avoid copying suspected credentials into public issue comments.
 
-## Verification status
-The repository was observed to be public; `.github/CODEOWNERS` was missing before this change. GitHub API did not authorize reading branch-protection settings, and a rulesets query returned no entries. Protections, secret scanning and reviewer policies are **not confirmed enabled**. Maintainer must verify and turn them on in GitHub settings. Do not claim this document itself changes those account settings.
+## Verification status — October 13 local audit
+
+Read-only GitHub verification confirms active ruleset `25007045` for main,
+release/* and integration/*: PRs, both Python checks, resolved threads, blocked
+force pushes and deletion. Required approving review count is zero; code-owner
+review is not enforced; repository administrators retain always-on bypass.
+CODEOWNERS is present. Secret scanning, push protection, private reporting,
+account 2FA and protected publisher settings were not independently available
+through the inspected connector response. No settings were changed in this audit.

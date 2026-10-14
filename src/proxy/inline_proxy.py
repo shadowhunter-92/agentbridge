@@ -11,21 +11,17 @@ Flows:
 """
 
 from typing import Any, Dict, List, Optional
+import uuid
 
-# TODO (tech debt — deferred on purpose): this proxy uses the older src/engine
-# TranslationEngine (MCP<->A2A, wraps results as {"task": ...}) rather than the canonical
-# src/protocols mesh. Consolidating onto src/protocols changes the wire bytes the proxy
-# emits, so it MUST be re-validated against the live MCP/A2A/ACP handshakes (live_*_proxy.py,
-# live_*_handshake.py, test_real_conformance.py). Do it on a branch AFTER demand is validated —
-# it's invisible to users and risky to touch right before a launch. ~1-3h, mostly re-testing.
-from ..engine.translation_engine import TranslationEngine, TranslationDirection
+# Executable calls use the canonical supported-action boundary. The optional
+# legacy engine argument is retained for constructor compatibility only.
 from . import transport
 from .supported_action_boundary import validated_a2a_tool_action, validated_mcp_tool_action
 
 
 class InlineProxy:
-    def __init__(self, engine: Optional[TranslationEngine] = None):
-        self.engine = engine or TranslationEngine()
+    def __init__(self, engine: Optional[Any] = None):
+        self.engine = engine
 
     # --- A2A caller  ->  live MCP tool server  ->  A2A-shaped reply ---------------
     async def a2a_request_to_mcp_agent(
@@ -46,7 +42,7 @@ class InlineProxy:
         text = " ".join(mcp_result.get("raw", [])) or ""
         a2a_reply = {
             "kind": "message",
-            "messageId": self.engine._generate_msg_id(),
+            "messageId": "msg_" + uuid.uuid4().hex[:12],
             "role": "agent",
             "parts": [{"kind": "text", "text": text}],
             "metadata": {
@@ -66,7 +62,6 @@ class InlineProxy:
     ) -> Dict[str, Any]:
         # Reject unsupported MCP procedures before any remote call.
         tool_name, args = validated_mcp_tool_action(mcp_request)
-        params = mcp_request["params"]
         text = (
             args.get("text")
             or args.get("query")

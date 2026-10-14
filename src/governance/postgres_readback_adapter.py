@@ -50,20 +50,22 @@ def observe_postgres_effect(
                     # separately provisioned, unprivileged observer login.
                     if os.getenv("AGENTBRIDGE_ENV", "").strip().lower() in ("prod", "production"):
                         access = cur.execute(
-                            "SELECT current_user = session_user, "
+                            "SELECT current_user = session_user AS direct_login, "
                             "(SELECT rolsuper OR rolcreaterole OR rolcreatedb "
                             "OR rolreplication OR rolbypassrls FROM pg_roles "
-                            "WHERE rolname = current_user), "
+                            "WHERE rolname = current_user) AS elevated, "
                             "has_table_privilege(current_user, "
-                            "'public.ab_evidence_effects', 'INSERT'), "
+                            "'public.ab_evidence_effects', 'INSERT') AS can_insert, "
                             "has_table_privilege(current_user, "
-                            "'public.ab_evidence_effects', 'UPDATE'), "
+                            "'public.ab_evidence_effects', 'UPDATE') AS can_update, "
                             "has_table_privilege(current_user, "
-                            "'public.ab_evidence_effects', 'DELETE'), "
+                            "'public.ab_evidence_effects', 'DELETE') AS can_delete, "
                             "has_table_privilege(current_user, "
-                            "'public.ab_evidence_effects', 'TRUNCATE')"
+                            "'public.ab_evidence_effects', 'TRUNCATE') AS can_truncate"
                         ).fetchone()
-                        if not access or tuple(access) != (True, False, False, False, False, False):
+                        if not access or tuple(access[name] for name in (
+                            "direct_login", "elevated", "can_insert", "can_update", "can_delete", "can_truncate"
+                        )) != (True, False, False, False, False, False):
                             raise PostgresReadbackUnavailable(
                                 "production readback principal must have SELECT-only privileges")
                     cur.execute(

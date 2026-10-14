@@ -47,20 +47,24 @@ def drill():
     marker = uuid.uuid4().hex[:10]
     primary = "ab-ha-primary-" + marker
     standby = "ab-ha-standby-" + marker
+    network = "ab-ha-network-" + marker
     volume = "ab-ha-replica-" + marker
     password = "disposable-replica-only-" + marker
-    primary_port, standby_port = 55433, 55434
     dsn = lambda port: (
         f"postgresql://postgres:{password}@127.0.0.1:{port}/postgres")
     created = []
     try:
         run(["docker", "volume", "create", volume])
         created.append(("volume", volume))
-        run(["docker", "run", "-d", "--name", primary, "--network", "host",
+        run(["docker", "network", "create", network])
+        created.append(("network", network))
+        run(["docker", "run", "-d", "--name", primary, "--network", network,
+             "--network-alias", "ab-primary", "--publish", "127.0.0.1::5432",
              "-e", "POSTGRES_PASSWORD=" + password, "postgres:16",
-             "postgres", "-c", f"port={primary_port}", "-c", "wal_level=replica",
+             "postgres", "-c", "wal_level=replica",
              "-c", "max_wal_senders=10"])
         created.append(("container", primary))
+        primary_port = int(run(["docker", "port", primary, "5432/tcp"]).stdout.strip().rsplit(":", 1)[1])
         wait_sql(dsn(primary_port), recovery=False)
         # PGDATA of standby is a *separate* Docker-managed volume.
         # The postgres Docker entrypoint adds host auth; explicitly add a
@@ -70,19 +74,21 @@ def drill():
              "/var/lib/postgresql/data/pg_hba.conf"])
         with connect(dsn(primary_port), autocommit=True) as admin:
             admin.execute("SELECT pg_reload_conf()")
-        run(["docker", "run", "--rm", "--network", "host",
+        run(["docker", "run", "--rm", "--network", network,
              "-v", f"{volume}:/var/lib/postgresql/data",
              "-e", "PGPASSWORD=" + password,
              "postgres:16", "bash", "-c",
-             f"pg_basebackup -h 127.0.0.1 -p {primary_port} -U postgres "
+             "pg_basebackup -h ab-primary -p 5432 -U postgres "
              "-D /var/lib/postgresql/data -X stream -R -c fast --no-password "
              "&& chown -R postgres:postgres /var/lib/postgresql/data"], timeout=120)
-        run(["docker", "run", "-d", "--name", standby, "--network", "host",
+        run(["docker", "run", "-d", "--name", standby, "--network", network,
+             "--publish", "127.0.0.1::5432",
              "-v", f"{volume}:/var/lib/postgresql/data",
              "-e", "POSTGRES_PASSWORD=" + password,
-             "postgres:16", "postgres", "-c", f"port={standby_port}",
+             "postgres:16", "postgres",
              "-c", "hot_standby=on"])
         created.append(("container", standby))
+        standby_port = int(run(["docker", "port", standby, "5432/tcp"]).stdout.strip().rsplit(":", 1)[1])
         wait_sql(dsn(standby_port), recovery=True)
         agent, operation = "ha-agent-" + marker, "ha-operation-" + marker
         store = PostgresStore(dsn(primary_port))
@@ -145,6 +151,8 @@ def drill():
         for kind, identifier in reversed(created):
             if kind == "container":
                 run(["docker", "rm", "-f", identifier], check=False)
+            elif kind == "network":
+                run(["docker", "network", "rm", identifier], check=False)
             else:
                 run(["docker", "volume", "rm", "-f", identifier], check=False)
 

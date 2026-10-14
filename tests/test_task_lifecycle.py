@@ -51,6 +51,8 @@ def test_stale_or_invalid_sequence_denied(seq):
     {"kind": "task", "id": "t", "contextId": "c", "status": {"state": "unknown"}},
     {"kind": "task", "id": "t", "contextId": "c", "status": "completed"},
     {"kind": "task", "id": "t", "contextId": "c", "status": {"state": "working"}, "metadata": "bad"},
+    {"kind": "task", "id": "t", "contextId": "c", "status": {"state": "working"}, "metadata": []},
+    {"kind": "task", "id": "t", "contextId": "c", "status": {"state": "working"}, "metadata": False},
     {"kind": "task", "id": "t", "contextId": "c", "status": {"state": "working"}, "metadata": {"agentbridge_sequence": True}},
     {"kind": "task", "id": " ", "contextId": "c", "status": {"state": "working"}},
     {"kind": "task", "id": "t", "contextId": " ", "status": {"state": "working"}},

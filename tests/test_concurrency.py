@@ -22,6 +22,7 @@ import os
 import sys
 import tempfile
 import threading
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -76,7 +77,15 @@ def _run(workers, total_timeout=60):
     # Bound the WHOLE run with a single shared deadline — NOT a per-thread timeout, which would
     # sum across threads and could blow past pytest-timeout — and fail loudly on a real deadlock.
     import time
-    threads = [threading.Thread(target=w, daemon=True) for w in workers]
+    failures = []
+    failure_lock = threading.Lock()
+    def checked(worker):
+        try:
+            worker()
+        except BaseException as exc:
+            with failure_lock:
+                failures.append(exc)
+    threads = [threading.Thread(target=checked, args=(w,), daemon=True) for w in workers]
     for t in threads:
         t.start()
     deadline = time.monotonic() + total_timeout
@@ -84,6 +93,16 @@ def _run(workers, total_timeout=60):
         t.join(max(0.0, deadline - time.monotonic()))
     stuck = [t for t in threads if t.is_alive()]
     assert not stuck, f"{len(stuck)}/{len(threads)} worker thread(s) deadlocked (barrier/lock)"
+    if failures:
+        raise AssertionError(f"{len(failures)} concurrency worker(s) failed") from failures[0]
+
+
+def test_worker_harness_propagates_worker_failure():
+    def failing_worker():
+        raise RuntimeError("injected worker failure")
+    with pytest.raises(AssertionError, match="worker.*failed") as error:
+        _run([lambda: None, failing_worker])
+    assert isinstance(error.value.__cause__, RuntimeError)
 
 
 # --------------------------------------------------------------------------------------
@@ -96,7 +115,7 @@ def test_shared_audit_chain_does_not_fork_across_workers():
     stores = []
     slock = threading.Lock()
     try:
-        n_workers, per_worker = 4, 25   # 4 concurrent SQLite writers: real contention, within SQLite's reliable range
+        n_workers, per_worker = 8, 25   # Exercise the WAL startup fix under stronger writer contention.
         barrier = _BestEffortBarrier(n_workers)  # syncs when prompt; never deadlocks/fails on a slow worker
 
         def worker():

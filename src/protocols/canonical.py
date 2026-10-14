@@ -21,6 +21,14 @@ class CanonicalCall:
     source_protocol: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self):
+        if not isinstance(self.capability, str):
+            raise ValueError("canonical capability must be a string")
+        if not isinstance(self.arguments, dict):
+            raise ValueError("canonical arguments must be a JSON object")
+        if self.text is not None and not isinstance(self.text, str):
+            raise ValueError("canonical text must be a string")
+
     def best_text(self) -> str:
         """A reasonable free-text rendering for protocols that take prose, not tool args."""
         if self.text:

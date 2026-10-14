@@ -57,8 +57,10 @@ def oidc(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _clean_policy_rules():
+def _clean_policy_rules(monkeypatch):
     """Policy rules are module-level state; never leak them into other tests."""
+    monkeypatch.setattr(control_plane, "ADMIN_KEY", "test-admin-key")
+    monkeypatch.setitem(control_plane._ready, "ok", True)
     yield
     control_plane.policy_rules.rules.clear()
 

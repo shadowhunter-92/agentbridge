@@ -25,10 +25,14 @@ class ObserverTrustRegistry:
         for entry in entries:
             if not isinstance(entry,ObserverKey):
                 raise ObserverKeyDenied("invalid observer key configuration")
-            if (not entry.key_id or len(entry.key_id)>128 or entry.key_id in self._keys
+            if (not isinstance(entry.key_id, str) or not entry.key_id
+                    or len(entry.key_id)>128 or entry.key_id in self._keys
                     or entry.state not in ("staged","active","revoked")):
                 raise ObserverKeyDenied("invalid or duplicate observer key identity")
             try:
+                if (not isinstance(entry.public_key_hex, str) or len(entry.public_key_hex) != 64
+                        or any(c not in "0123456789abcdefABCDEF" for c in entry.public_key_hex)):
+                    raise ValueError("noncanonical public key")
                 raw=bytes.fromhex(entry.public_key_hex)
                 if len(raw)!=32: raise ValueError("bad key length")
                 Ed25519PublicKey.from_public_bytes(raw)
@@ -41,6 +45,8 @@ class ObserverTrustRegistry:
             self._keys[entry.key_id]=entry
 
     def resolve_active(self,key_id):
+        if not isinstance(key_id, str):
+            raise ObserverKeyDenied("invalid observer key identity")
         item=self._keys.get(key_id)
         if item is None or item.state!="active":
             raise ObserverKeyDenied("observer key not active or has been revoked")

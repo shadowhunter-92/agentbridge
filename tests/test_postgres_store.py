@@ -78,11 +78,9 @@ def _reset_schema():
 
 
 def _run(workers):
-    threads = [threading.Thread(target=w) for w in workers]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    # Use the same bounded, exception-propagating harness as SQLite contention.
+    from tests.test_concurrency import _run as checked_run
+    checked_run(workers)
 
 
 def test_pg_audit_chain_does_not_fork_across_connections():

@@ -100,7 +100,9 @@ class TaskLifecycle:
             state = TaskState(raw["state"])
         except ValueError as exc:
             raise LifecycleRejected("unknown A2A task state") from exc
-        metadata = task.get("metadata") or {}
+        metadata = task.get("metadata")
+        if metadata is None:
+            metadata = {}
         if not isinstance(metadata, Mapping):
             raise LifecycleRejected("task metadata must be an object")
         seq = metadata.get("agentbridge_sequence", 0)

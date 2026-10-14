@@ -97,11 +97,11 @@ class IdentityRegistry:
         return ident
 
     def revoke(self, agent_id: str) -> bool:
-        if agent_id not in self._cache:
+        rec = self.store.get_identity(agent_id)
+        if rec is None:
             return False
         self._revoked[agent_id] = True
-        rec = self._cache[agent_id]
-        self.store.upsert_identity(agent_id, rec.public_key_hex, revoked=True)
+        self.store.upsert_identity(agent_id, rec["public_key_hex"], revoked=True)
         return True
 
     def is_revoked(self, agent_id: str) -> bool:
@@ -109,7 +109,8 @@ class IdentityRegistry:
         return rec is None or bool(rec.get("revoked", False))
 
     def get(self, agent_id: str) -> Optional[AgentIdentity]:
-        return self._cache.get(agent_id)
+        rec = self.store.get_identity(agent_id)
+        return AgentIdentity(agent_id, rec["public_key_hex"]) if rec else None
 
     def is_registered(self, agent_id: str) -> bool:
         rec = self.store.get_identity(agent_id)
@@ -123,5 +124,5 @@ class IdentityRegistry:
         return ident.verify(data, signature)
 
     def did_of(self, agent_id: str) -> Optional[str]:
-        ident = self._cache.get(agent_id)
+        ident = self.get(agent_id)
         return ident.did if ident else None

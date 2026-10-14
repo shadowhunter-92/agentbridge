@@ -1,5 +1,6 @@
 """Release signing helper produces a manifest the independent verifier accepts."""
 import hashlib
+import os
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives import serialization
 from tools.sign_release_manifest import create_signed_manifest
@@ -28,7 +29,8 @@ def test_offline_release_signer_matches_pinned_verifier(tmp_path):
         verify_release(str(root),manifest,sig,pub,expected_source_commit="a"*40)
 
 
-def test_signer_refuses_unsafe_key_permissions_and_symlink(tmp_path):
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits do not represent Windows ACLs")
+def test_signer_refuses_unsafe_posix_key_permissions(tmp_path):
     root=tmp_path/"dist";root.mkdir()
     (root/"file.whl").write_bytes(b"sample")
     key=tmp_path/"private.key";key.write_bytes(b"x"*32)

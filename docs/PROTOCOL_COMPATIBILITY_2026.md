@@ -60,3 +60,11 @@ The narrow A2A adapter now rejects unknown JSON-RPC procedures and malformed lif
 ## Non-executable A2A lifecycle model (experimental)
 
 `src/protocols/task_lifecycle.py` adds a typed snapshot and monotonic transition model separate from `CanonicalCall`. Its transitions deny stale sequence numbers, terminal-task resurrection and unknown states. Snapshots are **not** executable instructions; parsing them never issues tool calls. This does **not** implement A2A streaming, notification delivery, server-owned sequencing, task persistence, stateful resumption, subscriptions or full A2A conformance. The caller must enforce durable atomic sequence transitions and authorize external effects separately. Run `python -m pytest tests/test_task_lifecycle.py -q` to evaluate this bounded contract.
+
+## Durable status continuation (local audit)
+
+The optional [durable task-status SDK](DURABLE_TASK_LIFECYCLE.md) now implements
+atomic SQL persistence, owner-scoped recovery, cancellation status, event cursors
+and bounded pull consumption. The snapshot model above remains non-executable.
+This is not A2A wire streaming, push delivery, authenticated task endpoints or
+permission to retry a consequential action.

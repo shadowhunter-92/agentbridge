@@ -1,14 +1,14 @@
 # AgentBridge release-review image (not production certified).
 # Alpine-based review candidate to remove unfixed Debian 13 runtime OS CVEs.
-# Base pinned to digest captured from passing CI #316; Python dependencies still need hash locking.
+# Base pinned to digest captured from passing CI #316; runtime dependencies are hash locked.
 FROM python:3.12-alpine3.22@sha256:a190708a2dec1bd18b1decb539f8e8f5407abaa9bf39cacda583f7f8c11db322 AS builder
 RUN apk upgrade --no-cache
 WORKDIR /build
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
-COPY pyproject.toml README.md requirements-runtime.lock ./
+COPY pyproject.toml README.md requirements-runtime.lock requirements-postgres.lock ./
 COPY src ./src
 RUN python -m venv /venv && \
-    /venv/bin/pip install --no-cache-dir --require-hashes -r requirements-runtime.lock && \
+    /venv/bin/pip install --no-cache-dir --require-hashes -r requirements-postgres.lock && \
     /venv/bin/pip install --no-cache-dir --no-deps .
 
 FROM python:3.12-alpine3.22@sha256:a190708a2dec1bd18b1decb539f8e8f5407abaa9bf39cacda583f7f8c11db322
