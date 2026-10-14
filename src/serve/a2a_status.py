@@ -210,10 +210,13 @@ def create_a2a_status_app(tasks: DurableTaskLifecycle, verifier: OidcVerifier, *
     if not isinstance(limits, StreamLimits):
         raise ValueError("validated stream limits required")
     streams = _Streams(limits)
+    from ..authority_mode import require_legacy_authority
+    require_legacy_authority()
     app = FastAPI(title="AgentBridge admitted-task status", docs_url=None, redoc_url=None)
     app.state.status_streams = streams
 
     async def owner_of(request):
+        require_legacy_authority()
         header = request.headers.get("authorization", "")
         if not header.lower().startswith("bearer "):
             raise OidcError("Bearer authentication required")
