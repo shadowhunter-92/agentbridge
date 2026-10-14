@@ -21,7 +21,7 @@ from ..protocols import default_registry
 from ..protocols.durable_task_lifecycle import DurableTaskLifecycle
 from .audit import AuditLog
 from .audit_trust import AuditTrustStore
-from .authority import AuthorityDenied, Principal
+from .authority import AuthorityDenied, Principal, _identifier, _scopes, _subject
 from .budget import BudgetManager
 from .durable_policy import DurableApprovalQueue, DurablePolicySet
 from .gateway import GovernanceGateway
@@ -32,16 +32,37 @@ from .rbac import require
 from .tenant_store import TenantStoreRegistry
 
 
-def principal_owner(principal):
-    human = principal.kind != "machine"
-    material = [principal.tenant_id, "human" if human else "machine", principal.issuer, principal.subject]
-    return hashlib.sha256(json.dumps(material, separators=(",", ":")).encode()).hexdigest()
-
-
 def binding_owner(binding):
-    human = binding["kind"] != "machine"
-    material = [binding["tenant_id"], "human" if human else "machine", binding["issuer"], binding["subject"]]
-    return hashlib.sha256(json.dumps(material, separators=(",", ":")).encode()).hexdigest()
+    """Stable exact-scope ownership, never authority to mint a principal.
+
+    Exclude grant identity/revisions and request lifetime so a legitimate
+    same-scope renewal retains access. Include agent and complete scope to
+    prevent a narrow delegate inheriting the human's broader history.
+    Missing historical material is unassigned authority, not an empty default.
+    """
+    try:
+        if not isinstance(binding, dict) or binding["kind"] not in ("machine", "delegated_human"):
+            raise ValueError("agent resource owner required")
+        issuer = binding["issuer"]
+        if not isinstance(issuer, str) or not 1 <= len(issuer) <= 2048 or any(ord(c) < 32 for c in issuer):
+            raise ValueError("invalid issuer")
+        material = {
+            "domain": "agentbridge.resource-owner.v2",
+            "tenant_id": _identifier(binding["tenant_id"], "tenant_id"),
+            "kind": binding["kind"],
+            "issuer": issuer,
+            "subject": _subject(binding["subject"]),
+            "agent_id": _identifier(binding["agent_id"], "agent_id"),
+            "capabilities": _scopes(binding["capabilities"]),
+            "targets": _scopes(binding["targets"]),
+        }
+        return hashlib.sha256(json.dumps(material, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    except (KeyError, TypeError, ValueError) as exc:
+        raise AuthorityDenied("resource ownership is incomplete or unavailable") from exc
+
+
+def principal_owner(principal):
+    return binding_owner(principal.binding())
 
 
 @dataclass(frozen=True)

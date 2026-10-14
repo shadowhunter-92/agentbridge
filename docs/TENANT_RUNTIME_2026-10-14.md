@@ -20,8 +20,19 @@ The SQLite tradeoff is serialization across tenants sharing the authority file.
 Existing identity/budget/approval/audit/operation/task classes operate inside the
 bound namespace. Same agent and operation identifiers can exist in different
 tenants. Stable authority revisions enter approval/operation fingerprints. Human
-delegation changes ownership; a machine need not invent a human grant. Machine
-and delegated callers cannot read another principal's operation or task.
+delegation changes ownership; a machine need not invent a human grant. Resource
+ownership uses tenant, exact agent principal kind, issuer, subject, authenticated
+agent, and canonical capability/target sets. Token or grant renewal with the same
+scope preserves access; different agent or scope does not inherit history.
+Operator operation inspection still requires audit:read and remains tenant-scoped.
+
+Existing operation records retain complete bindings and can use this comparison
+without rewriting old signatures or state. Earlier opaque task-owner hashes do
+not contain enough authority metadata for safe automatic assignment. Their rows
+remain unchanged and fail closed through the agent session API. Trusted operators
+must retain them for explicit, independently evidenced reassignment or re-admission;
+there is no fallback to the older, broader human ownership key. Only machine and
+delegated-human principals use the agent task-session ownership API.
 
 ## Explicit HTTP mode
 
