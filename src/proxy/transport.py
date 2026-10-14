@@ -94,11 +94,11 @@ async def send_a2a_message(
     Returns: {"texts": [...], "raw": <full result dict>}
     """
     import httpx
+
     # NOTE: a2a-sdk marks A2AClient deprecated in favor of ClientFactory; it still works
     # and is pinned via requirements. Migrate to ClientFactory when we bump a2a-sdk.
-    from a2a.client import A2AClient, A2ACardResolver
-    from a2a.types import (SendMessageRequest, MessageSendParams, Message,
-                           TextPart, Part, Role)
+    from a2a.client import A2ACardResolver, A2AClient
+    from a2a.types import Message, MessageSendParams, Part, Role, SendMessageRequest, TextPart
 
     async with httpx.AsyncClient(timeout=timeout,proxy=proxy_url,trust_env=False) as hc:
         card = await A2ACardResolver(hc, base_url).get_agent_card()
@@ -148,7 +148,7 @@ async def call_acp_agent(
     Returns: {"texts": [...], "raw": <run dict>}
     """
     import httpx
-    from acp_sdk.models import RunCreateRequest, Run, Message, MessagePart
+    from acp_sdk.models import Message, MessagePart, Run, RunCreateRequest
 
     req = RunCreateRequest(
         agent_name=agent_name,
@@ -167,3 +167,61 @@ async def call_acp_agent(
             if (part.content_type or "").startswith("text/") and part.content:
                 texts.append(part.content)
     return {"texts": texts, "raw": run.model_dump(mode="json", exclude_none=True)}
+
+async def call_mcp_http_tool(
+    endpoint: str,
+    tool_name: str,
+    arguments: Dict[str, Any],
+    *,
+    timeout: float = 15.0,
+    headers: Optional[Dict[str, str]] = None,
+    proxy_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Developer-owned Streamable HTTP tool call using the official MCP SDK.
+
+    This direct client is not an execution authority or governed API route.
+    Operators own endpoints/credentials; the public proxy must not map arbitrary
+    agent URLs here. SDK negotiation/session handling remain protocol-versioned.
+    """
+    import asyncio
+    import math
+    from urllib.parse import urlsplit
+
+    import httpx
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamable_http_client
+
+    parsed = urlsplit(endpoint)
+    if parsed.scheme not in ("https", "http") or not parsed.hostname or \
+            parsed.username or parsed.password or parsed.fragment or \
+            (parsed.scheme == "http" and parsed.hostname not in ("127.0.0.1", "localhost", "::1")):
+        raise ValueError("explicit operator-owned HTTP(S) endpoint required")
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or \
+            not math.isfinite(timeout) or not 0 < timeout <= 120:
+        raise ValueError("bounded finite transport timeout required")
+    if not isinstance(tool_name, str) or not tool_name or not isinstance(arguments, dict):
+        raise ValueError("tool name and argument map required")
+    deadline = asyncio.timeout(timeout)
+    try:
+        async with deadline, httpx.AsyncClient(timeout=timeout, headers=headers, proxy=proxy_url,
+                                     trust_env=False, follow_redirects=False) as http:
+            async with streamable_http_client(endpoint, http_client=http) as (read, write, _):
+                async with ClientSession(read, write) as session:
+                    initialized = await session.initialize()
+                    result = await session.call_tool(tool_name, arguments)
+    except Exception as exc:
+        # SDK TaskGroup/session cleanup can surface a secondary HTTP error after
+        # our cancellation. Preserve a stable deadline result and its cause.
+        if deadline.expired():
+            raise TimeoutError("MCP HTTP deadline exceeded; remote outcome is unknown") from exc
+        raise
+    content, texts = [], []
+    for block in result.content or []:
+        text = getattr(block, "text", None)
+        if text is not None:
+            content.append({"type": "text", "text": text})
+            texts.append(text)
+        else:
+            content.append({"type": getattr(block, "type", "unknown"), "data": str(block)})
+    return {"isError": bool(result.isError), "content": content, "raw": texts,
+            "protocolVersion": initialized.protocolVersion}

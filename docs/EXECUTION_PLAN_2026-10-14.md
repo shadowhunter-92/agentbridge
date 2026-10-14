@@ -5,6 +5,15 @@ date. Keep the shared OSS/Trust/Evidence kernel coherent; do not fork four
 incompatible implementations or label unfinished internal engineering external.
 No new paid cloud environment, outbound outreach or branch deletion is assumed.
 
+## Current progress
+
+P0 is complete: PRs #51, #52 and #41 merged with preserved history; main is
+483bc98234ced2b876a6b296a1e1fd292747942c and its post-merge CI passed. Original
+refs remain online and the six dependency PRs closed through the merged ancestry.
+P1 is implemented for the bounded [status observer](A2A_STATUS_STREAMING.md) and
+MCP HTTP client; its tests and separate feature PR carry the exact qualification
+results. General conformance and governed async execution remain P2 work.
+
 ## P0 — Preserve and consolidate the verified foundation
 
 PR #51 has merged into integration. Before main changes, correct the newly

@@ -1,6 +1,7 @@
 # Documentation index
 
-Start with [publication and remaining work](PUBLICATION_STATUS_2026-10-14.md),
+Start with [execution plan](EXECUTION_PLAN_2026-10-14.md),
+[publication and remaining work](PUBLICATION_STATUS_2026-10-14.md),
 [current acceptance](CURRENT_STATUS_2026-10-13.md),
 [supported roadmap](ROADMAP.md), [protocol scope](PROTOCOL_COMPATIBILITY_2026.md),
 [deployment](DEPLOYMENT.md), and [four-product gates](FOUR_PRODUCT_EXECUTION_GATES_2026.md).
@@ -84,3 +85,5 @@ not an execution authority.
 | [Local continuation status](LOCAL_CONTINUATION_STATE_2026-10-13.md) |
 | [Consolidated audit publication](PUBLICATION_STATUS_2026-10-14.md) |
 | [Branch reconciliation and preservation](BRANCH_RECONCILIATION_2026-10-14.md) |
+| [Execution plan and acceptance gates](EXECUTION_PLAN_2026-10-14.md) |
+| [Authenticated A2A status streaming](A2A_STATUS_STREAMING.md) |

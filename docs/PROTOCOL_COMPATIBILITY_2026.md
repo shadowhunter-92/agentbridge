@@ -9,8 +9,8 @@ MCP or A2A specifications.
 
 | Surface | Demonstrated subset | Not certified/supported as a general guarantee |
 |---|---|---|
-| MCP | `tools/call` parameter serialization/interpretation, stdio client tests | Latest HTTP transport session semantics, negotiated extensions, resources, prompts, elicitation, sampling, cancellation, error lifecycle, streaming |
-| A2A | JSON-RPC message/task wire types against pinned `a2a-sdk 0.3.x`, limited live agent exchanges | A2A 1.0 general conformance, lifecycle, task state transitions, streaming, push notifications, authentication negotiation |
+| MCP | tools/call stdio; optional developer HTTP client qualified with MCP SDK 1.30.0 / 2025-11-25 negotiation, sessions and tool errors | Full latest transport/authentication compliance, resources, prompts, elicitation, sampling and governed HTTP execution |
+| A2A | 0.3.26 SDK shapes and exchanges; opt-in JWT-owned existing-task status HTTP/SSE, durable cursor replay | General A2A 1.x conformance, new task execution, artifacts, remote cancellation, push notifications and authentication negotiation |
 | BeeAI ACP | Limited run and message schemas | Full server runtime lifecycle and compatibility across ACP SDK revisions |
 | OpenAI tools | Chat tool-call function payload | Broader API format, streaming and agent control flow |
 | Gemini tools | FunctionCall/FunctionResponse shape | Full model streaming and tool lifecycle |
@@ -35,7 +35,7 @@ The first supported customer-facing evaluation should be **synthetic/read-only M
 |---|---|---|
 | MCP stdio `tools/call` simple JSON argument map | Real SDK message validation and live add-tool example | Invalid or unavailable tool must produce an error; no implicit arbitrary fallback |
 | MCP `resources/read`, `prompts/get`, sampling, notification, cancellation, session control | Not part of canonical action subset | Adapter rejects unsupported procedures; it MUST NOT convert them to tool actions |
-| MCP Streamable HTTP session, auth, resumability | Unqualified | No conformance claim until official transport-level tests |
+| MCP Streamable HTTP | Optional developer client session/tool subset qualified against official SDK reference server | Authentication, broad resumability and governed HTTP dispatch remain unqualified |
 | A2A `Task` data schema from pinned 0.3.x SDK | Limited translation | Unknown task lifecycle, streaming, cancellation and notifications are unqualified |
 | A2A 1.0 full interoperable service | Not qualified | Do not claim 1.0 support based on 0.3.x model validation |
 
@@ -66,5 +66,16 @@ The narrow A2A adapter now rejects unknown JSON-RPC procedures and malformed lif
 The optional [durable task-status SDK](DURABLE_TASK_LIFECYCLE.md) now implements
 atomic SQL persistence, owner-scoped recovery, cancellation status, event cursors
 and bounded pull consumption. The snapshot model above remains non-executable.
-This is not A2A wire streaming, push delivery, authenticated task endpoints or
-permission to retry a consequential action.
+The opt-in [status observer](A2A_STATUS_STREAMING.md) now exposes authenticated
+HTTP/SSE for that bounded existing-task subset. It does not enable push delivery,
+new action execution or retry permission.
+
+## Version-pinned network qualification
+
+`requirements-protocols.txt` fixes A2A SDK 0.3.26 and MCP SDK 1.30.0 for the new
+real-socket checks. The MCP client negotiates 2025-11-25; it is a direct developer
+utility, not a governed proxy endpoint. Tests cover initialize/session cleanup,
+tool errors, bad Origin and invalid sessions against the official read-only SDK
+server. The [A2A observer](A2A_STATUS_STREAMING.md) separately qualifies status
+queries and SSE replay for admitted tasks. Neither result certifies every
+protocol feature, SDK revision or production transport deployment.

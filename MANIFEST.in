@@ -10,6 +10,7 @@ include SECURITY.md
 include CODE_OF_CONDUCT.md
 include AI_DISCLOSURE.md
 include requirements.txt
+include requirements-protocols.txt
 include requirements-runtime.lock
 include requirements-postgres.lock
 include Makefile
