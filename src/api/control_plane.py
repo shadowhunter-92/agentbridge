@@ -24,6 +24,7 @@ Run:  uvicorn src.api.control_plane:app    (docs at /docs)
 
 import logging
 import os
+import asyncio
 import secrets
 import signal
 import sys
@@ -130,7 +131,7 @@ async def lifespan(app: FastAPI):
         # /ready is 503 before we tear down. This is intentionally simple — heavy
         # connection-drain logic belongs in the server (uvicorn --drain-timeout) or a
         # service mesh, not here.
-        time.sleep(0.1)
+        await asyncio.sleep(0.1)
     logger.info("drain complete; shutting down")
 
 
@@ -212,6 +213,13 @@ def _route_label(request: Request) -> str:
     return getattr(route, "path", None) or "<unmatched>"
 
 
+def _method_label(request: Request) -> str:
+    """Keep arbitrary HTTP extension methods out of permanent metric labels."""
+    return request.method if request.method in {
+        "GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"
+    } else "<other>"
+
+
 @app.middleware("http")
 async def _observability_and_rate_limit(request: Request, call_next):
     """Single middleware that does: request_id, slow-log, HTTP metrics, rate-limit.
@@ -243,15 +251,15 @@ async def _observability_and_rate_limit(request: Request, call_next):
         response = await call_next(request)
     except Exception:
         # Unhandled exception — record and re-raise so uvicorn's logger sees the trace.
-        HTTP_REQUESTS.labels(method=request.method, path=_route_label(request),
+        HTTP_REQUESTS.labels(method=_method_label(request), path=_route_label(request),
                              status="500").inc()
         raise
 
     elapsed = time.monotonic() - t0
     _plabel = _route_label(request)
-    HTTP_REQUESTS.labels(method=request.method, path=_plabel,
+    HTTP_REQUESTS.labels(method=_method_label(request), path=_plabel,
                          status=str(response.status_code)).inc()
-    HTTP_DURATION.labels(method=request.method, path=_plabel).observe(elapsed)
+    HTTP_DURATION.labels(method=_method_label(request), path=_plabel).observe(elapsed)
     response.headers["X-Request-ID"] = rid
     if elapsed > float(os.getenv("AGENTBRIDGE_SLOW_LOG_SECONDS", "2.0")):
         logger.warning("slow request %s %s took %.3fs", request.method,
@@ -271,7 +279,8 @@ def operator_guard(permission: str):
             role = "admin"
         elif oidc_verifier is not None and request.headers.get("Authorization"):
             try:
-                _claims, role = oidc_verifier.authenticate(request.headers["Authorization"])
+                _claims, role = await asyncio.to_thread(
+                    oidc_verifier.authenticate, request.headers["Authorization"])
             except OidcError as e:
                 AUTH_FAILURES.labels(kind="operator").inc()
                 raise HTTPException(401, f"operator auth failed: {e}")
@@ -299,6 +308,17 @@ async def authenticate_agent(request: Request, raw_body: Optional[bytes] = None)
         AUTH_FAILURES.labels(kind="agent").inc()
         raise HTTPException(401, f"agent auth failed: {reason}")
     return agent_id
+
+
+def _request_object(raw: bytes) -> Dict[str, Any]:
+    import json
+    try:
+        body = json.loads(raw or b"{}")
+    except (ValueError, UnicodeError) as exc:
+        raise HTTPException(400, "request body must be a JSON object") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(400, "request body must be a JSON object")
+    return body
 
 
 # --- models ---------------------------------------------------------------------------
@@ -382,7 +402,7 @@ def list_protocols():
 def translate_call(body: TranslateBody):
     try:
         return {"wire": registry.translate_call(body.wire, body.src, body.dst)}
-    except KeyError as e:
+    except (KeyError, ValueError, TypeError, AttributeError) as e:
         raise HTTPException(400, str(e))
 
 
@@ -390,7 +410,7 @@ def translate_call(body: TranslateBody):
 def translate_result(body: TranslateBody):
     try:
         return {"wire": registry.translate_result(body.wire, body.src, body.dst)}
-    except KeyError as e:
+    except (KeyError, ValueError, TypeError, AttributeError) as e:
         raise HTTPException(400, str(e))
 
 
@@ -603,10 +623,9 @@ async def _invoke_target(dst_proto: str, dst_wire: Dict[str, Any],
 
 @app.post("/control/route")
 async def governed_route(request: Request):
-    import json
     raw = await request.body()                       # read the body ONCE
     agent_id = await authenticate_agent(request, raw)
-    body = json.loads(raw or b"{}")
+    body = _request_object(raw)
     src, dst, wire = body.get("src"), body.get("dst"), body.get("wire")
     if not (src and dst and wire is not None):
         raise HTTPException(400, "src, dst, wire required")
@@ -621,6 +640,8 @@ async def governed_route(request: Request):
         raise HTTPException(400, f"security policy rejected call: {exc}")
     except KeyError as exc:
         raise HTTPException(400, str(exc))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise HTTPException(400, "malformed or unsupported action wire") from exc
 
     operation_id = body.get("operation_id")
     if target is not None and os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
@@ -651,10 +672,12 @@ async def governed_route(request: Request):
 
 @app.post("/control/authorize")
 async def authorize(request: Request):
-    import json
     raw = await request.body()                       # read the body ONCE
     agent_id = await authenticate_agent(request, raw)
-    body = json.loads(raw or b"{}")
-    d = policy.authorize(agent_id=agent_id, capability=body.get("capability", ""),
-                         cost=float(body.get("cost", 1.0)))
+    body = _request_object(raw)
+    try:
+        d = policy.authorize(agent_id=agent_id, capability=body.get("capability", ""),
+                             cost=float(body.get("cost", 1.0)))
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(400, "invalid authorization input") from exc
     return {"allowed": d.allowed, "reason": d.reason, "needs_approval": d.needs_approval}

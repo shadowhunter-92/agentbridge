@@ -3,7 +3,7 @@ on:
   push:
     branches: [integration/r4-main-reconciliation-2026-10]
   pull_request:
-    branches: [main]
+    branches: [main, integration/r4-main-reconciliation-2026-10]
 permissions:
   contents: read
 jobs:
@@ -11,8 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
       - name: Check AWS CloudFormation structure offline

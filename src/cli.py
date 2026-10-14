@@ -11,6 +11,7 @@ Commands:
 """
 
 import argparse
+import importlib.util
 import json
 import os
 import runpy
@@ -36,6 +37,7 @@ def _serve(args):
 
 
 def _mcp(args):
+    _require_mcp()
     # Mirrors `python -m src.serve.mcp_gateway` so we don't assume a specific entrypoint name.
     runpy.run_module("src.serve.mcp_gateway", run_name="__main__")
 
@@ -52,11 +54,18 @@ def _translate(args):
 
 
 def _demo(args):
-    runpy.run_module("examples.demo_story", run_name="__main__")
+    _require_mcp()
+    runpy.run_module("src.demos.demo_story", run_name="__main__")
 
 
 def _quickstart(args):
-    runpy.run_module("examples.quickstart", run_name="__main__")
+    _require_mcp()
+    runpy.run_module("src.demos.quickstart", run_name="__main__")
+
+
+def _require_mcp():
+    if importlib.util.find_spec("mcp") is None:
+        raise SystemExit("This command requires the optional MCP SDK. Install this wheel with its [mcp] extra, or run python -m pip install -e '.[mcp]' from the source checkout.")
 
 
 def main():

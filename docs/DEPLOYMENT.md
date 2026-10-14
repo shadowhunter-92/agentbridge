@@ -17,7 +17,7 @@ python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt        # Windows; use bin/ on macOS/Linux
 
 # Control plane (mesh + governance) — docs at http://localhost:8000/docs
-uvicorn src.api.control_plane:app --host 0.0.0.0 --port 8000
+uvicorn src.api.control_plane:app --host 127.0.0.1 --port 8000
 
 # OR the drop-in MCP server (stdio)
 python -m src.serve.mcp_gateway
@@ -25,20 +25,25 @@ python -m src.serve.mcp_gateway
 
 ## 2. Run with Docker
 
-```bash
-docker build -t agentbridge -f docker/Dockerfile .
-docker run -p 8000:8000 \
-  -e AGENTBRIDGE_ADMIN_KEY="$(openssl rand -hex 16)" \
-  -e AGENTBRIDGE_DB=/data/governance.db \
-  -v "$PWD/data:/data" \
-  agentbridge
-```
+Set a unique `AGENTBRIDGE_ADMIN_KEY` in the current process or private environment
+file, then run `docker compose up --build`. Root Compose binds loopback and uses
+its named-volume SQLite store. The hardened PostgreSQL reference is
+`docker-compose.release.yml`; its image installs the hash-locked PostgreSQL
+supplemental graph. It starts in production configuration mode for acceptance
+checks, which does not authorize consequential actions.
+
+The core package/image provides translation, HTTP governance and Evidence.
+Install the `[mcp]` extra for the stdio server and packaged synthetic demos;
+install `[transports]` for live MCP/A2A/ACP dispatch. Configured targets whose SDK
+is absent fail startup before a request can reserve budget.
+The supplied minimal review image does not include optional protocol SDKs;
+qualify and hash-lock any custom transport-enabled image separately.
 
 ## 3. Configuration (environment variables)
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `PORT` / `HOST` | `8000` / `0.0.0.0` | Bind address |
+| `PORT` / `HOST` | `8000` / `0.0.0.0` | Used by `main.py`; Docker CMD fixes port 8000, CLI uses its flags |
 | `AGENTBRIDGE_ADMIN_KEY` | auto-generated (logged) | Operator key for `X-Admin-Key` (role: admin). **Set this in production.** |
 | `AGENTBRIDGE_DB` | unset (in-memory) | Persistence target — see §4 |
 | `AGENTBRIDGE_RATE_LIMIT` | `240` | Max requests/min/IP to `/control/*` (blunts admin-key brute force) |
@@ -77,9 +82,8 @@ AGENTBRIDGE_DB=postgresql://user:pass@host/db uvicorn src.api.control_plane:app 
 
 The chain can't fork and budgets can't double-spend across workers (proven by
 `tests/test_concurrency.py`). **Do not** run `--workers > 1` on the default in-memory store —
-each worker would keep its own state. One piece of runtime state is still in-process, the human
-**approval queue**; if you use approvals, pin that traffic to one instance until it's
-store-backed. See `docs/ENTERPRISE.md` → *Concurrency & scaling*.
+each worker would keep its own state. Current approvals and policy are durable;
+shared SQL transactions do not by themselves establish split-brain-safe HA. See `docs/ENTERPRISE.md` → *Concurrency & scaling*.
 
 ## 5. Security model (what's enforced today)
 
@@ -100,12 +104,36 @@ store-backed. See `docs/ENTERPRISE.md` → *Concurrency & scaling*.
       expose the control plane plaintext on a public network.
 - [x] **OIDC operator SSO + RBAC** (Okta/Azure AD/Auth0) — set the `AGENTBRIDGE_OIDC_*`
       env vars; role claim maps to admin/operator/viewer.
-- [ ] **Metrics/tracing** (OpenTelemetry) — roadmap.
+- [x] **Metrics/tracing** — Prometheus `/metrics` and optional OpenTelemetry exist; operator telemetry acceptance remains separate.
 - [ ] A formal security review before handling regulated production traffic.
 
 See `docs/ROADMAP_AND_MONETIZATION.md` for what's gated on demand vs. built next.
 
 
-## Deployment NO-GO status (October 2026)
+## Deployment acceptance
 
-This guide is **not a certification or permission to connect consequential live actions**. Run in isolated staging with synthetic/read-only tools only. Production requires explicitly configured target IDs, per-agent capability ACLs, a durable database, stable secrets, signed nonce requests, and a unique 16–128 character `operation_id`. Direct arbitrary target configurations are rejected. Unknown remote outcomes retain reserved exposure pending independently verified reconciliation. Durable legal holds, trusted external audit anchoring, actual PostgreSQL failover, network partitions, recovery drills and independent penetration review have NOT been completed. Use `docs/PRODUCTION_OPERATOR_DRILLS.md` and `docs/HARDENING_RELEASE_GATES.md` as the acceptance criteria.
+This is not authorization for consequential live actions. Bounded local/CI and
+AWS replication, promotion and rollback evidence exists. Automated split-brain
+safety, independent custody, external destination enforcement and production SLOs
+remain unaccepted. See [current acceptance](CURRENT_STATUS_2026-10-13.md).
+
+Root Compose now requires `AGENTBRIDGE_ADMIN_KEY` explicitly and binds loopback.
+Generate a unique local secret in the current process, then run Compose:
+
+```powershell
+$env:AGENTBRIDGE_ADMIN_KEY = python -c "import secrets; print(secrets.token_hex(32))"
+docker compose up --build
+```
+
+The compatibility file under `docker/` extends that same SQLite evaluation
+service; its former Redis declarations did not persist governance state.
+The hardened PostgreSQL specimen is `docker-compose.release.yml`. It is a
+separate staging topology and requires external configuration and network review.
+The Kubernetes worker/proxy NetworkPolicy specimen and HTTP deployment use
+different roles and selectors; see [Kubernetes guide](../k8s/README.md).
+
+OIDC JWKS removal takes effect after the configured cache TTL and successful
+refresh; a brief global refresh cooldown bounds unknown-kid traffic. Expired
+keys fail closed during issuer outages. Authentication I/O runs off the event
+loop. Configure issuer keys, TLS and retention according to your deployment's
+security requirements.

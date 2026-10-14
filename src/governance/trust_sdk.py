@@ -56,7 +56,8 @@ def verify_action_evidence(*, destination_receipt: dict, readback_attestation: d
     )
 
 
-__all__ = ["VerifiedActionEvidence", "verify_action_evidence", "verify_anchored_audit"]
+__all__ = ["VerifiedActionEvidence", "verify_action_evidence", "verify_anchored_audit",
+           "verify_registered_action_evidence", "verify_journaled_action_evidence"]
 
 
 def verify_registered_action_evidence(*, observer_registry, observer_key_id: str,
@@ -75,3 +76,23 @@ def verify_registered_action_evidence(*, observer_registry, observer_key_id: str
     return verify_action_evidence(
         readback_key_hex=observer_registry.resolve_active(observer_key_id),
         **kwargs)
+
+
+def verify_journaled_action_evidence(*, trust_journal, destination_key_id: str,
+                                    observer_key_id: str, **kwargs) -> VerifiedActionEvidence:
+    """Verify against current controller-signed policies for BOTH signers.
+
+    The journal and its pinned controller keys belong to the embedding operator.
+    Verification loads the latest authenticated revisions under the rotation
+    lock. This is an evidence check, not a settlement or durable acceptance.
+    """
+    from .signing_trust_journal import SigningTrustJournal
+    if not isinstance(trust_journal, SigningTrustJournal):
+        raise TypeError("operator-configured signing trust journal required")
+    if {"destination_key_hex", "readback_key_hex"} & kwargs.keys():
+        raise ValueError("caller cannot override enrolled signing keys")
+    with trust_journal._transaction() as cur:
+        keys = trust_journal.settlement_keys(cur, destination_key_id=destination_key_id,
+                                            observer_key_id=observer_key_id)
+        return verify_action_evidence(destination_key_hex=keys["destination_key_hex"],
+                                      readback_key_hex=keys["readback_key_hex"], **kwargs)

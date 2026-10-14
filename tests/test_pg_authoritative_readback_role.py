@@ -7,7 +7,9 @@ import pytest
 pytestmark=pytest.mark.skipif(not os.getenv("AGENTBRIDGE_TEST_PG"),reason="disposable PostgreSQL required")
 
 
-def test_postgres_observer_reads_committed_effect_without_write_privileges():
+@pytest.mark.parametrize("environment", ["development", "production", "prod"])
+def test_postgres_observer_reads_committed_effect_without_write_privileges(monkeypatch, environment):
+    monkeypatch.setenv("AGENTBRIDGE_ENV", environment)
     import psycopg
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from cryptography.hazmat.primitives import serialization

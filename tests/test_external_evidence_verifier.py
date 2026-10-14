@@ -24,6 +24,9 @@ def test_offline_external_verifier_and_fail_closed_cases(tmp_path):
     trust = {"destination_public_key_hex": pub(destination), "observers": [
         {"key_id": "observer-v1", "public_key_hex": pub(observer), "state": "active"}]}
     assert verify_bundle(bundle, trust)["verdict"] == "signature_and_binding_verified"
+    assert verify_bundle(bundle, trust, expected_action=bundle["expected"])["externally_expected_action_verified"]
+    with pytest.raises(ValueError, match="independently expected"):
+        verify_bundle(bundle, trust, expected_action={**bundle["expected"], "operation_id": "another-operation"})
     for mutation in [
         {"expected": {**bundle["expected"], "fingerprint": "other"}},
         {"receipt": {**receipt, "outcome": "failed"}},

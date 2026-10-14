@@ -1,23 +1,23 @@
 # Requirements for Agent Bridge
 
 # Core dependencies
-fastapi>=0.109.0
+fastapi>=0.141.1
 uvicorn>=0.27.0
 pydantic>=2.13.4
 
 # Testing
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
-pytest-timeout>=2.2.0   # per-test timeout so no run can hang the suite (see tests/conftest, pyproject)
-pytest-cov>=4.1.0       # coverage report in CI logs
+pytest-timeout>=2.4.0   # per-test timeout so no run can hang the suite (see tests/conftest, pyproject)
+pytest-cov>=7.1.0       # coverage report in CI logs
 httpx>=0.28.1
 # Official protocol SDKs used by the conformance + live tests to validate translation
 # against each protocol's REAL schema (dev/test only; not imported at runtime).
 mcp>=1.27.0,<2.0.0
 a2a-sdk>=0.3.0,<1.0.0   # 0.3.x ships the JSON-RPC pydantic types we target
 acp-sdk>=1.0.0          # ACP models (server class is bypassed; see docs/PROTOCOL_SUPPORT.md)
-openai>=2.0.0           # ChatCompletionMessageToolCall (function-calling format)
-google-genai>=1.0.0     # Gemini FunctionCall / FunctionResponse
+openai>=2.51.0          # ChatCompletionMessageToolCall (function-calling format)
+google-genai>=2.16.0    # Gemini FunctionCall / FunctionResponse
 agntcy-acp>=1.5.0       # AGNTCY Agent Connect Protocol (RunCreateStateless, MessageTextBlock)
 
 # Governance plane (runtime): Ed25519 agent identity / signatures + signed audit checkpoints

@@ -3,14 +3,14 @@ on:
   push:
     branches: [integration/r4-main-reconciliation-2026-10]
   pull_request:
-    branches: [main]
+    branches: [main, integration/r4-main-reconciliation-2026-10]
 permissions:
   contents: read
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Parse phases without execution
         run: |
           bash -n tools/aws_pg_two_host_acceptance.sh
