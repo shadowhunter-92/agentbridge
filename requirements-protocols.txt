@@ -1,0 +1,4 @@
+# Published-version network qualification; not the core runtime graph.
+mcp==1.30.0
+a2a-sdk==0.3.26
+httpx==0.28.1

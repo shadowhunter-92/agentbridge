@@ -2,7 +2,8 @@
 
 `src.protocols.durable_task_lifecycle.DurableTaskLifecycle` extends the non-executable
 state model with SQLite/PostgreSQL snapshots and event history. It is a library
-component; no A2A streaming server or new HTTP endpoint is exposed.
+component. The separate opt-in [A2A status observer](A2A_STATUS_STREAMING.md)
+projects its existing tasks over authenticated HTTP/SSE.
 
 ```python
 from src.governance.store import SqliteStore
@@ -36,8 +37,9 @@ Keep action outcomes in the operation ledger and reconcile uncertain effects
 through the Trust/Evidence path.
 
 Retention quotas for total historical tasks, independent tamper evidence,
-authenticated network subscriptions, A2A wire resumability and production service
-backpressure remain separate work. This SDK does not certify those guarantees.
+fleet-wide network quotas, full A2A resumability and production service
+backpressure remain separate work. The observer supplies only the documented
+owner/task-bound replay extension and process-level stream bounds. This SDK does not certify those guarantees.
 
 Run `python -m pytest tests/test_durable_task_lifecycle.py -q` with an explicit
 disposable `AGENTBRIDGE_TEST_PG` to exercise both SQL backends.

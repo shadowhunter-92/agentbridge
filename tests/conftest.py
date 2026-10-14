@@ -16,15 +16,15 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.governance import (
-    make_store,
     AgentIdentity,
-    IdentityRegistry,
     BudgetManager,
-    PolicySet,
-    MaxCostPerCall,
-    RequireApprovalAboveCost,
-    DenyCapabilities,
     BusinessHoursOnly,
+    DenyCapabilities,
+    IdentityRegistry,
+    MaxCostPerCall,
+    PolicySet,
+    RequireApprovalAboveCost,
+    make_store,
 )
 
 
@@ -72,3 +72,78 @@ def sample_policy():
         DenyCapabilities(["wire_transfer"]),
         BusinessHoursOnly(9, 17, days=[0, 1, 2, 3, 4]),
     ])
+
+@pytest.fixture
+def loopback_server():
+    """Serve one real local HTTP app and release only its listener/thread."""
+    import socket
+    import threading
+    import time
+    from contextlib import contextmanager
+
+    import uvicorn
+
+    @contextmanager
+    def serve(factory):
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        url = "http://127.0.0.1:" + str(listener.getsockname()[1])
+        app = factory(url)
+        server = uvicorn.Server(uvicorn.Config(app, lifespan="on", access_log=False,
+                                             log_level="critical", timeout_graceful_shutdown=.2))
+        thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        thread.start()
+        deadline = time.monotonic() + 10
+        try:
+            while not server.started:
+                if not thread.is_alive() or time.monotonic() >= deadline:
+                    raise AssertionError("loopback server failed to start")
+                time.sleep(.01)
+            yield url, app
+        finally:
+            server.should_exit = True
+            thread.join(5)
+            listener.close()
+            assert not thread.is_alive(), "loopback server did not stop"
+
+    return serve
+
+@pytest.fixture(params=["sqlite", "postgres"])
+def network_sql_stores(request, tmp_path):
+    """Private per-test SQL namespace shared across restart handles."""
+    import uuid
+
+    from src.governance.store import PostgresStore, SqliteStore
+
+    handles = []
+    if request.param == "sqlite":
+        def factory():
+            store = SqliteStore(str(tmp_path / "network-status.sqlite"))
+            handles.append(store)
+            return store
+        try:
+            yield factory
+        finally:
+            for store in handles:
+                store.close()
+    else:
+        dsn = os.getenv("AGENTBRIDGE_TEST_PG")
+        if not dsn:
+            pytest.skip("explicit disposable PostgreSQL required")
+        import psycopg
+        from psycopg import sql
+        from psycopg.conninfo import make_conninfo
+
+        schema = "ab_network_" + uuid.uuid4().hex
+        with psycopg.connect(dsn, autocommit=True) as admin:
+            admin.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
+            def factory():
+                store = PostgresStore(make_conninfo(dsn, options="-csearch_path=" + schema))
+                handles.append(store)
+                return store
+            try:
+                yield factory
+            finally:
+                for store in handles:
+                    store.close()
+                admin.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))

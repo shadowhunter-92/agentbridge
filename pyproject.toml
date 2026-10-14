@@ -49,6 +49,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+a2a = ["a2a-sdk==0.3.26", "httpx>=0.28.1"]
 mcp = ["mcp>=1.27.0,<2.0.0"]
 transports = ["mcp>=1.27.0,<2.0.0", "a2a-sdk>=0.3.0,<1.0.0", "acp-sdk>=1.0.0", "httpx>=0.28.1"]
 test = [
