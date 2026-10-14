@@ -1,5 +1,10 @@
 # Control Plane API Reference
 
+> **Production target restriction:** HTTP named-target execution is disabled for
+> generic MCP/A2A/ACP transports in `prod` and `production` until destination-atomic
+> authority/fencing is qualified. Translation and nonproduction synthetic evaluation
+> remain available. See [destination contract](PRODUCTION_TARGET_QUALIFICATION_2026-10-14.md).
+
 Base: the FastAPI app in `src/api/control_plane.py`. Interactive docs at `/docs`.
 
 Three planes:

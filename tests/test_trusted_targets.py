@@ -83,5 +83,6 @@ def test_both_production_spellings_require_operator_cost_and_agent_acl(productio
     assert effective_call_cost(0, "pay", env=env) == 7.0
     with pytest.raises(SecurityConfigurationError, match="agent not authorized"):
         resolve_target("finance", "acp", "pay", env=env, agent_id="attacker")
-    assert resolve_target("finance", "acp", "pay", env=env,
-                          agent_id="approved")["proxy_url"] == "http://egress-proxy.example.com:3128"
+    # A valid ACL/proxy is necessary but cannot qualify opaque destination effects.
+    with pytest.raises(SecurityConfigurationError, match="destination-atomic"):
+        resolve_target("finance", "acp", "pay", env=env, agent_id="approved")

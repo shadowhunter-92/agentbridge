@@ -35,6 +35,7 @@ def test_transport_signatures_expose_operator_proxy_configuration():
     for method in (transport.fetch_a2a_card,transport.send_a2a_message,
                    transport.call_acp_agent):
         assert "proxy_url" in inspect.signature(method).parameters
-    target=resolve_target("test","a2a","read",agent_id="reviewer",
-                          env=_config("service.example.com"))
-    assert target["proxy_url"]=="http://approved-egress.example.com:3128"
+    # A valid proxy does not qualify an opaque production destination.
+    with pytest.raises(SecurityConfigurationError, match="destination-atomic"):
+        resolve_target("test","a2a","read",agent_id="reviewer",
+                       env=_config("service.example.com"))

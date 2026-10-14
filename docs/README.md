@@ -89,3 +89,4 @@ not an execution authority.
 | [Execution plan and acceptance gates](EXECUTION_PLAN_2026-10-14.md) |
 | [Authenticated A2A status streaming](A2A_STATUS_STREAMING.md) |
 | [Current handoff acceptance register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md) |
+| [Production destination qualification](PRODUCTION_TARGET_QUALIFICATION_2026-10-14.md) |
