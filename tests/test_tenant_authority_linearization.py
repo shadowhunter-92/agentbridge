@@ -51,3 +51,33 @@ def test_nested_authority_transaction_cannot_upgrade_shared_lock(authority):
     with directory.guard(owner):
         with pytest.raises(RuntimeError, match="cannot escalate"):
             directory.set_tenant(owner, "new-tenant", active=True)
+
+
+def test_postgres_bootstrap_waits_without_holding_governance_schema_lock(authority, namespaces):
+    import time
+
+    from src.governance.operation_ledger import OperationLedger
+    from src.governance.store import PostgresStore
+    directory, owner, _, factory, _ = authority
+    if not isinstance(directory.store, PostgresStore):
+        pytest.skip("PostgreSQL cross-connection advisory lock ordering")
+    other_store = factory()
+    tenant_store = namespaces("alpha")
+    pid = other_store._db.info.backend_pid
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        with directory.guard(owner):
+            starting = pool.submit(AuthorityDirectory, other_store, verifiers=directory.verifiers)
+            deadline = time.monotonic()+2
+            while time.monotonic() < deadline:
+                row = directory.store._db.execute(
+                    "SELECT 1 FROM pg_locks WHERE pid=%s AND locktype='advisory' "
+                    "AND objid=911005 AND NOT granted", (pid,)
+                ).fetchone()
+                if row:
+                    break
+                threading.Event().wait(.01)
+            assert row, "bootstrap did not reach the controlled authority-lock wait"
+            # This must complete while bootstrap is waiting for our authority
+            # guard; a reversed 911004 -> 911005 bootstrap order deadlocks here.
+            OperationLedger(tenant_store)
+        assert starting.result(timeout=5).store is other_store

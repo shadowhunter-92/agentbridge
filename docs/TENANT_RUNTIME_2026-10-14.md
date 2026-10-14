@@ -73,12 +73,25 @@ PostgreSQL COUNT still scans visible rows under MVCC.
 
 ## Qualification and remaining limits
 
-The combined runtime/HTTP source before the final authority-lock correction
-passed 734 Windows tests plus eight subtests. A subsequently added independent-
-connection test reproduced SQLite WAL revocation overtaking a budget update.
-The corrected BEGIN IMMEDIATE guard passed that same test on both SQL backends;
-38 focused authority/HTTP/runtime tests passed after the fix. Exact final commit
-qualification is recorded separately and must supersede these intermediate runs.
+The frozen runtime at `f76338fef677a7fe6a3923aa9ec53045fcbb4759`
+passed 764 Windows/Python 3.12 tests and 767 Linux/Python 3.11 tests, with eight
+subtests in each run. Eight Windows skips include three POSIX-only cases and
+five PostgreSQL privilege cases on the SQLite fixture; Linux skips the latter
+five. Both runs exercised SQLite and real PostgreSQL. These runs supersede
+the intermediate 734-test qualification.
+
+A subsequent separate-connection regression reproduced PostgreSQL authority
+bootstrap holding the schema lock while waiting for admission to release the
+authority lock. Bootstrap now acquires authority before schema, matching the
+governance order. The regression and authority/runtime/HTTP group passed 87
+tests, with one PostgreSQL-only case skipped on SQLite. Exact-head hosted CI
+must be checked after this correction; earlier CI is not its qualification.
+
+The packaging lock check seeds its candidate from the reviewed lock rather
+than resolving new package releases implicitly. A Linux/Python 3.12 experiment
+preserved all existing pins and detected a deliberately incompatible project
+requirement. Dependency auditing and container vulnerability gates remain
+separate required checks.
 
 Tests cover same-ID tenant separation, PostgreSQL namespace privileges, issuer
 and role confusion, replay/signature tampering, delegation revocation, operator

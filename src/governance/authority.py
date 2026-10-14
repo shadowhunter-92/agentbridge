@@ -233,12 +233,14 @@ class AuthorityDirectory:
                     raise
             else:
                 with store._db.transaction(), store._db.cursor() as raw:
-                    if bootstrap:
-                        raw.execute("SELECT pg_advisory_xact_lock(%s)", (911004,))
                     # Enrollment/revocation is exclusive; request/nonce claims
                     # share the lock and retain concurrent independent inserts.
                     lock = "pg_advisory_xact_lock" if write else "pg_advisory_xact_lock_shared"
                     raw.execute("SELECT " + lock + "(%s)", (_LOCK,))
+                    # Governance paths hold authority before helper schema DDL.
+                    # Bootstrap must use the same order across connections.
+                    if bootstrap:
+                        raw.execute("SELECT pg_advisory_xact_lock(%s)", (911004,))
                     cursor = _Cursor(raw, True)
                     self._transaction_context.active = (cursor, write, claim)
                     try:
