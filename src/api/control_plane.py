@@ -63,6 +63,8 @@ logger = logging.getLogger("control_plane")
 
 # --- startup: configure logging FIRST so the rest of init is observable ------------
 configure_logging()
+from ..authority_mode import require_legacy_authority
+require_legacy_authority()
 
 # --- validate configuration before any state is created ------------------------------
 # We validate AFTER logging so issues are emitted as structured logs. Errors raise
@@ -225,6 +227,10 @@ async def _observability_and_rate_limit(request: Request, call_next):
     """Single middleware that does: request_id, slow-log, HTTP metrics, rate-limit.
     Doing it in one pass avoids re-reading the body and re-wrapping the response chain.
     """
+    try:
+        require_legacy_authority()
+    except ConfigError:
+        return JSONResponse({"detail": "legacy authority mode unavailable"}, status_code=503)
     rid = request.headers.get("X-Request-ID") or new_request_id()
     bind_request_id(rid)
     request_id_header = {"X-Request-ID": rid}
@@ -599,27 +605,9 @@ def list_policy_rules(_role: str = Depends(operator_guard("policy:read"))):
 
 async def _invoke_target(dst_proto: str, dst_wire: Dict[str, Any],
                          target: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    """Invoke a live target if one is specified, else return the translated wire."""
-    if not target:
-        return {"translated_wire": dst_wire}
-    from ..proxy import transport
-    kind = target.get("kind")
-    if kind == "mcp_stdio":
-        params = dst_wire.get("params", {})
-        res = await transport.call_mcp_tool(target["command"], target.get("args", []),
-                                            params.get("name"), params.get("arguments", {}))
-        return {"result": res}
-    if kind == "a2a_http":
-        message = registry.get(dst_proto).to_canonical_call(dst_wire).best_text()
-        return {"result": await transport.send_a2a_message(target["base_url"], message,
-                                                           proxy_url=target.get("proxy_url"))}
-    if kind == "acp_http":
-        return {"result": await transport.call_acp_agent(target["base_url"],
-                                                          target.get("agent_name", "agent"),
-                                                          registry.get(dst_proto).to_canonical_call(dst_wire).best_text(),
-                                                          proxy_url=target.get("proxy_url"))}
-    raise HTTPException(400, f"unknown target kind '{kind}'")
-
+    """Shared transport dispatch; admission remains in the governance kernel."""
+    from ..proxy.transport import invoke_target
+    return await invoke_target(dst_proto, dst_wire, target, registry=registry)
 
 @app.post("/control/route")
 async def governed_route(request: Request):

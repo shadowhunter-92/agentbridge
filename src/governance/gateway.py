@@ -11,22 +11,26 @@ For every cross-protocol call:
 Atomic reserve/commit closes the TOCTOU race. Protocol-agnostic — the moat in action.
 """
 
-import time
-import json
+import asyncio
 import hashlib
+import json
+import logging
 import os
+import threading
+import time
+from types import SimpleNamespace
 from typing import Any, Awaitable, Callable, Dict, Optional
 
+from ..observability import record_call, span, update_audit_count, update_budget_gauge
 from ..protocols import default_registry
 from ..protocols.registry import ProtocolRegistry
-from .identity import IdentityRegistry
-from .budget import BudgetManager
 from .approvals import ApprovalQueue
-from .policy import PolicyEngine, Decision
-from .audit import AuditLog, AuditEntry
-from .operation_ledger import OperationLedger, OperationConflict
+from .audit import AuditEntry, AuditLog
+from .budget import BudgetManager
+from .identity import IdentityRegistry
+from .operation_ledger import OperationConflict, OperationLedger
+from .policy import Decision, PolicyEngine
 from .request_auth import canonical_payload
-from ..observability import span, record_call, update_audit_count, update_budget_gauge
 
 
 class GovernanceError(PermissionError):
@@ -46,15 +50,41 @@ class GovernanceGateway:
                  policy: Optional[PolicyEngine] = None,
                  audit: Optional[AuditLog] = None,
                  registry: Optional[ProtocolRegistry] = None,
-                 require_verified: bool = True):
+                 require_verified: bool = True,
+                 authority=None, tenant_id=None):
+        if authority is None:
+            from ..authority_mode import require_legacy_authority
+            require_legacy_authority()
+        if (authority is None) != (tenant_id is None):
+            raise ValueError("authority and tenant_id must be configured together")
+        self.authority, self.tenant_id = authority, tenant_id
         self.identities = identities or IdentityRegistry()
         self.budgets = budgets or BudgetManager()
         self.approvals = approvals
         self.policy = policy or PolicyEngine(self.identities, self.budgets,
                                              approvals=approvals,
-                                             require_verified=require_verified)
+                                             require_verified=require_verified,
+                                             authority=authority, tenant_id=tenant_id)
         self.audit = audit or AuditLog()
         self.registry = registry or default_registry
+        self._operations = None
+        self._operations_init_lock = threading.Lock()
+        if authority is not None:
+            if self.policy.authority is not authority or self.policy.tenant_id != tenant_id:
+                raise ValueError("gateway policy must share authenticated tenant authority")
+            if any(component is not None and component.store is not self.identities.store
+                   for component in (self.budgets, self.approvals, self.audit)):
+                raise ValueError("all tenant governance components must share the same bound store")
+
+    def _operation_ledger(self):
+        # The ledger caches no operation/authorization state. Cache only its
+        # schema-bound handle so steady-state requests do not execute DDL twice.
+        with self._operations_init_lock:
+            if self._operations is None:
+                self._operations = OperationLedger(self.identities.store)
+            elif self._operations.store is not self.identities.store:
+                raise ValueError("gateway governance store cannot change after initialization")
+            return self._operations
 
     async def route_call(
         self,
@@ -71,27 +101,170 @@ class GovernanceGateway:
         signature: Optional[bytes] = None,
         signed_body: Optional[bytes] = None,
         signed_nonce: Optional[str] = None,
+        principal=None,
     ) -> Dict[str, Any]:
+        # SQL/JWT/policy work runs off the network event loop. Shield admission
+        # so cancellation cannot lose the reservation token while a SQL worker
+        # is still completing its transaction. No invocation starts on this path.
+        prepare = asyncio.create_task(asyncio.to_thread(
+            self._admit, agent_id=agent_id, src_proto=src_proto, dst_proto=dst_proto,
+            src_wire=src_wire, cost=cost, target_id=target_id, operation_id=operation_id,
+            signed_data=signed_data, signature=signature, signed_body=signed_body,
+            signed_nonce=signed_nonce, principal=principal))
+        try:
+            admission = await asyncio.shield(prepare)
+        except asyncio.CancelledError:
+            try:
+                admission = await self._complete(prepare)
+            except BaseException:
+                # _admit performs its own cleanup before returning an error.
+                pass
+            else:
+                cleanup = asyncio.create_task(asyncio.to_thread(self._abort_admission, admission))
+                try:
+                    await self._complete(cleanup)
+                except BaseException:
+                    logging.getLogger(__name__).exception(
+                        "canceled admission cleanup failed; operation requires reconciliation")
+            raise
+        try:
+            result = await invoke(admission.wire)
+        except BaseException as exc:
+            cleanup = asyncio.create_task(asyncio.to_thread(self._invocation_failed, admission, exc))
+            await self._complete(cleanup)
+            raise
+        settle = asyncio.create_task(asyncio.to_thread(self._settle, admission))
+        try:
+            await asyncio.shield(settle)
+        except asyncio.CancelledError:
+            # A definite successful result must finish settling even when its
+            # HTTP caller disconnects; cancellation never causes an auto replay.
+            try:
+                await self._complete(settle)
+            except BaseException as exc:
+                failure = asyncio.create_task(asyncio.to_thread(self._invocation_failed, admission, exc))
+                await self._complete(failure)
+            raise
+        except BaseException as exc:
+            failure = asyncio.create_task(asyncio.to_thread(self._invocation_failed, admission, exc))
+            await self._complete(failure)
+            raise
+        return result
+
+    @staticmethod
+    async def _complete(task):
+        """Finish a bounded SQL cleanup despite repeated caller cancellation."""
+        while True:
+            try:
+                return await asyncio.shield(task)
+            except asyncio.CancelledError:
+                if task.cancelled():
+                    raise
+
+    def _audit_admission(self, admission, decision, reason, cost=0.0):
+        self.audit.record(actor=admission.actor, action="route_call",
+                          source_protocol=admission.src, target_protocol=admission.dst,
+                          capability=admission.capability, decision=decision,
+                          reason=reason, cost=cost)
+        update_audit_count(self.audit.count())
+        record_call(admission.src, admission.dst, admission.capability,
+                    decision, time.monotonic()-admission.started)
+
+    def _abort_admission(self, admission):
+        self.budgets.release(admission.agent_id, admission.token)
+        if admission.ledger is not None:
+            admission.ledger.finish(admission.agent_id, admission.operation_id, "failed")
+        self._audit_admission(admission, "error", "request canceled before invocation")
+
+    def _invocation_failed(self, admission, exc):
+        uncertain = admission.ledger is not None
+        if not uncertain:
+            self.budgets.release(admission.agent_id, admission.token)
+        self._audit_admission(admission, "unknown" if uncertain else "error",
+                              str(exc)[:200] or type(exc).__name__)
+
+    def _settle(self, admission):
+        if not self.budgets.commit(admission.agent_id, admission.token):
+            raise RuntimeError("budget reservation missing after invocation; reconcile outcome")
+        if admission.ledger is not None:
+            admission.ledger.finish(admission.agent_id, admission.operation_id, "succeeded")
+        self._audit_admission(admission, "allow", admission.decision.reason, admission.cost)
+        try:
+            budget = self.budgets.get(admission.agent_id)
+            update_budget_gauge(admission.agent_id, budget.spent, budget.remaining())
+        except Exception:
+            pass  # telemetry cannot invalidate a committed operation
+
+    def _admit(self, **kwargs):
+        if self.authority is None:
+            return self._admit_guarded(**kwargs)
+        with self.authority.guard(kwargs.get("principal")):
+            return self._admit_guarded(**kwargs)
+
+    def _admit_guarded(
+        self,
+        *,
+        agent_id: str,
+        src_proto: str,
+        dst_proto: str,
+        src_wire: Dict[str, Any],
+        cost: float = 1.0,
+        target_id: Optional[str] = None,
+        operation_id: Optional[str] = None,
+        signed_data: Optional[bytes] = None,
+        signature: Optional[bytes] = None,
+        signed_body: Optional[bytes] = None,
+        signed_nonce: Optional[str] = None,
+        principal=None,
+    ) -> Dict[str, Any]:
+        if self.authority is None:
+            from ..authority_mode import require_legacy_authority
+            require_legacy_authority()
+        audit_actor = agent_id
+        if self.authority is not None:
+            from .authority import AuthorityDenied
+            if principal is None or principal.tenant_id != self.tenant_id or principal.agent_id != agent_id:
+                raise AuthorityDenied("principal does not own this tenant gateway")
+            self.authority.assert_request(principal, body=signed_body, nonce=signed_nonce)
+            audit_actor = "principal:v1:" + json.dumps(principal.binding(), sort_keys=True, separators=(",", ":"))
+
+        def audit_record(**fields):
+            fields["actor"] = audit_actor
+            return self.audit.record(**fields)
+
         # Library callers receive the same fail-closed protocol admission as HTTP.
         self.registry.get(src_proto)
         self.registry.get(dst_proto)
         t0 = time.monotonic()
-        with span("gateway.route_call", {
+        with span("gateway.admission", {
             "agent_id": agent_id, "src": src_proto, "dst": dst_proto, "cost": cost,
         }):
             canonical = self.registry.get(src_proto).to_canonical_call(src_wire)
             capability = canonical.capability
-            request_material = json.dumps({
+            material = {
                 "agent_id": agent_id, "src": src_proto, "dst": dst_proto,
                 "wire": src_wire, "cost": cost, "target_id": target_id,
                 "operation_id": operation_id,
-            }, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+            }
+            if self.authority is not None:
+                self.authority.authorize(principal, capability, target_id)
+                try:
+                    body = json.loads(signed_body)
+                    if not isinstance(body, dict) or not (
+                            body.get("src") == src_proto and body.get("dst") == dst_proto
+                            and body.get("wire") == src_wire and body.get("target_id") == target_id
+                            and body.get("operation_id") == operation_id):
+                        raise ValueError("signed operation differs from invocation")
+                except (ValueError, TypeError, UnicodeError) as exc:
+                    raise AuthorityDenied("signed principal proof does not bind this operation") from exc
+                material["authority"] = principal.binding()
+            request_material = json.dumps(material, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
             request_scope = hashlib.sha256(request_material).hexdigest()
 
-            if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+            if self.authority is not None or os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
                 if (not isinstance(operation_id, str) or
                         not 16 <= len(operation_id) <= 128):
-                    entry = self.audit.record(
+                    entry = audit_record(
                         actor=agent_id, action="route_call", source_protocol=src_proto,
                         target_protocol=dst_proto, capability=capability,
                         decision="deny", reason="durable operation_id required in production",
@@ -100,7 +273,7 @@ class GovernanceGateway:
                         Decision(False, "durable operation_id required in production"), entry)
                 # An identity registered in SQL is not proof that an arbitrary
                 # in-process caller possesses its signing key.
-                proof_ok = False
+                proof_ok = self.authority is not None
                 try:
                     # Proof has to authenticate this operation, not unrelated
                     # caller-selected bytes. Cost is an operator reservation, so
@@ -113,7 +286,7 @@ class GovernanceGateway:
                             and body.get("target_id") == target_id
                             and body.get("operation_id") == operation_id
                         )
-                        if matches and signed_data == canonical_payload(
+                        if self.authority is None and matches and signed_data == canonical_payload(
                                 agent_id, signed_nonce, signed_body):
                             proof_ok = (signature is not None and
                                         self.identities.verify_signature(
@@ -121,7 +294,7 @@ class GovernanceGateway:
                 except (TypeError, ValueError, UnicodeError):
                     proof_ok = False
                 if not proof_ok:
-                    entry = self.audit.record(actor=agent_id, action="route_call",
+                    entry = audit_record(actor=agent_id, action="route_call",
                         source_protocol=src_proto, target_protocol=dst_proto,
                         capability=capability, decision="deny",
                         reason="request-bound signed agent proof required", cost=0.0)
@@ -131,7 +304,7 @@ class GovernanceGateway:
             # This is a read-only hint, NOT the concurrency lock: atomic
             # ledger.claim below remains the authority for new operations.
             if operation_id is not None:
-                existing = OperationLedger(self.identities.store).get(agent_id, operation_id)
+                existing = self._operation_ledger().get(agent_id, operation_id)
                 if existing is not None:
                     if existing["fingerprint"] != request_scope:
                         raise OperationConflict("idempotency key reused for different request")
@@ -143,13 +316,14 @@ class GovernanceGateway:
                 signed_data=signed_data, signature=signature,
                 src_protocol=src_proto, dst_protocol=dst_proto,
                 request_scope=request_scope,
+                **({"principal": principal, "target_id": target_id} if self.authority is not None else {}),
             )
 
             if not decision.allowed:
                 approval_id = None
                 if decision.needs_approval and self.approvals:
                     approval_id = self.approvals.request(agent_id, capability, cost, request_scope).id
-                entry = self.audit.record(
+                entry = audit_record(
                     actor=agent_id, action="route_call",
                     source_protocol=src_proto, target_protocol=dst_proto,
                     capability=capability, decision="deny", reason=decision.reason, cost=0.0,
@@ -163,7 +337,7 @@ class GovernanceGateway:
             # the cap (the fix for the multi-worker double-spend).
             token, why = self.budgets.reserve(agent_id, cost)
             if token is None:
-                entry = self.audit.record(
+                entry = audit_record(
                     actor=agent_id, action="route_call",
                     source_protocol=src_proto, target_protocol=dst_proto,
                     capability=capability, decision="deny", reason=why, cost=0.0,
@@ -172,69 +346,49 @@ class GovernanceGateway:
                 record_call(src_proto, dst_proto, capability, "deny", time.monotonic() - t0)
                 raise GovernanceError(Decision(False, why), entry)
 
-            # Claim a one-shot grant BEFORE the target is invoked. The store operation
-            # is atomic: parallel calls cannot execute on the same approval.
-            if decision.approval_required:
-                if not self.approvals or not self.approvals.consume(agent_id, capability, request_scope):
-                    self.budgets.release(agent_id, token)
-                    entry = self.audit.record(actor=agent_id, action="route_call",
-                        source_protocol=src_proto, target_protocol=dst_proto,
-                        capability=capability, decision="deny", reason="approval grant already consumed", cost=0.0)
-                    raise GovernanceError(Decision(False, "approval grant already consumed"), entry)
-
-            ledger = None
-            if operation_id is not None:
-                # Claim after authorization, budget reservation and approval, but
-                # BEFORE translation or external execution. A failed/unknown
-                # downstream outcome is never automatically replayed.
-                ledger = OperationLedger(self.identities.store)
+            if self.authority is not None:
                 try:
-                    ledger.claim(agent_id, operation_id, request_scope, reservation_token=token)
+                    self.authority.authorize(principal, capability, target_id)
                 except BaseException:
                     self.budgets.release(agent_id, token)
                     raise
 
-            # A remote timeout may occur AFTER the target committed its side effect.
-            # When using durable operation IDs, retain the budget reservation until
-            # an operator reconciles this unknown outcome. Otherwise a timeout could
-            # free capacity for another potentially consequential action.
-            invocation_started = False
+            ledger = None
+            claimed = False
             try:
+                # Claim a one-shot grant BEFORE the target is invoked. The store operation
+                # is atomic: parallel calls cannot execute on the same approval.
+                if decision.approval_required:
+                    if not self.approvals or not self.approvals.consume(agent_id, capability, request_scope):
+                        self.budgets.release(agent_id, token)
+                        entry = audit_record(actor=agent_id, action="route_call",
+                            source_protocol=src_proto, target_protocol=dst_proto,
+                            capability=capability, decision="deny", reason="approval grant already consumed", cost=0.0)
+                        raise GovernanceError(Decision(False, "approval grant already consumed"), entry)
+
+                ledger = None
+                if operation_id is not None:
+                    # Claim after authorization, budget reservation and approval, but
+                    # BEFORE translation or external execution. A failed/unknown
+                    # downstream outcome is never automatically replayed.
+                    ledger = self._operation_ledger()
+                    try:
+                        ledger.claim(agent_id, operation_id, request_scope, reservation_token=token,
+                                     **({"authority_binding": principal.binding()} if self.authority is not None else {}))
+                        claimed = True
+                    except BaseException:
+                        self.budgets.release(agent_id, token)
+                        raise
+                if self.authority is not None:
+                    self.authority.authorize(principal, capability, target_id)
                 dst_wire = self.registry.translate_call(src_wire, src_proto, dst_proto)
-                invocation_started = True
-                result = await invoke(dst_wire)
-            except BaseException as e:
-                uncertain = invocation_started and ledger is not None
-                if not uncertain:
-                    self.budgets.release(agent_id, token)
-                self.audit.record(
-                    actor=agent_id, action="route_call",
-                    source_protocol=src_proto, target_protocol=dst_proto,
-                    capability=capability,
-                    decision="unknown" if uncertain else "error",
-                    reason=(str(e)[:200] or type(e).__name__), cost=0.0,
-                )
-                update_audit_count(self.audit.count())
-                record_call(src_proto, dst_proto, capability,
-                            "unknown" if uncertain else "error", time.monotonic() - t0)
+            except BaseException:
+                self.budgets.release(agent_id, token)
+                if ledger is not None and claimed:
+                    ledger.finish(agent_id, operation_id, "failed")
                 raise
-
-            self.budgets.commit(agent_id, token)
-            if ledger is not None:
-                ledger.finish(agent_id, operation_id, "succeeded")
-            self.audit.record(
-                actor=agent_id, action="route_call",
-                source_protocol=src_proto, target_protocol=dst_proto,
-                capability=capability, decision="allow", reason=decision.reason, cost=cost,
-            )
-
-            # Update gauges so Prometheus sees live state.
-            update_audit_count(self.audit.count())
-            try:
-                b = self.budgets.get(agent_id)
-                update_budget_gauge(agent_id, b.spent, b.remaining())
-            except Exception:
-                pass  # budget gauge is best-effort; never break a real call for it
-
-            record_call(src_proto, dst_proto, capability, "allow", time.monotonic() - t0)
-            return result
+            return SimpleNamespace(agent_id=agent_id, src=src_proto, dst=dst_proto,
+                                   capability=capability, cost=cost, token=token,
+                                   ledger=ledger, operation_id=operation_id,
+                                   wire=dst_wire, decision=decision, actor=audit_actor,
+                                   started=t0)

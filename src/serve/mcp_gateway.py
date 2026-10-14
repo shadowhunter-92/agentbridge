@@ -13,6 +13,7 @@ Tools exposed:
 
 The tool bodies are plain importable functions (so they're unit-testable) and are also
 registered as MCP tools. Run:  python -m src.serve.mcp_gateway   (stdio)
+Generic remote execution is nonproduction-only; production translation remains available.
 """
 
 import json
@@ -27,6 +28,8 @@ def _approved_remote_target(base_url: str) -> str:
     A URL allowlist is NOT a DNS rebinding defense. The operator's egress
     proxy must independently enforce authenticated destination and IP policy.
     """
+    from ..authority_mode import require_legacy_authority
+    require_legacy_authority()
     import os
     from urllib.parse import urlsplit
     import ipaddress
@@ -66,6 +69,10 @@ def _approved_remote_target(base_url: str) -> str:
     proxy_url = os.environ.get("AGENTBRIDGE_EGRESS_PROXY_URL")
     if not proxy_url:
         raise ValueError("remote MCP tools require operator-configured egress proxy")
+    from ..api.trusted_targets import _qualified_invocation
+    # A URL allowlist/proxy does not create a destination-atomic effect contract.
+    # Hosted standalone tools obey the same production restriction as HTTP.
+    _qualified_invocation({"kind": "mcp_gateway_remote"}, os.environ)
     return proxy_url
 
 
@@ -100,6 +107,8 @@ async def bridge_call_acp(base_url: str, agent_name: str, message: str) -> str:
 
 def build_server():
     """Construct the FastMCP server with the bridge tools registered."""
+    from ..authority_mode import require_legacy_authority
+    require_legacy_authority()
     from mcp.server.fastmcp import FastMCP
     mcp = FastMCP("agentbridge-meta-bridge")
     mcp.tool()(bridge_list_protocols)
