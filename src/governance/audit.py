@@ -67,9 +67,11 @@ class AuditLog:
         self.store = store or InMemoryStore()
         self._lock = threading.RLock()
         self._legal_hold = False
-        self._entries: List[AuditEntry] = [
+        # SQL remains authoritative. Do not eagerly duplicate all historical
+        # evidence in every worker; explicit verification/export loads it.
+        self._entries: List[AuditEntry] = ([
             AuditEntry(**rec) for rec in self.store.load_audit()
-        ]
+        ] if isinstance(self.store, InMemoryStore) else [])
 
     def record(self, *, actor: str, action: str, source_protocol: str,
                target_protocol: str, capability: str, decision: str,
@@ -90,7 +92,8 @@ class AuditLog:
         with self._lock:
             rec = self.store.append_audit_chained(build)
             entry = AuditEntry(**rec)
-            self._entries.append(entry)        # local cache; the store is the source of truth
+            if isinstance(self.store, InMemoryStore):
+                self._entries.append(entry)
             return entry
 
     def entries(self) -> List[AuditEntry]:
@@ -99,9 +102,11 @@ class AuditLog:
         return [AuditEntry(**rec) for rec in self.store.load_audit()]
 
     def count(self) -> int:
-        """Number of audit entries currently cached — O(1), no list copy (hot path)."""
-        with self._lock:
-            return len(self.entries())
+        """Persisted count without transferring/deserializing historical records.
+
+        PostgreSQL COUNT observes MVCC rows and is not claimed to be O(1).
+        """
+        return self.store.audit_count()
 
     def export_jsonl(self) -> str:
         """Audit export for compliance (one JSON object per line)."""
@@ -160,9 +165,8 @@ class AuditLog:
     # --- signed checkpoints (compliance / third-party verifiable) ---------------------
     def head_hash(self) -> str:
         """The current chain head hash (GENESIS if empty)."""
-        with self._lock:
-            records = self.entries()
-            return records[-1].entry_hash if records else self.GENESIS
+        head = self.store.load_audit_head()
+        return head["entry_hash"] if head else self.GENESIS
 
     @staticmethod
     def _checkpoint_payload(seq: int, head_hash: str) -> bytes:
@@ -172,10 +176,9 @@ class AuditLog:
         """Sign the current audit head so a third party can later prove the log was not
         truncated or rewound past this point. `sign(bytes) -> bytes` is an Ed25519 signer
         (e.g. AgentIdentity.sign for an operator key)."""
-        with self._lock:
-            records = self.entries()
-            seq = records[-1].seq + 1 if records else 0
-            head = records[-1].entry_hash if records else self.GENESIS
+        record = self.store.load_audit_head()
+        seq = record["seq"] + 1 if record else 0
+        head = record["entry_hash"] if record else self.GENESIS
         sig = sign(self._checkpoint_payload(seq, head))
         return {"seq": seq, "head_hash": head, "algo": "ed25519",
                 "public_key_hex": public_key_hex, "signature_hex": sig.hex(),

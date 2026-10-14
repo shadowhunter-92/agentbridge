@@ -80,6 +80,7 @@ dev = [
 [project.scripts]
 agentbridge = "src.cli:main"
 agentbridge-verify-evidence = "src.governance.evidence_cli:main"
+agentbridge-tenant-migrate = "src.governance.tenant_migration_cli:main"
 
 [project.urls]
 Homepage = "https://github.com/shadowhunter-92/agentbridge"
