@@ -24,6 +24,54 @@ def _quote(value):
     return '"' + value.replace('"', '""') + '"'
 
 
+def _install_sqlite_guards(cur, tables):
+    for table in tables:
+        for action in ("INSERT", "UPDATE", "DELETE"):
+            name = "tenant_guard_" + uuid.uuid5(uuid.NAMESPACE_OID, table + ":" + action).hex
+            condition = (
+                "1"
+                if table == "tenant_store_binding" and action != "INSERT"
+                else "agentbridge_current_tenant() IS NOT (SELECT tenant_id FROM tenant_store_binding WHERE singleton=1)"
+            )
+            cur.execute(
+                "CREATE TRIGGER IF NOT EXISTS "
+                + _quote(name)
+                + " BEFORE "
+                + action
+                + " ON "
+                + _quote(table)
+                + " WHEN "
+                + condition
+                + " BEGIN SELECT RAISE(ABORT,'tenant write scope required'); END"
+            )
+
+
+def _install_postgres_guards(cur, schema, tables):
+    function = _quote(schema) + ".agentbridge_tenant_write_guard"
+    binding = _quote(schema) + ".tenant_store_binding"
+    cur.execute(
+        "CREATE OR REPLACE FUNCTION "
+        + function
+        + "() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog AS $$ BEGIN IF (TG_TABLE_NAME='tenant_store_binding' AND TG_OP<>'INSERT') OR current_setting('agentbridge.tenant_id',true) IS DISTINCT FROM (SELECT tenant_id FROM "
+        + binding
+        + " WHERE singleton=1) THEN RAISE EXCEPTION 'tenant write scope required'; END IF; RETURN NULL; END $$"
+    )
+    for table in tables:
+        name = _quote("agentbridge_tenant_write_guard")
+        target = _quote(schema) + "." + _quote(table)
+        cur.execute("DROP TRIGGER IF EXISTS " + name + " ON " + target)
+        # Statement-level guard returning NULL does not suppress rows.
+        cur.execute(
+            "CREATE TRIGGER "
+            + name
+            + " BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "
+            + target
+            + " FOR EACH STATEMENT EXECUTE FUNCTION "
+            + function
+            + "()"
+        )
+
+
 class TenantSqliteStore(SqliteStore):
     def __init__(self, path, *, tenant_id):
         _identifier(tenant_id, "tenant_id")
@@ -99,25 +147,7 @@ class TenantSqliteStore(SqliteStore):
             self.assert_scope()
             self._db.execute("BEGIN IMMEDIATE")
             try:
-                for table in self._tables():
-                    for action in ("INSERT", "UPDATE", "DELETE"):
-                        name = "tenant_guard_" + uuid.uuid5(uuid.NAMESPACE_OID, table + ":" + action).hex
-                        condition = (
-                            "1"
-                            if table == "tenant_store_binding" and action != "INSERT"
-                            else "agentbridge_current_tenant() IS NOT (SELECT tenant_id FROM tenant_store_binding WHERE singleton=1)"
-                        )
-                        self._db.execute(
-                            "CREATE TRIGGER IF NOT EXISTS "
-                            + _quote(name)
-                            + " BEFORE "
-                            + action
-                            + " ON "
-                            + _quote(table)
-                            + " WHEN "
-                            + condition
-                            + " BEGIN SELECT RAISE(ABORT,'tenant write scope required'); END"
-                        )
+                _install_sqlite_guards(self._db, self._tables())
                 self._db.execute("COMMIT")
             except BaseException:
                 self._db.execute("ROLLBACK")
@@ -231,29 +261,7 @@ class TenantPostgresStore(PostgresStore):
         with self._lock, self._db.transaction(), self._db.cursor() as cur:
             self.assert_scope()
             cur.execute("SELECT pg_advisory_xact_lock(%s)", (911004,))
-            function = _quote(self.schema) + ".agentbridge_tenant_write_guard"
-            binding = _quote(self.schema) + ".tenant_store_binding"
-            cur.execute(
-                "CREATE OR REPLACE FUNCTION "
-                + function
-                + "() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog AS $$ BEGIN IF (TG_TABLE_NAME='tenant_store_binding' AND TG_OP<>'INSERT') OR current_setting('agentbridge.tenant_id',true) IS DISTINCT FROM (SELECT tenant_id FROM "
-                + binding
-                + " WHERE singleton=1) THEN RAISE EXCEPTION 'tenant write scope required'; END IF; RETURN NULL; END $$"
-            )
-            for table in self._tables(cur):
-                name = _quote("agentbridge_tenant_write_guard")
-                target = _quote(self.schema) + "." + _quote(table)
-                cur.execute("DROP TRIGGER IF EXISTS " + name + " ON " + target)
-                # Statement-level guard returning NULL does not suppress rows.
-                cur.execute(
-                    "CREATE TRIGGER "
-                    + name
-                    + " BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "
-                    + target
-                    + " FOR EACH STATEMENT EXECUTE FUNCTION "
-                    + function
-                    + "()"
-                )
+            _install_postgres_guards(cur, self.schema, self._tables(cur))
 
 
 class TenantStoreRegistry:
