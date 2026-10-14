@@ -1,0 +1,83 @@
+# Enrolled tenant runtime and HTTP boundary
+
+This is an opt-in engineering alpha layer over the existing Trust Kernel. It
+does not establish production acceptance or activate historical databases.
+
+## Authority and storage
+
+`TenantKernel` receives an operator-built `AuthorityDirectory`, explicit tenant
+stores, cost schedules, and target records. A tenant owns a private SQLite file
+or a private PostgreSQL schema with its own unprivileged direct login. PostgreSQL
+tenant logins cannot inherit roles, create temporary objects, or have USAGE on
+another configured tenant or authority schema. Authority lives separately.
+
+Every `TenantSession` operation revalidates the sealed principal. Local governance
+reads and mutations hold an authority lock: SQLite BEGIN IMMEDIATE, PostgreSQL a
+shared advisory lock. Enrollment/revocation uses the exclusive boundary. This
+serializes local admission with revocation; it does not make remote effects atomic.
+The SQLite tradeoff is serialization across tenants sharing the authority file.
+
+Existing identity/budget/approval/audit/operation/task classes operate inside the
+bound namespace. Same agent and operation identifiers can exist in different
+tenants. Stable authority revisions enter approval/operation fingerprints. Human
+delegation changes ownership; a machine need not invent a human grant. Machine
+and delegated callers cannot read another principal's operation or task.
+
+## Explicit HTTP mode
+
+Set `AGENTBRIDGE_AUTHORITY_MODE=multi_tenant` and construct
+`src.api.tenant_control_plane.create_tenant_app(kernel)` from trusted application
+setup. This factory has no default database, global administrator key or login
+bootstrap. CLI configuration loading is not yet provided. The legacy CLI/HTTP,
+MCP server, A2A status factory and unscoped gateway refuse this mode. Legacy
+single-tenant behavior remains available in `legacy_single_tenant`, the default.
+
+Operator endpoints require `Authorization: Bearer`, `X-Issuer`, and a verified
+enrolled tenant selected by `X-Tenant-Id`. Platform administrators authenticate
+without a tenant selector and explicitly choose `X-Resource-Tenant` for tenant
+resources. JWT role claims do not grant enrolled membership or platform authority.
+
+Agent POST endpoints require `X-Tenant-Id`, `X-Agent-Id`, `X-Nonce`, `X-Signature`
+and optional `X-Delegation-Id`. Ed25519 tenant-v2 proof covers the exact body and
+selectors. A signed `request_scope` binds route versus operation/task lookup.
+Duplicate authentication headers, duplicate JSON members, extra body fields,
+compressed bodies and oversized bodies are rejected. Body reads have a deadline.
+`TenantAgentClient` signs these requests, requires TLS except explicit loopback
+evaluation, refuses redirects/environment proxies, bounds responses and never
+automatically retries a consequential operation.
+
+## Async admission and performance
+
+The existing gateway offloads SQL admission and settlement from the event loop.
+Cancellation before invocation completes cleanup; cancellation after dispatch
+retains UNKNOWN exposure for reconciliation. A definite successful result settles
+even if its caller disconnects. Duplicate losers cannot fail a winner's ledger row.
+
+SQL audit initialization/count/head no longer load the complete audit history.
+Explicit chain verification/export retain their full historical semantics. Local
+30-sample microbenchmarks at 5,000 entries observed median initialization/count/
+head latency fall from 118.714 to 5.647 ms on SQLite and 150.438 to 12.238 ms on
+PostgreSQL. These observations are not network or production SLO measurements.
+PostgreSQL COUNT still scans visible rows under MVCC.
+
+## Qualification and remaining limits
+
+The combined runtime/HTTP source before the final authority-lock correction
+passed 734 Windows tests plus eight subtests. A subsequently added independent-
+connection test reproduced SQLite WAL revocation overtaking a budget update.
+The corrected BEGIN IMMEDIATE guard passed that same test on both SQL backends;
+38 focused authority/HTTP/runtime tests passed after the fix. Exact final commit
+qualification is recorded separately and must supersede these intermediate runs.
+
+Tests cover same-ID tenant separation, PostgreSQL namespace privileges, issuer
+and role confusion, replay/signature tampering, delegation revocation, operator
+exports, real HTTP routing, body/header bounds, alternate legacy entry points,
+async cancellation, duplicate admission and original production target gates.
+
+Not complete: historical assignment/rollback tooling, durable fleet quotas and
+retention, tenant-aware reconciliation/evidence/background services, actual async
+task execution/cancellation, MCP/A2A tenant network projections, workload identity,
+qualified destination-atomic effects and observer readback, full-path performance,
+trusted release qualification and independent acceptance. The generic production
+target restriction remains in force, including standalone remote MCP tools. No
+main merge, deployment, release publication or external contact occurs here.

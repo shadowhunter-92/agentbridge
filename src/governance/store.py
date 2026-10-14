@@ -50,6 +50,15 @@ class GovernanceStore(ABC):
         """Delete audit entries with seq < `seq`. Returns the number deleted.
         Implementations MUST be a no-op (return 0) when seq <= 0."""
 
+    def audit_count(self) -> int:
+        """Compatibility fallback; SQL backends override without loading evidence."""
+        return len(self.load_audit())
+
+    def load_audit_head(self) -> Optional[Dict[str, Any]]:
+        """Return the persisted head; SQL backends use the sequence index."""
+        records = self.load_audit()
+        return records[-1] if records else None
+
     # approvals (store-backed; new in production-readiness pass)
     @abstractmethod
     def insert_approval(self, approval: Dict[str, Any]) -> None: ...
@@ -115,6 +124,14 @@ class InMemoryStore(GovernanceStore):
     def load_audit(self):
         with self._lock:
             return [dict(e) for e in self._audit]
+
+    def audit_count(self):
+        with self._lock:
+            return len(self._audit)
+
+    def load_audit_head(self):
+        with self._lock:
+            return dict(self._audit[-1]) if self._audit else None
 
     def truncate_audit_before(self, seq):
         if seq <= 0:
@@ -281,6 +298,15 @@ class SqliteStore(GovernanceStore):
         with self._lock:
             rows = self._db.execute("SELECT entry FROM audit ORDER BY seq").fetchall()
         return [json.loads(r["entry"]) for r in rows]
+
+    def audit_count(self):
+        with self._lock:
+            return self._db.execute("SELECT count(*) AS n FROM audit").fetchone()["n"]
+
+    def load_audit_head(self):
+        with self._lock:
+            row = self._db.execute("SELECT entry FROM audit ORDER BY seq DESC LIMIT 1").fetchone()
+        return json.loads(row["entry"]) if row else None
 
     def truncate_audit_before(self, seq):
         # Never allow deletion through a direct store call in production.
@@ -450,7 +476,7 @@ class PostgresStore(GovernanceStore):
 
     GENESIS = "0" * 64
 
-    def __init__(self, dsn: str):
+    def __init__(self, dsn: str, *, initialize_connection=None):
         try:
             import psycopg
             from psycopg.rows import dict_row
@@ -460,8 +486,23 @@ class PostgresStore(GovernanceStore):
                 "`pip install \"psycopg[binary]\"`, or use a SQLite path instead."
             ) from e
         self._lock = threading.RLock()
-        self._db = psycopg.connect(dsn, autocommit=True, row_factory=dict_row)
-        self._init_schema()
+        # Bound SQL work so cancellation cleanup cannot wait forever on a
+        # disconnected server or a stalled lock holder. Preserve trusted DSN
+        # namespace options; append service limits after them.
+        from psycopg.conninfo import conninfo_to_dict
+        configured_options = conninfo_to_dict(dsn).get("options", "")
+        options = configured_options + " -cstatement_timeout=10000 -clock_timeout=5000"
+        self._db = psycopg.connect(dsn, autocommit=True, row_factory=dict_row,
+                                  connect_timeout=5, options=options)
+        try:
+            # Trusted host callback may establish/validate a private namespace
+            # before bootstrap creates any objects. Never selected from a request.
+            if initialize_connection is not None:
+                initialize_connection(self._db)
+            self._init_schema()
+        except BaseException:
+            self._db.close()
+            raise
 
     def _init_schema(self):
         # PostgreSQL CREATE TABLE IF NOT EXISTS is NOT race-free across
@@ -549,6 +590,19 @@ class PostgresStore(GovernanceStore):
             cur.execute("SELECT entry FROM audit ORDER BY seq")
             rows = cur.fetchall()
         return [json.loads(r["entry"]) for r in rows]
+
+    def audit_count(self):
+        # MVCC COUNT still scans visible rows, but never transfers/deserializes
+        # the entire evidence history merely to update routine telemetry.
+        with self._lock, self._db.cursor() as cur:
+            cur.execute("SELECT count(*) AS n FROM audit")
+            return cur.fetchone()["n"]
+
+    def load_audit_head(self):
+        with self._lock, self._db.cursor() as cur:
+            cur.execute("SELECT entry FROM audit ORDER BY seq DESC LIMIT 1")
+            row = cur.fetchone()
+        return json.loads(row["entry"]) if row else None
 
     def truncate_audit_before(self, seq):
         if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
