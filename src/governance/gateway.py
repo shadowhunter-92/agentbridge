@@ -77,6 +77,7 @@ class GovernanceGateway:
         self.audit = audit or AuditLog()
         self.registry = registry or default_registry
         self._operations = None
+        self._quotas = None
         self._operations_init_lock = threading.Lock()
         if authority is not None:
             if self.policy.authority is not authority or self.policy.tenant_id != tenant_id:
@@ -121,7 +122,12 @@ class GovernanceGateway:
         # schema-bound handle so steady-state requests do not execute DDL twice.
         with self._operations_init_lock:
             if self._operations is None:
-                self._operations = OperationLedger(self.identities.store)
+                ledger = OperationLedger(self.identities.store)
+                quotas = None
+                if self.authority is not None:
+                    from .admission_quotas import AdmissionQuotas
+                    quotas = AdmissionQuotas(self.identities.store)
+                self._operations, self._quotas = ledger, quotas
             elif self._operations.store is not self.identities.store:
                 raise ValueError("gateway governance store cannot change after initialization")
             return self._operations
@@ -435,7 +441,15 @@ class GovernanceGateway:
                         # Lock/claim operation before budget, matching outcome
                         # settlement and reconciliation. Nothing is visible until
                         # reservation, approval and its token link commit together.
-                        ledger.claim(agent_id, operation_id, request_scope, **binding)
+                        quota_hook = None
+                        if self._quotas is not None:
+                            def quota_hook():
+                                from .admission_quotas import QuotaDenied
+                                try:
+                                    self._quotas.admit(principal, agent_id, operation_id, request_scope, cost)
+                                except QuotaDenied as exc:
+                                    raise _AdmissionRejected(str(exc)) from exc
+                        ledger.claim(agent_id, operation_id, request_scope, before_insert=quota_hook, **binding)
                         claimed = True
                     token, why = self.budgets.reserve(agent_id, cost)
                     if token is None:

@@ -59,7 +59,7 @@ class OperationLedger:
                                 "agent_id TEXT NOT NULL,operation_id TEXT NOT NULL,"
                                 "binding TEXT NOT NULL,PRIMARY KEY(agent_id,operation_id))")
 
-    def claim(self, agent_id, operation_id, fingerprint, reservation_token=None, *, authority_binding=None):
+    def claim(self, agent_id, operation_id, fingerprint, reservation_token=None, *, authority_binding=None, before_insert=None):
         if not all(isinstance(x, str) and x and len(x) <= 256 for x in (agent_id, operation_id, fingerprint)):
             raise ValueError("invalid operation claim")
         if reservation_token is not None and (not isinstance(reservation_token, str) or not reservation_token):
@@ -86,6 +86,8 @@ class OperationLedger:
                     if row["fingerprint"] != fingerprint:
                         raise OperationConflict("idempotency key reused for different request")
                     raise OperationConflict("existing operation is " + row["state"] + "; no automatic replay")
+                if before_insert is not None:
+                    before_insert()
                 db.execute(
                     "INSERT INTO agent_operations VALUES(?,?,?,?,?)",
                     (agent_id, operation_id, fingerprint, "unknown", stamp),
@@ -108,6 +110,8 @@ class OperationLedger:
                 if row["fingerprint"] != fingerprint:
                     raise OperationConflict("idempotency key reused for different request")
                 raise OperationConflict("existing operation is " + row["state"] + "; no automatic replay")
+            if before_insert is not None:
+                before_insert()
             cur.execute(
                 "INSERT INTO agent_operations VALUES(%s,%s,%s,%s,%s)",
                 (agent_id, operation_id, fingerprint, "unknown", stamp),

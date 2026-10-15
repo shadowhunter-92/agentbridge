@@ -100,7 +100,7 @@ async cancellation, duplicate admission and original production target gates.
 
 Offline historical assignment and conservative rollback have a separate qualified procedure: [tenant migration](TENANT_MIGRATION_2026-10-14.md). Rolling and large-database migration remain unqualified.
 
-Not complete: durable fleet quotas and
+Not complete: qualified storage quotas and
 retention, tenant-aware reconciliation/evidence/background services, actual async
 task execution/cancellation, MCP/A2A tenant network projections, workload identity,
 qualified destination-atomic effects and observer readback, full-path performance,
@@ -108,4 +108,4 @@ trusted release qualification and independent acceptance. The generic production
 target restriction remains in force, including standalone remote MCP tools. No
 main merge, deployment, release publication or external contact occurs here.
 
-Shared-SQL success settlement and pre-invocation abort now commit budget, operation state and audit together; see [atomic outcome accounting](ATOMIC_GOVERNANCE_STATE_2026-10-14.md). Shared-SQL admission now atomically binds reservation, approval and operation claim; see [atomic admission](ATOMIC_ADMISSION_2026-10-14.md). Aggregate quotas remain subsequent work.
+Shared-SQL success settlement and pre-invocation abort now commit budget, operation state and audit together; see [atomic outcome accounting](ATOMIC_GOVERNANCE_STATE_2026-10-14.md). Shared-SQL admission now atomically binds reservation, approval and operation claim; see [atomic admission](ATOMIC_ADMISSION_2026-10-14.md). Operator-enabled durable aggregate admission quotas have a separate boundary: [tenant/user caps](DURABLE_ADMISSION_QUOTAS_2026-10-15.md). Storage quotas and qualified retention remain subsequent work.

@@ -129,7 +129,7 @@ class TenantKernel:
                 authority=directory,
                 tenant_id=tenant,
             )
-            operations = OperationLedger(store)
+            operations = gateway._operation_ledger()
             tasks = DurableTaskLifecycle(store)
             audit_trust = AuditTrustStore(store)
             store.seal_writes()
@@ -237,6 +237,19 @@ class TenantSession:
     @_guarded(write=False)
     def get_budget(self, agent_id):
         return self._runtime("budgets:read").budgets.get(agent_id).state()
+
+    @_guarded(write=True)
+    def set_quotas(self, **limits):
+        from .admission_quotas import QuotaLimits
+        runtime = self._runtime("policy:write")
+        runtime.gateway._operation_ledger()
+        runtime.gateway._quotas.set_policy(QuotaLimits(**limits), audit=lambda: self._audit(runtime, "set_quotas"))
+
+    @_guarded(write=False)
+    def get_quotas(self):
+        runtime = self._runtime("budgets:read")
+        runtime.gateway._operation_ledger()
+        return runtime.gateway._quotas.inspect()
 
     @_guarded(write=False)
     def pending_approvals(self):

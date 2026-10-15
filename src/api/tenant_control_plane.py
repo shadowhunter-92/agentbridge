@@ -63,6 +63,18 @@ class BudgetBody(_Body):
     window_seconds: int = Field(default=3600, ge=1, le=31536000)
 
 
+class QuotaBody(_Body):
+    enabled: bool
+    spend_limit: float = Field(default=1000.0, ge=0, allow_inf_nan=False)
+    user_spend_limit: float = Field(default=100.0, ge=0, allow_inf_nan=False)
+    rate_limit: int = Field(default=10000, ge=1, le=1000000)
+    user_rate_limit: int = Field(default=1000, ge=1, le=1000000)
+    window_seconds: int = Field(default=3600, ge=1, le=31536000)
+    max_active: int = Field(default=128, ge=1, le=1000000)
+    user_max_active: int = Field(default=32, ge=1, le=1000000)
+    max_records: int = Field(default=100000, ge=1, le=10000000)
+
+
 class ApprovalBody(_Body):
     granted: bool
 
@@ -245,6 +257,17 @@ def create_tenant_app(kernel: TenantKernel, *, max_body_bytes=1048576):
         session = await operator(request)
         _, value = await _body(request, BudgetBody, limit=max_body_bytes)
         await asyncio.to_thread(session.set_budget, agent_id, **value.model_dump())
+        return {"updated": True}
+
+    @app.get("/v2/operator/quotas")
+    async def quotas(request: Request):
+        return await asyncio.to_thread((await operator(request)).get_quotas)
+
+    @app.put("/v2/operator/quotas")
+    async def set_quotas(request: Request):
+        session = await operator(request)
+        _, value = await _body(request, QuotaBody, limit=max_body_bytes)
+        await asyncio.to_thread(session.set_quotas, **value.model_dump())
         return {"updated": True}
 
     @app.get("/v2/operator/approvals")
