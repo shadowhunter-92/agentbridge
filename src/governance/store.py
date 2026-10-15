@@ -75,6 +75,7 @@ class GovernanceStore(ABC):
         """Atomically transition an approval from 'approved' to 'consumed'.
         Returns True on success, False if the row doesn't exist or isn't 'approved'.
         Distinct from update_approval_status (which only allows pending->approved/denied)."""
+
     @abstractmethod
     def delete_approval(self, approval_id: str) -> bool: ...
 
@@ -422,21 +423,12 @@ class SqliteStore(GovernanceStore):
                 raise
 
     def consume_approval(self, approval_id):
-        with self._lock:
-            self._db.execute("BEGIN IMMEDIATE")
-            try:
-                row = self._db.execute(
-                    "SELECT status FROM approvals WHERE id=?", (approval_id,)).fetchone()
-                if not row or row["status"] != "approved":
-                    self._db.execute("ROLLBACK")
-                    return False
-                self._db.execute("UPDATE approvals SET status='consumed' WHERE id=?",
-                                 (approval_id,))
-                self._db.execute("COMMIT")
-                return True
-            except Exception:
-                self._db.execute("ROLLBACK")
-                raise
+        with sql_atomic(self):
+            row = self._db.execute("SELECT status FROM approvals WHERE id=?", (approval_id,)).fetchone()
+            if not row or row["status"] != "approved":
+                return False
+            self._db.execute("UPDATE approvals SET status='consumed' WHERE id=?", (approval_id,))
+            return True
 
     def delete_approval(self, approval_id):
         with self._lock:
@@ -711,7 +703,6 @@ class PostgresStore(GovernanceStore):
     def close(self) -> None:
         with self._lock:
             self._db.close()
-
 
 
 @contextmanager

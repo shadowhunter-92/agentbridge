@@ -108,4 +108,4 @@ trusted release qualification and independent acceptance. The generic production
 target restriction remains in force, including standalone remote MCP tools. No
 main merge, deployment, release publication or external contact occurs here.
 
-Shared-SQL success settlement and pre-invocation abort now commit budget, operation state and audit together; see [atomic outcome accounting](ATOMIC_GOVERNANCE_STATE_2026-10-14.md). Admission transactions and aggregate quotas remain subsequent work.
+Shared-SQL success settlement and pre-invocation abort now commit budget, operation state and audit together; see [atomic outcome accounting](ATOMIC_GOVERNANCE_STATE_2026-10-14.md). Shared-SQL admission now atomically binds reservation, approval and operation claim; see [atomic admission](ATOMIC_ADMISSION_2026-10-14.md). Aggregate quotas remain subsequent work.

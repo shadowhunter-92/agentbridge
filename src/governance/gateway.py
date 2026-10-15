@@ -18,7 +18,7 @@ import logging
 import os
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from types import SimpleNamespace
 from typing import Any, Awaitable, Callable, Dict, Optional
 
@@ -37,12 +37,19 @@ from .store import PostgresStore, SqliteStore, sql_atomic
 
 class GovernanceError(PermissionError):
     """Raised when a call is denied by policy."""
+
     def __init__(self, decision: Decision, audit_entry: AuditEntry,
                  approval_id: Optional[str] = None):
         super().__init__(decision.reason)
         self.decision = decision
         self.audit_entry = audit_entry
         self.approval_id = approval_id
+
+
+class _AdmissionRejected(Exception):
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.decision = Decision(False, reason)
 
 
 class GovernanceGateway:
@@ -78,12 +85,21 @@ class GovernanceGateway:
                    for component in (self.budgets, self.approvals, self.audit)):
                 raise ValueError("all tenant governance components must share the same bound store")
 
+    def _shared_sql_store(self, ledger):
+        store = self.identities.store
+        participants = (self.budgets, self.approvals, self.audit, ledger)
+        if isinstance(store, (SqliteStore, PostgresStore)) and all(
+            component is None or component.store is store for component in participants
+        ):
+            return store
+        if self.authority is not None:
+            raise ValueError("tenant governance requires one shared durable SQL store")
+        return None
+
     @contextmanager
     def _atomic_state(self, admission):
-        store = self.identities.store
-        participants = (self.budgets, self.approvals, self.audit, admission.ledger)
-        if isinstance(store, (SqliteStore, PostgresStore)) and all(
-                component is None or component.store is store for component in participants):
+        store = self._shared_sql_store(admission.ledger)
+        if store is not None:
             with sql_atomic(store):
                 if admission.ledger is not None:
                     # Reconciliation locks operation -> budget -> audit. Match
@@ -96,8 +112,6 @@ class GovernanceGateway:
                         raise OperationConflict("operation missing or already settled; inspect its durable outcome")
                 yield
             return
-        if self.authority is not None:
-            raise ValueError("tenant settlement requires one shared durable SQL store")
         # Caller-owned legacy embeddings with separate/in-memory participants
         # keep their explicitly weaker local-state contract.
         yield
@@ -256,6 +270,7 @@ class GovernanceGateway:
     ) -> Dict[str, Any]:
         if self.authority is None:
             from ..authority_mode import require_legacy_authority
+
             require_legacy_authority()
         # Canonicalize the same validated value used by budget arithmetic.
         # Equivalent integer/float operator costs must share an operation scope.
@@ -263,6 +278,7 @@ class GovernanceGateway:
         audit_actor = agent_id
         if self.authority is not None:
             from .authority import AuthorityDenied
+
             if principal is None or principal.tenant_id != self.tenant_id or principal.agent_id != agent_id:
                 raise AuthorityDenied("principal does not own this tenant gateway")
             self.authority.assert_request(principal, body=signed_body, nonce=signed_nonce)
@@ -276,14 +292,24 @@ class GovernanceGateway:
         self.registry.get(src_proto)
         self.registry.get(dst_proto)
         t0 = time.monotonic()
-        with span("gateway.admission", {
-            "agent_id": agent_id, "src": src_proto, "dst": dst_proto, "cost": cost,
-        }):
+        with span(
+            "gateway.admission",
+            {
+                "agent_id": agent_id,
+                "src": src_proto,
+                "dst": dst_proto,
+                "cost": cost,
+            },
+        ):
             canonical = self.registry.get(src_proto).to_canonical_call(src_wire)
             capability = canonical.capability
             material = {
-                "agent_id": agent_id, "src": src_proto, "dst": dst_proto,
-                "wire": src_wire, "cost": cost, "target_id": target_id,
+                "agent_id": agent_id,
+                "src": src_proto,
+                "dst": dst_proto,
+                "wire": src_wire,
+                "cost": cost,
+                "target_id": target_id,
                 "operation_id": operation_id,
             }
             if self.authority is not None:
@@ -291,9 +317,12 @@ class GovernanceGateway:
                 try:
                     body = json.loads(signed_body)
                     if not isinstance(body, dict) or not (
-                            body.get("src") == src_proto and body.get("dst") == dst_proto
-                            and body.get("wire") == src_wire and body.get("target_id") == target_id
-                            and body.get("operation_id") == operation_id):
+                        body.get("src") == src_proto
+                        and body.get("dst") == dst_proto
+                        and body.get("wire") == src_wire
+                        and body.get("target_id") == target_id
+                        and body.get("operation_id") == operation_id
+                    ):
                         raise ValueError("signed operation differs from invocation")
                 except (ValueError, TypeError, UnicodeError) as exc:
                     raise AuthorityDenied("signed principal proof does not bind this operation") from exc
@@ -302,15 +331,18 @@ class GovernanceGateway:
             request_scope = hashlib.sha256(request_material).hexdigest()
 
             if self.authority is not None or os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
-                if (not isinstance(operation_id, str) or
-                        not 16 <= len(operation_id) <= 128):
+                if not isinstance(operation_id, str) or not 16 <= len(operation_id) <= 128:
                     entry = audit_record(
-                        actor=agent_id, action="route_call", source_protocol=src_proto,
-                        target_protocol=dst_proto, capability=capability,
-                        decision="deny", reason="durable operation_id required in production",
-                        cost=0.0)
-                    raise GovernanceError(
-                        Decision(False, "durable operation_id required in production"), entry)
+                        actor=agent_id,
+                        action="route_call",
+                        source_protocol=src_proto,
+                        target_protocol=dst_proto,
+                        capability=capability,
+                        decision="deny",
+                        reason="durable operation_id required in production",
+                        cost=0.0,
+                    )
+                    raise GovernanceError(Decision(False, "durable operation_id required in production"), entry)
                 # An identity registered in SQL is not proof that an arbitrary
                 # in-process caller possesses its signing key.
                 proof_ok = self.authority is not None
@@ -321,23 +353,33 @@ class GovernanceGateway:
                     body = json.loads(signed_body) if signed_body is not None else None
                     if isinstance(body, dict) and isinstance(signed_nonce, str):
                         matches = (
-                            body.get("src") == src_proto and body.get("dst") == dst_proto
+                            body.get("src") == src_proto
+                            and body.get("dst") == dst_proto
                             and body.get("wire") == src_wire
                             and body.get("target_id") == target_id
                             and body.get("operation_id") == operation_id
                         )
-                        if self.authority is None and matches and signed_data == canonical_payload(
-                                agent_id, signed_nonce, signed_body):
-                            proof_ok = (signature is not None and
-                                        self.identities.verify_signature(
-                                            agent_id, signed_data, signature))
+                        if (
+                            self.authority is None
+                            and matches
+                            and signed_data == canonical_payload(agent_id, signed_nonce, signed_body)
+                        ):
+                            proof_ok = signature is not None and self.identities.verify_signature(
+                                agent_id, signed_data, signature
+                            )
                 except (TypeError, ValueError, UnicodeError):
                     proof_ok = False
                 if not proof_ok:
-                    entry = audit_record(actor=agent_id, action="route_call",
-                        source_protocol=src_proto, target_protocol=dst_proto,
-                        capability=capability, decision="deny",
-                        reason="request-bound signed agent proof required", cost=0.0)
+                    entry = audit_record(
+                        actor=agent_id,
+                        action="route_call",
+                        source_protocol=src_proto,
+                        target_protocol=dst_proto,
+                        capability=capability,
+                        decision="deny",
+                        reason="request-bound signed agent proof required",
+                        cost=0.0,
+                    )
                     raise GovernanceError(Decision(False, "request-bound signed agent proof required"), entry)
 
             # Detect a known idempotency collision before the budget pre-check.
@@ -348,13 +390,16 @@ class GovernanceGateway:
                 if existing is not None:
                     if existing["fingerprint"] != request_scope:
                         raise OperationConflict("idempotency key reused for different request")
-                    raise OperationConflict("existing operation is " + existing["state"] +
-                                            "; no automatic replay")
+                    raise OperationConflict("existing operation is " + existing["state"] + "; no automatic replay")
 
             decision = self.policy.authorize(
-                agent_id=agent_id, capability=capability, cost=cost,
-                signed_data=signed_data, signature=signature,
-                src_protocol=src_proto, dst_protocol=dst_proto,
+                agent_id=agent_id,
+                capability=capability,
+                cost=cost,
+                signed_data=signed_data,
+                signature=signature,
+                src_protocol=src_proto,
+                dst_protocol=dst_proto,
                 request_scope=request_scope,
                 **({"principal": principal, "target_id": target_id} if self.authority is not None else {}),
             )
@@ -364,71 +409,86 @@ class GovernanceGateway:
                 if decision.needs_approval and self.approvals:
                     approval_id = self.approvals.request(agent_id, capability, cost, request_scope).id
                 entry = audit_record(
-                    actor=agent_id, action="route_call",
-                    source_protocol=src_proto, target_protocol=dst_proto,
-                    capability=capability, decision="deny", reason=decision.reason, cost=0.0,
+                    actor=agent_id,
+                    action="route_call",
+                    source_protocol=src_proto,
+                    target_protocol=dst_proto,
+                    capability=capability,
+                    decision="deny",
+                    reason=decision.reason,
+                    cost=0.0,
                 )
                 update_audit_count(self.audit.count())
                 record_call(src_proto, dst_proto, capability, "deny", time.monotonic() - t0)
                 raise GovernanceError(decision, entry, approval_id=approval_id)
 
-            # Atomically reserve budget before doing any work. The reservation is recorded in
-            # the durable store inside an atomic section, so concurrent workers can't both pass
-            # the cap (the fix for the multi-worker double-spend).
-            token, why = self.budgets.reserve(agent_id, cost)
-            if token is None:
-                entry = audit_record(
-                    actor=agent_id, action="route_call",
-                    source_protocol=src_proto, target_protocol=dst_proto,
-                    capability=capability, decision="deny", reason=why, cost=0.0,
-                )
-                update_audit_count(self.audit.count())
-                record_call(src_proto, dst_proto, capability, "deny", time.monotonic() - t0)
-                raise GovernanceError(Decision(False, why), entry)
-
-            if self.authority is not None:
-                try:
-                    self.authority.authorize(principal, capability, target_id)
-                except BaseException:
-                    self.budgets.release(agent_id, token)
-                    raise
-
-            ledger = None
-            claimed = False
+            # Translation is pure preparation: reject unsupported semantics before
+            # reserving budget, consuming a grant or creating a durable claim.
+            dst_wire = self.registry.translate_call(src_wire, src_proto, dst_proto)
+            ledger = self._operation_ledger() if operation_id is not None else None
+            store = self._shared_sql_store(ledger)
+            token, claimed = None, False
+            binding = {"authority_binding": principal.binding()} if self.authority is not None else {}
             try:
-                # Claim a one-shot grant BEFORE the target is invoked. The store operation
-                # is atomic: parallel calls cannot execute on the same approval.
-                if decision.approval_required:
-                    if not self.approvals or not self.approvals.consume(agent_id, capability, request_scope):
-                        self.budgets.release(agent_id, token)
-                        entry = audit_record(actor=agent_id, action="route_call",
-                            source_protocol=src_proto, target_protocol=dst_proto,
-                            capability=capability, decision="deny", reason="approval grant already consumed", cost=0.0)
-                        raise GovernanceError(Decision(False, "approval grant already consumed"), entry)
-
-                ledger = None
-                if operation_id is not None:
-                    # Claim after authorization, budget reservation and approval, but
-                    # BEFORE translation or external execution. A failed/unknown
-                    # downstream outcome is never automatically replayed.
-                    ledger = self._operation_ledger()
-                    try:
-                        ledger.claim(agent_id, operation_id, request_scope, reservation_token=token,
-                                     **({"authority_binding": principal.binding()} if self.authority is not None else {}))
+                with sql_atomic(store) if store is not None else nullcontext():
+                    if store is not None and ledger is not None:
+                        # Lock/claim operation before budget, matching outcome
+                        # settlement and reconciliation. Nothing is visible until
+                        # reservation, approval and its token link commit together.
+                        ledger.claim(agent_id, operation_id, request_scope, **binding)
                         claimed = True
-                    except BaseException:
+                    token, why = self.budgets.reserve(agent_id, cost)
+                    if token is None:
+                        raise _AdmissionRejected(why)
+                    if self.authority is not None:
+                        self.authority.authorize(principal, capability, target_id)
+                    if ledger is not None and claimed:
+                        ledger.attach_reservation(agent_id, operation_id, token)
+                    if decision.approval_required and (
+                        not self.approvals or not self.approvals.consume(agent_id, capability, request_scope)
+                    ):
+                        raise _AdmissionRejected("approval grant already consumed")
+                    if ledger is not None and not claimed:
+                        # Preserve the explicitly weaker legacy embedding path
+                        # when its participants do not share one SQL connection.
+                        ledger.claim(agent_id, operation_id, request_scope, reservation_token=token, **binding)
+                        claimed = True
+                    if self.authority is not None:
+                        self.authority.authorize(principal, capability, target_id)
+            except BaseException as exc:
+                if store is None:
+                    if token is not None:
                         self.budgets.release(agent_id, token)
-                        raise
-                if self.authority is not None:
-                    self.authority.authorize(principal, capability, target_id)
-                dst_wire = self.registry.translate_call(src_wire, src_proto, dst_proto)
-            except BaseException:
-                self.budgets.release(agent_id, token)
-                if ledger is not None and claimed:
-                    ledger.finish(agent_id, operation_id, "failed")
+                    if ledger is not None and claimed:
+                        ledger.finish(agent_id, operation_id, "failed")
+                if isinstance(exc, _AdmissionRejected):
+                    # Denials are durable after rollback; do not commit partial
+                    # reservation/approval state just to retain an audit entry.
+                    entry = audit_record(
+                        actor=agent_id,
+                        action="route_call",
+                        source_protocol=src_proto,
+                        target_protocol=dst_proto,
+                        capability=capability,
+                        decision="deny",
+                        reason=exc.decision.reason,
+                        cost=0.0,
+                    )
+                    update_audit_count(self.audit.count())
+                    record_call(src_proto, dst_proto, capability, "deny", time.monotonic() - t0)
+                    raise GovernanceError(exc.decision, entry) from exc
                 raise
-            return SimpleNamespace(agent_id=agent_id, src=src_proto, dst=dst_proto,
-                                   capability=capability, cost=cost, token=token,
-                                   ledger=ledger, operation_id=operation_id,
-                                   wire=dst_wire, decision=decision, actor=audit_actor,
-                                   started=t0)
+            return SimpleNamespace(
+                agent_id=agent_id,
+                src=src_proto,
+                dst=dst_proto,
+                capability=capability,
+                cost=cost,
+                token=token,
+                ledger=ledger,
+                operation_id=operation_id,
+                wire=dst_wire,
+                decision=decision,
+                actor=audit_actor,
+                started=t0,
+            )
