@@ -5,11 +5,11 @@ claimed, a retry is rejected even if the worker crashes; an unknown result
 requires external reconciliation by a trusted operator. This does NOT provide
 exactly-once semantics at an arbitrary external destination.
 """
-import hashlib
+
 import json
-import threading
 import time
-from .store import SqliteStore, PostgresStore
+
+from .store import PostgresStore, SqliteStore, sql_atomic
 
 
 class OperationConflict(RuntimeError):
@@ -46,56 +46,131 @@ class OperationLedger:
                             "agent_id TEXT NOT NULL, operation_id TEXT NOT NULL, "
                             "token TEXT NOT NULL, PRIMARY KEY(agent_id, operation_id))")
 
-    def claim(self, agent_id, operation_id, fingerprint, reservation_token=None):
-        if not all(isinstance(x, str) and x and len(x) <= 256
-                   for x in (agent_id, operation_id, fingerprint)):
+        if getattr(store, "tenant_id", None) is not None:
+            if isinstance(store, SqliteStore):
+                with store._lock:
+                    store._db.execute("CREATE TABLE IF NOT EXISTS operation_authority ("
+                                      "agent_id TEXT NOT NULL,operation_id TEXT NOT NULL,"
+                                      "binding TEXT NOT NULL,PRIMARY KEY(agent_id,operation_id))")
+            else:
+                with store._lock, store._db.transaction(), store._db.cursor() as cur:
+                    cur.execute("SELECT pg_advisory_xact_lock(%s)", (911004,))
+                    cur.execute("CREATE TABLE IF NOT EXISTS operation_authority ("
+                                "agent_id TEXT NOT NULL,operation_id TEXT NOT NULL,"
+                                "binding TEXT NOT NULL,PRIMARY KEY(agent_id,operation_id))")
+
+    def claim(self, agent_id, operation_id, fingerprint, reservation_token=None, *, authority_binding=None):
+        if not all(isinstance(x, str) and x and len(x) <= 256 for x in (agent_id, operation_id, fingerprint)):
             raise ValueError("invalid operation claim")
         if reservation_token is not None and (not isinstance(reservation_token, str) or not reservation_token):
             raise ValueError("reservation_token must be nonempty")
+        binding = None
+        if authority_binding is not None:
+            if (
+                not isinstance(authority_binding, dict)
+                or authority_binding.get("tenant_id") != getattr(self.store, "tenant_id", None)
+                or authority_binding.get("agent_id") != agent_id
+            ):
+                raise ValueError("operation authority does not match the bound tenant/agent")
+            binding = json.dumps(authority_binding, sort_keys=True, separators=(",", ":"), allow_nan=False)
         stamp = time.time()
         store = self.store
         if isinstance(store, SqliteStore):
-            with store._lock:
+            with sql_atomic(store):
                 db = store._db
-                db.execute("BEGIN IMMEDIATE")
-                try:
-                    row = db.execute(
-                        "SELECT fingerprint,state FROM agent_operations "
-                        "WHERE agent_id=? AND operation_id=?",
-                        (agent_id, operation_id)).fetchone()
-                    if row:
-                        if row["fingerprint"] != fingerprint:
-                            raise OperationConflict("idempotency key reused for different request")
-                        raise OperationConflict("existing operation is " + row["state"] +
-                                                "; no automatic replay")
+                row = db.execute(
+                    "SELECT fingerprint,state FROM agent_operations WHERE agent_id=? AND operation_id=?",
+                    (agent_id, operation_id),
+                ).fetchone()
+                if row:
+                    if row["fingerprint"] != fingerprint:
+                        raise OperationConflict("idempotency key reused for different request")
+                    raise OperationConflict("existing operation is " + row["state"] + "; no automatic replay")
+                db.execute(
+                    "INSERT INTO agent_operations VALUES(?,?,?,?,?)",
+                    (agent_id, operation_id, fingerprint, "unknown", stamp),
+                )
+                if reservation_token is not None:
                     db.execute(
-                        "INSERT INTO agent_operations VALUES(?,?,?,?,?)",
-                        (agent_id, operation_id, fingerprint, "unknown", stamp))
-                    if reservation_token is not None:
-                        db.execute("INSERT INTO operation_reservations VALUES(?,?,?)",
-                                   (agent_id, operation_id, reservation_token))
-                    db.execute("COMMIT")
-                except BaseException:
-                    db.execute("ROLLBACK")
-                    raise
+                        "INSERT INTO operation_reservations VALUES(?,?,?)", (agent_id, operation_id, reservation_token)
+                    )
+                if binding is not None:
+                    db.execute("INSERT INTO operation_authority VALUES(?,?,?)", (agent_id, operation_id, binding))
             return
         with store._lock, store._db.transaction(), store._db.cursor() as cur:
-            cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))",
-                        (f"operation:{agent_id}:{operation_id}",))
+            cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"operation:{agent_id}:{operation_id}",))
             cur.execute(
-                "SELECT fingerprint,state FROM agent_operations "
-                "WHERE agent_id=%s AND operation_id=%s", (agent_id, operation_id))
+                "SELECT fingerprint,state FROM agent_operations WHERE agent_id=%s AND operation_id=%s",
+                (agent_id, operation_id),
+            )
             row = cur.fetchone()
             if row:
                 if row["fingerprint"] != fingerprint:
                     raise OperationConflict("idempotency key reused for different request")
-                raise OperationConflict("existing operation is " + row["state"] +
-                                        "; no automatic replay")
-            cur.execute("INSERT INTO agent_operations VALUES(%s,%s,%s,%s,%s)",
-                        (agent_id, operation_id, fingerprint, "unknown", stamp))
+                raise OperationConflict("existing operation is " + row["state"] + "; no automatic replay")
+            cur.execute(
+                "INSERT INTO agent_operations VALUES(%s,%s,%s,%s,%s)",
+                (agent_id, operation_id, fingerprint, "unknown", stamp),
+            )
             if reservation_token is not None:
-                cur.execute("INSERT INTO operation_reservations VALUES(%s,%s,%s)",
-                            (agent_id, operation_id, reservation_token))
+                cur.execute(
+                    "INSERT INTO operation_reservations VALUES(%s,%s,%s)", (agent_id, operation_id, reservation_token)
+                )
+
+            if binding is not None:
+                cur.execute("INSERT INTO operation_authority VALUES(%s,%s,%s)", (agent_id, operation_id, binding))
+
+    def attach_reservation(self, agent_id, operation_id, token):
+        """Link an owned pending budget token; use an outer admission transaction.
+
+        The operation is locked before budget, matching settlement/reconciliation.
+        A token cannot be attached to two operations in the same agent namespace.
+        """
+        if not all(isinstance(value, str) and value and len(value) <= 256 for value in (agent_id, operation_id, token)):
+            raise ValueError("invalid reservation binding")
+        store = self.store
+        postgres = isinstance(store, PostgresStore)
+
+        def execute(query, values=()):
+            return store._db.execute(query.replace("?", "%s") if postgres else query, values)
+
+        with sql_atomic(store):
+            row = execute(
+                "SELECT state FROM agent_operations WHERE agent_id=? AND operation_id=?"
+                + (" FOR UPDATE" if postgres else ""),
+                (agent_id, operation_id),
+            ).fetchone()
+            if not row or row["state"] != "unknown":
+                raise OperationConflict("reservation requires an unresolved owned operation")
+            if execute(
+                "SELECT 1 FROM operation_reservations WHERE agent_id=? AND operation_id=?", (agent_id, operation_id)
+            ).fetchone():
+                raise OperationConflict("operation already has a reservation binding")
+            if postgres:
+                execute("SELECT pg_advisory_xact_lock(hashtext(?))", (f"budget:{agent_id}",))
+            row = execute(
+                "SELECT state FROM budgets WHERE agent_id=?" + (" FOR UPDATE" if postgres else ""), (agent_id,)
+            ).fetchone()
+            state = json.loads(row["state"]) if row else {}
+            if token not in state.get("reserved", {}):
+                raise OperationConflict("reservation is not pending for this agent")
+            if execute(
+                "SELECT 1 FROM operation_reservations WHERE agent_id=? AND token=?", (agent_id, token)
+            ).fetchone():
+                raise OperationConflict("reservation is already attached to an operation")
+            execute("INSERT INTO operation_reservations VALUES(?,?,?)", (agent_id, operation_id, token))
+
+    def authority_binding(self, agent_id, operation_id):
+        if getattr(self.store, "tenant_id", None) is None:
+            return None
+        with self.store._lock:
+            if isinstance(self.store, SqliteStore):
+                row = self.store._db.execute("SELECT binding FROM operation_authority WHERE agent_id=? AND operation_id=?", (agent_id, operation_id)).fetchone()
+            else:
+                with self.store._db.cursor() as cur:
+                    cur.execute("SELECT binding FROM operation_authority WHERE agent_id=%s AND operation_id=%s", (agent_id, operation_id))
+                    row = cur.fetchone()
+        return json.loads(row["binding"]) if row else None
 
     def finish(self, agent_id, operation_id, state):
         if state not in ("succeeded", "failed", "unknown"):
