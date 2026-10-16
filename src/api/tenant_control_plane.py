@@ -75,6 +75,10 @@ class QuotaBody(_Body):
     max_records: int = Field(default=100000, ge=1, le=10000000)
 
 
+class TaskHistoryCapacityBody(_Body):
+    max_tasks: int = Field(ge=1, le=1000000)
+
+
 class ApprovalBody(_Body):
     granted: bool
 
@@ -268,6 +272,17 @@ def create_tenant_app(kernel: TenantKernel, *, max_body_bytes=1048576):
         session = await operator(request)
         _, value = await _body(request, QuotaBody, limit=max_body_bytes)
         await asyncio.to_thread(session.set_quotas, **value.model_dump())
+        return {"updated": True}
+
+    @app.get("/v2/operator/task-history-capacity")
+    async def task_history_capacity(request: Request):
+        return await asyncio.to_thread((await operator(request)).task_history_capacity)
+
+    @app.put("/v2/operator/task-history-capacity")
+    async def set_task_history_capacity(request: Request):
+        session = await operator(request)
+        _, value = await _body(request, TaskHistoryCapacityBody, limit=max_body_bytes)
+        await asyncio.to_thread(session.set_task_history_capacity, value.max_tasks)
         return {"updated": True}
 
     @app.get("/v2/operator/approvals")

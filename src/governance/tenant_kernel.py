@@ -253,6 +253,15 @@ class TenantSession:
         return runtime.gateway._quotas.inspect()
 
     @_guarded(write=False)
+    def task_history_capacity(self):
+        return self._runtime("budgets:read").tasks.history_capacity()
+
+    @_guarded(write=True)
+    def set_task_history_capacity(self, max_tasks):
+        runtime = self._runtime("policy:write")
+        runtime.tasks.set_history_capacity(max_tasks, audit=lambda: self._audit(runtime, "set_task_history_capacity"))
+
+    @_guarded(write=False)
     def pending_approvals(self):
         return self._runtime("approvals:read").approvals.pending()
 
