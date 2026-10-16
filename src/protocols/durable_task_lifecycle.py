@@ -14,7 +14,7 @@ import math
 from contextlib import contextmanager
 from dataclasses import asdict
 
-from src.governance.store import PostgresStore, SqliteStore
+from src.governance.store import PostgresStore, SqliteStore, sql_atomic
 
 from .task_lifecycle import LifecycleRejected, TaskLifecycle, TaskState, _identifier
 
@@ -28,6 +28,8 @@ class DurableTaskLifecycle:
 
     SQLite serializes with BEGIN IMMEDIATE; PostgreSQL uses a transaction advisory
     lock across connections. Limits must be identical across service replicas.
+    Local status changes can join sql_atomic on the same store. Initialize the
+    service before admitting work; schema setup is not a request-path operation.
     This is application-level persistence, not tamper-proof database storage.
     """
 
@@ -51,26 +53,27 @@ class DurableTaskLifecycle:
                 "owner_id TEXT NOT NULL, task_id TEXT NOT NULL, sequence BIGINT NOT NULL,"
                 "snapshot TEXT NOT NULL, PRIMARY KEY(owner_id,task_id,sequence))"
             )
+            if getattr(store, "tenant_id", None):
+                from src.governance.tenant_store import _install_postgres_guards, _install_sqlite_guards
+
+                tables = ("task_lifecycle_snapshots", "task_lifecycle_events")
+                if isinstance(store, PostgresStore):
+                    _install_postgres_guards(cur, store.schema, tables)
+                else:
+                    _install_sqlite_guards(cur, tables)
 
     @contextmanager
     def _transaction(self):
-        with self.store._lock:
-            if isinstance(self.store, SqliteStore):
-                self.store._db.execute("BEGIN IMMEDIATE")
-                try:
-                    with_cursor = self.store._db.cursor()
-                    try:
-                        yield with_cursor
-                    finally:
-                        with_cursor.close()
-                    self.store._db.execute("COMMIT")
-                except BaseException:
-                    self.store._db.execute("ROLLBACK")
-                    raise
-            else:
-                with self.store._db.transaction(), self.store._db.cursor() as cur:
+        # Reuse the governance boundary: a nested lifecycle call owns only its
+        # savepoint, never the embedding admission transaction's commit.
+        with sql_atomic(self.store):
+            cur = self.store._db.cursor()
+            try:
+                if isinstance(self.store, PostgresStore):
                     cur.execute("SELECT pg_advisory_xact_lock(%s)", (911006,))
-                    yield cur
+                yield cur
+            finally:
+                cur.close()
 
     def _execute(self, cur, query, values):
         if isinstance(self.store, PostgresStore):

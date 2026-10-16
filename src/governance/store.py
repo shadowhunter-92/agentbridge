@@ -19,7 +19,9 @@ import json
 import os
 import sqlite3
 import threading
+import uuid
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
 
 from .resilience import retry_transient
@@ -50,6 +52,15 @@ class GovernanceStore(ABC):
         """Delete audit entries with seq < `seq`. Returns the number deleted.
         Implementations MUST be a no-op (return 0) when seq <= 0."""
 
+    def audit_count(self) -> int:
+        """Compatibility fallback; SQL backends override without loading evidence."""
+        return len(self.load_audit())
+
+    def load_audit_head(self) -> Optional[Dict[str, Any]]:
+        """Return the persisted head; SQL backends use the sequence index."""
+        records = self.load_audit()
+        return records[-1] if records else None
+
     # approvals (store-backed; new in production-readiness pass)
     @abstractmethod
     def insert_approval(self, approval: Dict[str, Any]) -> None: ...
@@ -64,6 +75,7 @@ class GovernanceStore(ABC):
         """Atomically transition an approval from 'approved' to 'consumed'.
         Returns True on success, False if the row doesn't exist or isn't 'approved'.
         Distinct from update_approval_status (which only allows pending->approved/denied)."""
+
     @abstractmethod
     def delete_approval(self, approval_id: str) -> bool: ...
 
@@ -115,6 +127,14 @@ class InMemoryStore(GovernanceStore):
     def load_audit(self):
         with self._lock:
             return [dict(e) for e in self._audit]
+
+    def audit_count(self):
+        with self._lock:
+            return len(self._audit)
+
+    def load_audit_head(self):
+        with self._lock:
+            return dict(self._audit[-1]) if self._audit else None
 
     def truncate_audit_before(self, seq):
         if seq <= 0:
@@ -231,14 +251,13 @@ class SqliteStore(GovernanceStore):
             self._db.commit()
 
     def upsert_identity(self, agent_id, public_key_hex, revoked=False):
-        with self._lock:
+        with sql_atomic(self):
             self._db.execute(
                 "INSERT INTO identities(agent_id, public_key_hex, revoked) VALUES(?,?,?) "
                 "ON CONFLICT(agent_id) DO UPDATE SET public_key_hex=excluded.public_key_hex, "
                 "revoked=excluded.revoked",
                 (agent_id, public_key_hex, 1 if revoked else 0),
             )
-            self._db.commit()
 
     def get_identity(self, agent_id):
         with self._lock:
@@ -258,12 +277,11 @@ class SqliteStore(GovernanceStore):
                  "revoked": bool(r["revoked"])} for r in rows]
 
     def upsert_budget(self, agent_id, state):
-        with self._lock:
+        with sql_atomic(self):
             self._db.execute(
                 "INSERT INTO budgets(agent_id, state) VALUES(?,?) "
                 "ON CONFLICT(agent_id) DO UPDATE SET state=excluded.state",
                 (agent_id, json.dumps(state)))
-            self._db.commit()
 
     def get_budget(self, agent_id):
         with self._lock:
@@ -272,15 +290,23 @@ class SqliteStore(GovernanceStore):
         return json.loads(row["state"]) if row else None
 
     def append_audit(self, entry):
-        with self._lock:
+        with sql_atomic(self):
             self._db.execute("INSERT INTO audit(seq, entry) VALUES(?,?)",
                              (entry["seq"], json.dumps(entry)))
-            self._db.commit()
 
     def load_audit(self):
         with self._lock:
             rows = self._db.execute("SELECT entry FROM audit ORDER BY seq").fetchall()
         return [json.loads(r["entry"]) for r in rows]
+
+    def audit_count(self):
+        with self._lock:
+            return self._db.execute("SELECT count(*) AS n FROM audit").fetchone()["n"]
+
+    def load_audit_head(self):
+        with self._lock:
+            row = self._db.execute("SELECT entry FROM audit ORDER BY seq DESC LIMIT 1").fetchone()
+        return json.loads(row["entry"]) if row else None
 
     def truncate_audit_before(self, seq):
         # Never allow deletion through a direct store call in production.
@@ -290,70 +316,52 @@ class SqliteStore(GovernanceStore):
             raise PermissionError("production audit retention requires external anchoring")
         if seq <= 0:
             return 0
-        with self._lock:
-            self._db.execute("BEGIN IMMEDIATE")
-            try:
-                exists = self._db.execute(
-                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='audit_holds'"
-                ).fetchone()
-                if exists and self._db.execute(
-                    "SELECT 1 FROM audit_holds WHERE enabled=1 LIMIT 1"
-                ).fetchone():
-                    raise PermissionError("durable legal hold blocks audit deletion")
-                cur = self._db.execute("DELETE FROM audit WHERE seq < ?", (seq,))
-                self._db.execute("COMMIT")
-                return cur.rowcount or 0
-            except BaseException:
-                self._db.execute("ROLLBACK")
-                raise
+        with sql_atomic(self):
+            exists = self._db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='audit_holds'"
+            ).fetchone()
+            if exists and self._db.execute(
+                "SELECT 1 FROM audit_holds WHERE enabled=1 LIMIT 1"
+            ).fetchone():
+                raise PermissionError("durable legal hold blocks audit deletion")
+            cur = self._db.execute("DELETE FROM audit WHERE seq < ?", (seq,))
+            return cur.rowcount or 0
 
     def append_audit_chained(self, build_entry):
         @retry_transient(max_attempts=4, base_delay=0.01, max_delay=0.5)
         def _go():
-            with self._lock:
-                self._db.execute("BEGIN IMMEDIATE")          # write lock -> serialize across procs
-                try:
-                    row = self._db.execute(
-                        "SELECT seq, entry FROM audit ORDER BY seq DESC LIMIT 1").fetchone()
-                    if row:
-                        last = json.loads(row["entry"])
-                        seq, prev_hash = last["seq"] + 1, last["entry_hash"]
-                    else:
-                        seq, prev_hash = 0, self.GENESIS
-                    entry = build_entry(seq, prev_hash)
-                    self._db.execute("INSERT INTO audit(seq, entry) VALUES(?,?)",
-                                     (entry["seq"], json.dumps(entry)))
-                    self._db.execute("COMMIT")
-                    return entry
-                except Exception:
-                    self._db.execute("ROLLBACK")
-                    raise
+            with sql_atomic(self):
+                row = self._db.execute(
+                    "SELECT seq, entry FROM audit ORDER BY seq DESC LIMIT 1").fetchone()
+                if row:
+                    last = json.loads(row["entry"])
+                    seq, prev_hash = last["seq"] + 1, last["entry_hash"]
+                else:
+                    seq, prev_hash = 0, self.GENESIS
+                entry = build_entry(seq, prev_hash)
+                self._db.execute("INSERT INTO audit(seq, entry) VALUES(?,?)",
+                                 (entry["seq"], json.dumps(entry)))
+                return entry
         return _go()
 
     def mutate_budget(self, agent_id, mutator):
         @retry_transient(max_attempts=4, base_delay=0.01, max_delay=0.5)
         def _go():
-            with self._lock:
-                self._db.execute("BEGIN IMMEDIATE")
-                try:
-                    row = self._db.execute("SELECT state FROM budgets WHERE agent_id=?",
-                                           (agent_id,)).fetchone()
-                    state = json.loads(row["state"]) if row else {}
-                    result = mutator(state)
-                    self._db.execute(
-                        "INSERT INTO budgets(agent_id, state) VALUES(?,?) "
-                        "ON CONFLICT(agent_id) DO UPDATE SET state=excluded.state",
-                        (agent_id, json.dumps(state)))
-                    self._db.execute("COMMIT")
-                    return result
-                except Exception:
-                    self._db.execute("ROLLBACK")
-                    raise
+            with sql_atomic(self):
+                row = self._db.execute("SELECT state FROM budgets WHERE agent_id=?",
+                                       (agent_id,)).fetchone()
+                state = json.loads(row["state"]) if row else {}
+                result = mutator(state)
+                self._db.execute(
+                    "INSERT INTO budgets(agent_id, state) VALUES(?,?) "
+                    "ON CONFLICT(agent_id) DO UPDATE SET state=excluded.state",
+                    (agent_id, json.dumps(state)))
+                return result
         return _go()
 
     # --- approvals (atomic status update so multi-worker approve/deny is race-free) ---
     def insert_approval(self, approval):
-        with self._lock:
+        with sql_atomic(self):
             self._db.execute(
                 "INSERT OR IGNORE INTO approvals(id, agent_id, capability, cost, status, created_at) "
                 "VALUES(?,?,?,?,?,?)",
@@ -361,7 +369,6 @@ class SqliteStore(GovernanceStore):
                  float(approval["cost"]), approval.get("status", "pending"),
                  approval.get("created_at", "")),
             )
-            self._db.commit()
 
     def get_approval(self, approval_id):
         with self._lock:
@@ -389,43 +396,26 @@ class SqliteStore(GovernanceStore):
                 for r in rows]
 
     def update_approval_status(self, approval_id, status):
-        with self._lock:
-            self._db.execute("BEGIN IMMEDIATE")
-            try:
-                row = self._db.execute(
-                    "SELECT status FROM approvals WHERE id=?", (approval_id,)).fetchone()
-                if not row or row["status"] != "pending":
-                    self._db.execute("ROLLBACK")
-                    return False
-                self._db.execute("UPDATE approvals SET status=? WHERE id=?",
-                                 (status, approval_id))
-                self._db.execute("COMMIT")
-                return True
-            except Exception:
-                self._db.execute("ROLLBACK")
-                raise
+        with sql_atomic(self):
+            row = self._db.execute(
+                "SELECT status FROM approvals WHERE id=?", (approval_id,)).fetchone()
+            if not row or row["status"] != "pending":
+                return False
+            self._db.execute("UPDATE approvals SET status=? WHERE id=?",
+                             (status, approval_id))
+            return True
 
     def consume_approval(self, approval_id):
-        with self._lock:
-            self._db.execute("BEGIN IMMEDIATE")
-            try:
-                row = self._db.execute(
-                    "SELECT status FROM approvals WHERE id=?", (approval_id,)).fetchone()
-                if not row or row["status"] != "approved":
-                    self._db.execute("ROLLBACK")
-                    return False
-                self._db.execute("UPDATE approvals SET status='consumed' WHERE id=?",
-                                 (approval_id,))
-                self._db.execute("COMMIT")
-                return True
-            except Exception:
-                self._db.execute("ROLLBACK")
-                raise
+        with sql_atomic(self):
+            row = self._db.execute("SELECT status FROM approvals WHERE id=?", (approval_id,)).fetchone()
+            if not row or row["status"] != "approved":
+                return False
+            self._db.execute("UPDATE approvals SET status='consumed' WHERE id=?", (approval_id,))
+            return True
 
     def delete_approval(self, approval_id):
-        with self._lock:
+        with sql_atomic(self):
             cur = self._db.execute("DELETE FROM approvals WHERE id=?", (approval_id,))
-            self._db.commit()
             return cur.rowcount > 0
 
     def close(self) -> None:
@@ -450,7 +440,7 @@ class PostgresStore(GovernanceStore):
 
     GENESIS = "0" * 64
 
-    def __init__(self, dsn: str):
+    def __init__(self, dsn: str, *, initialize_connection=None):
         try:
             import psycopg
             from psycopg.rows import dict_row
@@ -460,8 +450,23 @@ class PostgresStore(GovernanceStore):
                 "`pip install \"psycopg[binary]\"`, or use a SQLite path instead."
             ) from e
         self._lock = threading.RLock()
-        self._db = psycopg.connect(dsn, autocommit=True, row_factory=dict_row)
-        self._init_schema()
+        # Bound SQL work so cancellation cleanup cannot wait forever on a
+        # disconnected server or a stalled lock holder. Preserve trusted DSN
+        # namespace options; append service limits after them.
+        from psycopg.conninfo import conninfo_to_dict
+        configured_options = conninfo_to_dict(dsn).get("options", "")
+        options = configured_options + " -cstatement_timeout=10000 -clock_timeout=5000"
+        self._db = psycopg.connect(dsn, autocommit=True, row_factory=dict_row,
+                                  connect_timeout=5, options=options)
+        try:
+            # Trusted host callback may establish/validate a private namespace
+            # before bootstrap creates any objects. Never selected from a request.
+            if initialize_connection is not None:
+                initialize_connection(self._db)
+            self._init_schema()
+        except BaseException:
+            self._db.close()
+            raise
 
     def _init_schema(self):
         # PostgreSQL CREATE TABLE IF NOT EXISTS is NOT race-free across
@@ -549,6 +554,19 @@ class PostgresStore(GovernanceStore):
             cur.execute("SELECT entry FROM audit ORDER BY seq")
             rows = cur.fetchall()
         return [json.loads(r["entry"]) for r in rows]
+
+    def audit_count(self):
+        # MVCC COUNT still scans visible rows, but never transfers/deserializes
+        # the entire evidence history merely to update routine telemetry.
+        with self._lock, self._db.cursor() as cur:
+            cur.execute("SELECT count(*) AS n FROM audit")
+            return cur.fetchone()["n"]
+
+    def load_audit_head(self):
+        with self._lock, self._db.cursor() as cur:
+            cur.execute("SELECT entry FROM audit ORDER BY seq DESC LIMIT 1")
+            row = cur.fetchone()
+        return json.loads(row["entry"]) if row else None
 
     def truncate_audit_before(self, seq):
         if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
@@ -667,6 +685,33 @@ class PostgresStore(GovernanceStore):
     def close(self) -> None:
         with self._lock:
             self._db.close()
+
+
+@contextmanager
+def sql_atomic(store):
+    """One SQL commit, with savepoints for existing component operations.
+
+    The caller must use one store instance for all participants. This boundary
+    covers local SQL state only; it cannot roll back a remote destination effect.
+    """
+    if not isinstance(store, (SqliteStore, PostgresStore)):
+        raise ValueError("one durable SQL store required for atomic governance")
+    with store._lock:
+        if isinstance(store, PostgresStore):
+            with store._db.transaction():
+                yield
+            return
+        nested = store._db.in_transaction
+        name = "ab_atomic_" + uuid.uuid4().hex
+        store._db.execute("SAVEPOINT " + name if nested else "BEGIN IMMEDIATE")
+        try:
+            yield
+            store._db.execute("RELEASE SAVEPOINT " + name if nested else "COMMIT")
+        except BaseException:
+            store._db.execute("ROLLBACK TO SAVEPOINT " + name if nested else "ROLLBACK")
+            if nested:
+                store._db.execute("RELEASE SAVEPOINT " + name)
+            raise
 
 
 def make_store(db: Optional[str]) -> GovernanceStore:
