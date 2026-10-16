@@ -278,12 +278,11 @@ class SqliteStore(GovernanceStore):
                  "revoked": bool(r["revoked"])} for r in rows]
 
     def upsert_budget(self, agent_id, state):
-        with self._lock:
+        with sql_atomic(self):
             self._db.execute(
                 "INSERT INTO budgets(agent_id, state) VALUES(?,?) "
                 "ON CONFLICT(agent_id) DO UPDATE SET state=excluded.state",
                 (agent_id, json.dumps(state)))
-            self._db.commit()
 
     def get_budget(self, agent_id):
         with self._lock:
