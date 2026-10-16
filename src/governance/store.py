@@ -251,14 +251,13 @@ class SqliteStore(GovernanceStore):
             self._db.commit()
 
     def upsert_identity(self, agent_id, public_key_hex, revoked=False):
-        with self._lock:
+        with sql_atomic(self):
             self._db.execute(
                 "INSERT INTO identities(agent_id, public_key_hex, revoked) VALUES(?,?,?) "
                 "ON CONFLICT(agent_id) DO UPDATE SET public_key_hex=excluded.public_key_hex, "
                 "revoked=excluded.revoked",
                 (agent_id, public_key_hex, 1 if revoked else 0),
             )
-            self._db.commit()
 
     def get_identity(self, agent_id):
         with self._lock:
@@ -291,10 +290,9 @@ class SqliteStore(GovernanceStore):
         return json.loads(row["state"]) if row else None
 
     def append_audit(self, entry):
-        with self._lock:
+        with sql_atomic(self):
             self._db.execute("INSERT INTO audit(seq, entry) VALUES(?,?)",
                              (entry["seq"], json.dumps(entry)))
-            self._db.commit()
 
     def load_audit(self):
         with self._lock:
@@ -318,22 +316,16 @@ class SqliteStore(GovernanceStore):
             raise PermissionError("production audit retention requires external anchoring")
         if seq <= 0:
             return 0
-        with self._lock:
-            self._db.execute("BEGIN IMMEDIATE")
-            try:
-                exists = self._db.execute(
-                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='audit_holds'"
-                ).fetchone()
-                if exists and self._db.execute(
-                    "SELECT 1 FROM audit_holds WHERE enabled=1 LIMIT 1"
-                ).fetchone():
-                    raise PermissionError("durable legal hold blocks audit deletion")
-                cur = self._db.execute("DELETE FROM audit WHERE seq < ?", (seq,))
-                self._db.execute("COMMIT")
-                return cur.rowcount or 0
-            except BaseException:
-                self._db.execute("ROLLBACK")
-                raise
+        with sql_atomic(self):
+            exists = self._db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='audit_holds'"
+            ).fetchone()
+            if exists and self._db.execute(
+                "SELECT 1 FROM audit_holds WHERE enabled=1 LIMIT 1"
+            ).fetchone():
+                raise PermissionError("durable legal hold blocks audit deletion")
+            cur = self._db.execute("DELETE FROM audit WHERE seq < ?", (seq,))
+            return cur.rowcount or 0
 
     def append_audit_chained(self, build_entry):
         @retry_transient(max_attempts=4, base_delay=0.01, max_delay=0.5)
@@ -369,7 +361,7 @@ class SqliteStore(GovernanceStore):
 
     # --- approvals (atomic status update so multi-worker approve/deny is race-free) ---
     def insert_approval(self, approval):
-        with self._lock:
+        with sql_atomic(self):
             self._db.execute(
                 "INSERT OR IGNORE INTO approvals(id, agent_id, capability, cost, status, created_at) "
                 "VALUES(?,?,?,?,?,?)",
@@ -377,7 +369,6 @@ class SqliteStore(GovernanceStore):
                  float(approval["cost"]), approval.get("status", "pending"),
                  approval.get("created_at", "")),
             )
-            self._db.commit()
 
     def get_approval(self, approval_id):
         with self._lock:
@@ -405,21 +396,14 @@ class SqliteStore(GovernanceStore):
                 for r in rows]
 
     def update_approval_status(self, approval_id, status):
-        with self._lock:
-            self._db.execute("BEGIN IMMEDIATE")
-            try:
-                row = self._db.execute(
-                    "SELECT status FROM approvals WHERE id=?", (approval_id,)).fetchone()
-                if not row or row["status"] != "pending":
-                    self._db.execute("ROLLBACK")
-                    return False
-                self._db.execute("UPDATE approvals SET status=? WHERE id=?",
-                                 (status, approval_id))
-                self._db.execute("COMMIT")
-                return True
-            except Exception:
-                self._db.execute("ROLLBACK")
-                raise
+        with sql_atomic(self):
+            row = self._db.execute(
+                "SELECT status FROM approvals WHERE id=?", (approval_id,)).fetchone()
+            if not row or row["status"] != "pending":
+                return False
+            self._db.execute("UPDATE approvals SET status=? WHERE id=?",
+                             (status, approval_id))
+            return True
 
     def consume_approval(self, approval_id):
         with sql_atomic(self):
@@ -430,9 +414,8 @@ class SqliteStore(GovernanceStore):
             return True
 
     def delete_approval(self, approval_id):
-        with self._lock:
+        with sql_atomic(self):
             cur = self._db.execute("DELETE FROM approvals WHERE id=?", (approval_id,))
-            self._db.commit()
             return cur.rowcount > 0
 
     def close(self) -> None:

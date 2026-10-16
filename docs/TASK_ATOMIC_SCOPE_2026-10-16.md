@@ -57,3 +57,7 @@ Other legacy SQLite methods still use standalone commit/transaction boundaries
 composition with an outer transaction needs a separate caller audit and
 reproductions. This unit makes no general claim that every storage API can join
 `sql_atomic`. Production remains NO-GO.
+
+Follow-up: [legacy SQLite mutation boundaries](SQLITE_ATOMIC_MUTATIONS_2026-10-16.md)
+records the separate reproductions and corrections for the six methods listed
+above. The original task phase scope remains a historical observation.
