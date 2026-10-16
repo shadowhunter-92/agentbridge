@@ -79,6 +79,10 @@ class TaskHistoryCapacityBody(_Body):
     max_tasks: int = Field(ge=1, le=1000000)
 
 
+class TaskEventCapacityBody(_Body):
+    max_event_bytes: int = Field(ge=4096, le=1073741824)
+
+
 class ApprovalBody(_Body):
     granted: bool
 
@@ -283,6 +287,17 @@ def create_tenant_app(kernel: TenantKernel, *, max_body_bytes=1048576):
         session = await operator(request)
         _, value = await _body(request, TaskHistoryCapacityBody, limit=max_body_bytes)
         await asyncio.to_thread(session.set_task_history_capacity, value.max_tasks)
+        return {"updated": True}
+
+    @app.get("/v2/operator/task-event-capacity")
+    async def task_event_capacity(request: Request):
+        return await asyncio.to_thread((await operator(request)).task_event_capacity)
+
+    @app.put("/v2/operator/task-event-capacity")
+    async def set_task_event_capacity(request: Request):
+        session = await operator(request)
+        _, value = await _body(request, TaskEventCapacityBody, limit=max_body_bytes)
+        await asyncio.to_thread(session.set_task_event_capacity, value.max_event_bytes)
         return {"updated": True}
 
     @app.get("/v2/operator/approvals")

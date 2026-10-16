@@ -262,6 +262,15 @@ class TenantSession:
         runtime.tasks.set_history_capacity(max_tasks, audit=lambda: self._audit(runtime, "set_task_history_capacity"))
 
     @_guarded(write=False)
+    def task_event_capacity(self):
+        return self._runtime("budgets:read").tasks.event_capacity()
+
+    @_guarded(write=True)
+    def set_task_event_capacity(self, max_event_bytes):
+        runtime = self._runtime("policy:write")
+        runtime.tasks.set_event_capacity(max_event_bytes, audit=lambda: self._audit(runtime, "set_task_event_capacity"))
+
+    @_guarded(write=False)
     def pending_approvals(self):
         return self._runtime("approvals:read").approvals.pending()
 
