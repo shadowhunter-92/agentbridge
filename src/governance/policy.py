@@ -10,10 +10,10 @@ import os
 from dataclasses import dataclass
 from typing import Dict, Optional, Set
 
-from .identity import IdentityRegistry
-from .budget import BudgetManager
 from .approvals import ApprovalQueue
-from .policy_rules import PolicySet, PolicyContext
+from .budget import BudgetManager
+from .identity import IdentityRegistry
+from .policy_rules import PolicyContext, PolicySet
 
 
 @dataclass
@@ -28,7 +28,17 @@ class PolicyEngine:
     def __init__(self, identities: IdentityRegistry, budgets: BudgetManager,
                  approvals: Optional[ApprovalQueue] = None,
                  require_verified: bool = True,
-                 policy_set: Optional[PolicySet] = None):
+                 policy_set: Optional[PolicySet] = None,
+                 authority=None, tenant_id=None):
+        if (authority is None) != (tenant_id is None):
+            raise ValueError("authority and tenant_id must be configured together")
+        if authority is not None:
+            from .authority import AuthorityDirectory
+            from .tenant_store import TenantPostgresStore, TenantSqliteStore
+            if not isinstance(authority, AuthorityDirectory) or not isinstance(
+                    identities.store, (TenantSqliteStore, TenantPostgresStore)) or identities.store.tenant_id != tenant_id:
+                raise ValueError("enrolled authority and exactly bound tenant store required")
+        self.authority, self.tenant_id = authority, tenant_id
         self.identities = identities
         self.budgets = budgets
         self.approvals = approvals
@@ -44,7 +54,24 @@ class PolicyEngine:
                   signature: Optional[bytes] = None,
                   src_protocol: Optional[str] = None,
                   dst_protocol: Optional[str] = None,
-                  request_scope: Optional[str] = None) -> Decision:
+                  request_scope: Optional[str] = None,
+                  principal=None, target_id=None) -> Decision:
+        if self.authority is None:
+            from ..authority_mode import require_legacy_authority
+            require_legacy_authority()
+        if self.authority is not None:
+            from .authority import AuthorityDenied
+            try:
+                if principal is None or principal.tenant_id != self.tenant_id or principal.agent_id != agent_id:
+                    raise AuthorityDenied("principal does not own this tenant/agent context")
+                self.authority.authorize(principal, capability, target_id)
+                with self.authority._transaction() as cur:
+                    enrolled = self.authority._agent(cur, self.tenant_id, agent_id)
+                identity = self.identities.get(agent_id)
+                if identity is None or identity.public_key_hex != enrolled["public_key_hex"]:
+                    raise AuthorityDenied("tenant identity and enrollment disagree")
+            except AuthorityDenied as exc:
+                return Decision(False, str(exc))
         # 1) identity (registered AND not revoked)
         if self.require_verified and not self.identities.is_registered(agent_id):
             return Decision(False, f"unknown or revoked identity '{agent_id}'")
@@ -54,7 +81,11 @@ class PolicyEngine:
 
         # 2) Strict, operator-owned capability allowlist in production. Registered
         # identities confer authentication only, never blanket authorization.
-        if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+        if self.authority is not None:
+            # The enrolled principal was already checked above. Never select a
+            # tenant's capability policy from a shared caller-chosen agent ID.
+            pass
+        elif os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
             try:
                 allowlists = json.loads(os.getenv("AGENTBRIDGE_CAPABILITY_ALLOWLIST_JSON", "{}"))
                 if not isinstance(allowlists, dict):
