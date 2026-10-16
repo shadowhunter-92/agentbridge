@@ -14,7 +14,7 @@ import math
 from contextlib import contextmanager
 from dataclasses import asdict
 
-from src.governance.store import PostgresStore, SqliteStore
+from src.governance.store import PostgresStore, SqliteStore, sql_atomic
 
 from .task_lifecycle import LifecycleRejected, TaskLifecycle, TaskState, _identifier
 
@@ -28,6 +28,8 @@ class DurableTaskLifecycle:
 
     SQLite serializes with BEGIN IMMEDIATE; PostgreSQL uses a transaction advisory
     lock across connections. Limits must be identical across service replicas.
+    Local status changes can join sql_atomic on the same store. Initialize the
+    service before admitting work; schema setup is not a request-path operation.
     This is application-level persistence, not tamper-proof database storage.
     """
 
@@ -51,26 +53,28 @@ class DurableTaskLifecycle:
                 "owner_id TEXT NOT NULL, task_id TEXT NOT NULL, sequence BIGINT NOT NULL,"
                 "snapshot TEXT NOT NULL, PRIMARY KEY(owner_id,task_id,sequence))"
             )
+            self._bootstrap_history_capacity(cur)
+            if getattr(store, "tenant_id", None):
+                from src.governance.tenant_store import _install_postgres_guards, _install_sqlite_guards
+
+                tables = ("task_lifecycle_snapshots", "task_lifecycle_events", "task_lifecycle_history_policy_v1", "task_lifecycle_capacity_meta_v1")
+                if isinstance(store, PostgresStore):
+                    _install_postgres_guards(cur, store.schema, tables)
+                else:
+                    _install_sqlite_guards(cur, tables)
 
     @contextmanager
     def _transaction(self):
-        with self.store._lock:
-            if isinstance(self.store, SqliteStore):
-                self.store._db.execute("BEGIN IMMEDIATE")
-                try:
-                    with_cursor = self.store._db.cursor()
-                    try:
-                        yield with_cursor
-                    finally:
-                        with_cursor.close()
-                    self.store._db.execute("COMMIT")
-                except BaseException:
-                    self.store._db.execute("ROLLBACK")
-                    raise
-            else:
-                with self.store._db.transaction(), self.store._db.cursor() as cur:
+        # Reuse the governance boundary: a nested lifecycle call owns only its
+        # savepoint, never the embedding admission transaction's commit.
+        with sql_atomic(self.store):
+            cur = self.store._db.cursor()
+            try:
+                if isinstance(self.store, PostgresStore):
                     cur.execute("SELECT pg_advisory_xact_lock(%s)", (911006,))
-                    yield cur
+                yield cur
+            finally:
+                cur.close()
 
     def _execute(self, cur, query, values):
         if isinstance(self.store, PostgresStore):
@@ -108,6 +112,8 @@ class DurableTaskLifecycle:
             if self._execute(cur, "SELECT 1 FROM task_lifecycle_snapshots "
                              "WHERE owner_id=? AND task_id=?", scope).fetchone():
                 raise LifecycleRejected("task identity already exists; no replay or replacement")
+            if self._history_count(cur) >= self._history_policy(cur):
+                raise LifecycleCapacity("historical-task capacity reached; reviewed capacity increase required")
             active = self._execute(cur, "SELECT count(*) AS n FROM task_lifecycle_snapshots "
                                    "WHERE owner_id=? AND terminal=0", (owner_id,)).fetchone()["n"]
             if active >= self.max_active:
@@ -188,3 +194,85 @@ class DurableTaskLifecycle:
                 if task.terminal:
                     return
             await asyncio.sleep(poll_seconds)
+
+    def _history_count(self, cur):
+        return self._execute(cur, "SELECT count(*) AS n FROM task_lifecycle_snapshots", ()).fetchone()["n"]
+
+    def _history_policy(self, cur):
+        row = self._execute(cur, "SELECT p.version,p.max_tasks FROM task_lifecycle_history_policy_v1 p "
+                            "JOIN task_lifecycle_capacity_meta_v1 m ON m.singleton=p.singleton AND m.version=1 "
+                            "WHERE p.singleton=1", ()).fetchone()
+        if not row or row["version"] != 1 or type(row["max_tasks"]) is not int or not 1 <= row["max_tasks"] <= 1000000:
+            raise LifecycleCapacity("missing or unsupported historical-task capacity policy")
+        return row["max_tasks"]
+
+    def _bootstrap_history_capacity(self, cur):
+        tables = ("task_lifecycle_history_policy_v1", "task_lifecycle_capacity_meta_v1")
+        if isinstance(self.store, PostgresStore):
+            rows = self._execute(cur,
+                "SELECT c.relname AS name,c.relkind AS kind FROM pg_catalog.pg_class c "
+                "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+                "WHERE n.nspname=current_schema() AND c.relname IN (?,?)", tables).fetchall()
+            kind = "r"
+        else:
+            rows = self._execute(cur, "SELECT name,type AS kind FROM sqlite_master WHERE name IN (?,?)", tables).fetchall()
+            kind = "table"
+        existing = {row["name"] for row in rows if row["kind"] == kind}
+        if len(existing) != len(rows) or (existing and existing != set(tables)):
+            raise LifecycleCapacity("incomplete or unsupported historical-task capacity schema")
+        cur.execute("CREATE TABLE IF NOT EXISTS task_lifecycle_history_policy_v1 ("
+                    "singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL,"
+                    "max_tasks INTEGER NOT NULL CHECK(max_tasks BETWEEN 1 AND 1000000))")
+        cur.execute("CREATE TABLE IF NOT EXISTS task_lifecycle_capacity_meta_v1 ("
+                    "singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL)")
+        if not existing:
+            cur.execute("INSERT INTO task_lifecycle_history_policy_v1 VALUES(1,1,10000)")
+            cur.execute("INSERT INTO task_lifecycle_capacity_meta_v1 VALUES(1,1)")
+        self._history_policy(cur)
+        # Private tenant namespaces enforce the bound for supported older task
+        # workers as well. Standalone legacy stores retain an application bound;
+        # source migration stays within its ordinary-table contract.
+        if not getattr(self.store, "tenant_id", None):
+            return
+        if isinstance(self.store, SqliteStore):
+            cur.execute("CREATE TRIGGER IF NOT EXISTS agentbridge_task_history_capacity_v1 "
+                "BEFORE INSERT ON task_lifecycle_snapshots WHEN "
+                "COALESCE((SELECT version FROM task_lifecycle_capacity_meta_v1 WHERE singleton=1),0)<>1 OR "
+                "COALESCE((SELECT version FROM task_lifecycle_history_policy_v1 WHERE singleton=1),0)<>1 OR "
+                "COALESCE((SELECT max_tasks FROM task_lifecycle_history_policy_v1 WHERE singleton=1),0)<1 OR "
+                "(SELECT count(*) FROM task_lifecycle_snapshots)>="
+                "(SELECT max_tasks FROM task_lifecycle_history_policy_v1 WHERE singleton=1) "
+                "BEGIN SELECT RAISE(ABORT,'historical-task capacity reached or policy unavailable'); END")
+        else:
+            from src.governance.tenant_store import _quote
+
+            namespace = _quote(self.store.schema) + "."
+            function = namespace + "agentbridge_task_history_capacity_v1"
+            cur.execute("CREATE OR REPLACE FUNCTION " + function + "() RETURNS trigger LANGUAGE plpgsql "
+                "SET search_path=pg_catalog AS $$ DECLARE v integer; cap integer; BEGIN "
+                "PERFORM pg_advisory_xact_lock(911006); SELECT p.version,p.max_tasks INTO v,cap FROM " + namespace +
+                "task_lifecycle_history_policy_v1 p JOIN " + namespace +
+                "task_lifecycle_capacity_meta_v1 m ON m.singleton=p.singleton AND m.version=1 WHERE p.singleton=1; "
+                "IF v IS DISTINCT FROM 1 OR cap IS NULL OR cap<1 OR cap>1000000 THEN "
+                "RAISE EXCEPTION 'historical-task capacity policy unavailable'; END IF; "
+                "IF (SELECT count(*) FROM " + namespace + "task_lifecycle_snapshots)>=cap THEN "
+                "RAISE EXCEPTION 'historical-task capacity reached'; END IF; RETURN NEW; END $$")
+            cur.execute("DROP TRIGGER IF EXISTS agentbridge_task_history_capacity_v1 ON " + namespace + "task_lifecycle_snapshots")
+            cur.execute("CREATE TRIGGER agentbridge_task_history_capacity_v1 BEFORE INSERT ON " + namespace +
+                "task_lifecycle_snapshots FOR EACH ROW EXECUTE FUNCTION " + function + "()")
+
+    def history_capacity(self):
+        with self._transaction() as cur:
+            return {"max_tasks": self._history_policy(cur), "used_tasks": self._history_count(cur)}
+
+    def set_history_capacity(self, max_tasks, *, audit=None):
+        """Trusted embedding operator only; never deletes history to make room."""
+        if type(max_tasks) is not int or not 1 <= max_tasks <= 1000000:
+            raise LifecycleRejected("bounded historical-task capacity required")
+        with self._transaction() as cur:
+            self._history_policy(cur)
+            if max_tasks < self._history_count(cur):
+                raise LifecycleCapacity("capacity cannot discard retained task history")
+            self._execute(cur, "UPDATE task_lifecycle_history_policy_v1 SET max_tasks=? WHERE singleton=1", (max_tasks,))
+            if audit is not None:
+                audit()
