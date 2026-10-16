@@ -29,6 +29,7 @@ from .identity import IdentityRegistry
 from .operation_ledger import OperationLedger
 from .policy import PolicyEngine
 from .rbac import require
+from .store import sql_atomic
 from .tenant_store import TenantStoreRegistry
 
 
@@ -263,17 +264,19 @@ class TenantSession:
             self._audit(runtime, "approve" if granted else "deny")
         return result
 
-    @_guarded(write=False)
+    @_guarded(write=True)
     def mark_sensitive(self, capability):
         runtime = self._runtime("policy:write")
-        runtime.approvals.mark_sensitive(capability)
-        self._audit(runtime, "mark_sensitive")
+        with sql_atomic(runtime.store):
+            runtime.approvals.mark_sensitive(capability)
+            self._audit(runtime, "mark_sensitive")
 
-    @_guarded(write=False)
+    @_guarded(write=True)
     def add_policy(self, rule):
         runtime = self._runtime("policy:write")
-        runtime.rules.add(rule)
-        self._audit(runtime, "add_policy")
+        with sql_atomic(runtime.store):
+            runtime.rules.add(rule)
+            self._audit(runtime, "add_policy")
 
     @_guarded(write=False)
     def policy_rules(self):
