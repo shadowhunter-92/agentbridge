@@ -408,3 +408,25 @@ def test_quota_callback_cannot_create_orphan_records_outside_a_claim_transaction
     with pytest.raises(RuntimeError, match="operation claim transaction"):
         runtime.gateway._quotas.admit(principal, "worker", operation(), "orphan-attempt", 1)
     assert tenant_app[1]["alpha"].get_quotas()["usage"]["records"] == 0
+
+
+@pytest.mark.parametrize("damage", ["missing-policy-row", "missing-record-table"])
+def test_quota_restart_rejects_incomplete_persisted_state(tenant_app, damage):
+    runtime = tenant_app[0]._runtimes["alpha"]
+    tenant_app[1]["alpha"].set_quotas(enabled=True, spend_limit=1)
+    if damage == "missing-policy-row":
+        runtime.store._db.execute("DELETE FROM admission_quota_policy_v1")
+    else:
+        runtime.store._db.execute("DROP TABLE admission_quota_records_v1")
+    with pytest.raises(QuotaDenied, match="missing|incomplete"):
+        AdmissionQuotas(runtime.store)
+
+
+def test_quota_constructor_guards_new_tables_without_a_kernel_seal(authority, namespaces):
+    store = namespaces("alpha")
+    OperationLedger(store)
+    manager = AdmissionQuotas(store)
+    old = namespaces("alpha", legacy=True)
+    with pytest.raises(Exception, match="tenant write scope|agentbridge_current_tenant"):
+        old._db.execute("UPDATE admission_quota_policy_v1 SET policy='{}' WHERE singleton=1")
+    assert not manager.inspect()["limits"]["enabled"]

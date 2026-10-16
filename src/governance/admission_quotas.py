@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass
 from .authority import AuthorityDenied, _identifier, _subject
 from .budget import _checked_cost
 from .store import PostgresStore, SqliteStore, sql_atomic
-from .tenant_store import _quote
+from .tenant_store import _install_postgres_guards, _install_sqlite_guards, _quote
 
 
 class QuotaDenied(ValueError):
@@ -85,6 +85,23 @@ class AdmissionQuotas:
         with sql_atomic(store):
             if self.postgres:
                 self._execute("SELECT pg_advisory_xact_lock(?)", (911004,))
+            tables = ("admission_quota_policy_v1", "admission_quota_records_v1")
+            if self.postgres:
+                rows = self._execute(
+                    "SELECT c.relname AS name,c.relkind AS kind FROM pg_catalog.pg_class c "
+                    "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+                    "WHERE n.nspname=current_schema() AND c.relname IN (?,?)",
+                    tables,
+                ).fetchall()
+                valid_kind = "r"
+            else:
+                rows = self._execute(
+                    "SELECT name,type AS kind FROM sqlite_master WHERE name IN (?,?)", tables
+                ).fetchall()
+                valid_kind = "table"
+            existing = {row["name"] for row in rows if row["kind"] == valid_kind}
+            if len(existing) != len(rows) or (existing and existing != set(tables)):
+                raise QuotaDenied("incomplete persisted quota schema; reviewed recovery required")
             self._execute(
                 "CREATE TABLE IF NOT EXISTS admission_quota_policy_v1 ("
                 "singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL,policy TEXT NOT NULL)"
@@ -98,13 +115,20 @@ class AdmissionQuotas:
             self._execute(
                 "CREATE INDEX IF NOT EXISTS admission_quota_owner_time_v1 ON admission_quota_records_v1(owner,admitted)"
             )
-            self._execute(
-                "INSERT INTO admission_quota_policy_v1 VALUES(1,1,?) ON CONFLICT(singleton) DO NOTHING",
-                (json.dumps(asdict(QuotaLimits()), sort_keys=True),),
-            )
+            if not existing:
+                self._execute(
+                    "INSERT INTO admission_quota_policy_v1 VALUES(1,1,?)",
+                    (json.dumps(asdict(QuotaLimits()), sort_keys=True),),
+                )
             self._policy()
             self._install_claim_guard()
-        store.seal_writes()
+            # Protect only the tables this component introduced. Reinstalling
+            # every tenant table's triggers adds avoidable startup round trips.
+            if self.postgres:
+                with store._db.cursor() as cur:
+                    _install_postgres_guards(cur, store.schema, tables)
+            else:
+                _install_sqlite_guards(store._db, tables)
 
     def _execute(self, query, values=()):
         return self.store._db.execute(query.replace("?", "%s") if self.postgres else query, values)

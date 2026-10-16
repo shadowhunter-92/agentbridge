@@ -66,7 +66,13 @@ records retain their admission timestamp even after failed outcomes. Timestamps
 come from the database clock; PostgreSQL workers do not supply local time.
 
 Policy/cost/attribution history survives restart. Missing, malformed or unsupported
-policy is rejected. Actual worker death before commit must roll back the quota
+policy is rejected. Bootstrap inserts a disabled default only when both quota
+tables are absent. A missing policy row, missing companion table or unexpected
+relation type in an existing namespace requires reviewed recovery; restart must
+not silently disable limits or recreate missing attribution history. Quota
+bootstrap protects its own two tables within the same transaction, while the
+kernel retains its final seal of all tenant helpers. Actual worker death before
+commit must roll back the quota
 record along with budget and claim. Full history capacity fails closed and calls
 for reviewed archival; this component never deletes history, UNKNOWN outcomes,
 reservations, holds, audit or evidence to regain capacity.
