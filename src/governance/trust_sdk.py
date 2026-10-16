@@ -10,8 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .destination_receipts import verify_destination_receipt
-from .readback_attestations import verify_readback_attestation
 from .external_anchor import verify_anchored_audit
+from .readback_attestations import verify_readback_attestation
 
 
 @dataclass(frozen=True)
@@ -91,7 +91,7 @@ def verify_journaled_action_evidence(*, trust_journal, destination_key_id: str,
         raise TypeError("operator-configured signing trust journal required")
     if {"destination_key_hex", "readback_key_hex"} & kwargs.keys():
         raise ValueError("caller cannot override enrolled signing keys")
-    with trust_journal._transaction() as cur:
+    with trust_journal._transaction(write=False) as cur:
         keys = trust_journal.settlement_keys(cur, destination_key_id=destination_key_id,
                                             observer_key_id=observer_key_id)
         return verify_action_evidence(destination_key_hex=keys["destination_key_hex"],
