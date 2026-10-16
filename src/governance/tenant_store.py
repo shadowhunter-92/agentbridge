@@ -300,19 +300,22 @@ class TenantStoreRegistry:
                 raise TenantStoreDenied("authority and tenant data must not share a namespace")
             if not isinstance(store, TenantPostgresStore):
                 continue
-            other_schemas = [
+            # Reported address/port/database equality is not proof of a server
+            # boundary: aliases, multi-homing and proxies can differ. Ask this
+            # connection's catalog about every configured protected schema name.
+            # Its own schema name is valid on separate databases and must not
+            # become a false positive just because a name is reused elsewhere.
+            other_schemas = {
                 other.schema
                 for other in self._stores.values()
-                if isinstance(other, TenantPostgresStore)
-                and other is not store
-                and other.namespace_key[:4] == store.namespace_key[:4]
-            ]
-            if authority_namespace[:4] == store.namespace_key[:4]:
-                other_schemas.append(authority_namespace[4])
+                if isinstance(other, TenantPostgresStore) and other.schema != store.schema
+            }
+            if authority_namespace[0] == "postgres" and authority_namespace[4] != store.schema:
+                other_schemas.add(authority_namespace[4])
             with store._lock, store._db.cursor() as cur:
                 cur.execute(
                     "SELECT nspname FROM pg_namespace WHERE nspname=ANY(%s) AND has_schema_privilege(current_user,oid,'USAGE')",
-                    (other_schemas,),
+                    (sorted(other_schemas),),
                 )
                 if cur.fetchone():
                     raise TenantStoreDenied("tenant SQL role can access another tenant or authority namespace")
