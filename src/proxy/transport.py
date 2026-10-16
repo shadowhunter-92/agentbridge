@@ -225,3 +225,28 @@ async def call_mcp_http_tool(
             content.append({"type": getattr(block, "type", "unknown"), "data": str(block)})
     return {"isError": bool(result.isError), "content": content, "raw": texts,
             "protocolVersion": initialized.protocolVersion}
+
+
+async def invoke_target(dst_proto: str, dst_wire: Dict[str, Any],
+                         target: Optional[Dict[str, Any]], *, registry=None) -> Dict[str, Any]:
+    """Invoke a live target if one is specified, else return the translated wire."""
+    if not target:
+        return {"translated_wire": dst_wire}
+    from ..protocols import default_registry
+    registry = registry or default_registry
+    kind = target.get("kind")
+    if kind == "mcp_stdio":
+        params = dst_wire.get("params", {})
+        res = await call_mcp_tool(target["command"], target.get("args", []),
+                                            params.get("name"), params.get("arguments", {}))
+        return {"result": res}
+    if kind == "a2a_http":
+        message = registry.get(dst_proto).to_canonical_call(dst_wire).best_text()
+        return {"result": await send_a2a_message(target["base_url"], message,
+                                                           proxy_url=target.get("proxy_url"))}
+    if kind == "acp_http":
+        return {"result": await call_acp_agent(target["base_url"],
+                                                          target.get("agent_name", "agent"),
+                                                          registry.get(dst_proto).to_canonical_call(dst_wire).best_text(),
+                                                          proxy_url=target.get("proxy_url"))}
+    raise ValueError(f"unknown target kind '{kind}'")

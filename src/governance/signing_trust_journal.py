@@ -70,17 +70,57 @@ class SigningTrustJournal:
         self.store = store
         self._controllers = dict(controller_keys)
         self._floors = dict(floors)
-        with self._transaction() as cur:
-            if isinstance(store, PostgresStore):
+        if isinstance(store, PostgresStore):
+            with store._lock, store._db.transaction(), store._db.cursor() as cur:
+                # Old journal workers hold this key exclusively. A shared
+                # compatibility barrier retains their exclusion while composing
+                # with an authority read guard on a separate SQL connection.
+                cur.execute("SELECT pg_advisory_xact_lock_shared(%s)", (self._LOCK,))
                 cur.execute("SELECT pg_advisory_xact_lock(%s)", (911004,))
-            cur.execute(
-                "CREATE TABLE IF NOT EXISTS signing_trust_revisions ("
-                "domain TEXT NOT NULL, revision INTEGER NOT NULL, envelope TEXT NOT NULL, "
-                "PRIMARY KEY(domain, revision))"
-            )
+                cur.execute("SELECT to_regclass('signing_trust_lock_v1') AS relation")
+                existed = cur.fetchone()["relation"] is not None
+                cur.execute(
+                    "CREATE TABLE IF NOT EXISTS signing_trust_lock_v1 ("
+                    "singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL)"
+                )
+                if not existed:
+                    cur.execute("INSERT INTO signing_trust_lock_v1 VALUES(1,1)")
+                self._policy_lock(cur, write=True)
+                self._create_history(cur)
+                self._install_tenant_guards(cur)
+        else:
+            with self._transaction() as cur:
+                self._create_history(cur)
+                self._install_tenant_guards(cur)
+
+    @staticmethod
+    def _create_history(cur):
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS signing_trust_revisions ("
+            "domain TEXT NOT NULL, revision INTEGER NOT NULL, envelope TEXT NOT NULL, "
+            "PRIMARY KEY(domain, revision))"
+        )
+
+    def _install_tenant_guards(self, cur):
+        if not getattr(self.store, "tenant_id", None):
+            return
+        from .tenant_store import _install_postgres_guards, _install_sqlite_guards
+
+        if isinstance(self.store, PostgresStore):
+            _install_postgres_guards(cur, self.store.schema, ("signing_trust_revisions", "signing_trust_lock_v1"))
+        else:
+            _install_sqlite_guards(cur, ("signing_trust_revisions",))
+
+    @staticmethod
+    def _policy_lock(cur, *, write):
+        lock = "FOR UPDATE" if write else "FOR SHARE"
+        cur.execute("SELECT version FROM signing_trust_lock_v1 WHERE singleton=1 " + lock)
+        row = cur.fetchone()
+        if not row or row["version"] != 1:
+            raise TrustJournalDenied("missing or unsupported signing coordination policy")
 
     @contextmanager
-    def _transaction(self):
+    def _transaction(self, *, write=True):
         store = self.store
         with store._lock:
             if isinstance(store, SqliteStore):
@@ -97,7 +137,8 @@ class SigningTrustJournal:
                     raise
             else:
                 with store._db.transaction(), store._db.cursor() as cur:
-                    cur.execute("SELECT pg_advisory_xact_lock(%s)", (self._LOCK,))
+                    cur.execute("SELECT pg_advisory_xact_lock_shared(%s)", (self._LOCK,))
+                    self._policy_lock(cur, write=write)
                     yield cur
 
     def _verify(self, envelope):
@@ -200,9 +241,20 @@ class SigningTrustJournal:
         return registry_digest(envelope)
 
     def settlement_keys(self, cur, *, destination_key_id, observer_key_id):
-        """Called inside the settlement transaction; serializes against rotation."""
+        """Called inside this store's transaction; serializes against rotation."""
+        if getattr(cur, "connection", None) is not self.store._db:
+            raise TrustJournalDenied("signing policy requires its own store transaction cursor")
+        if isinstance(self.store, SqliteStore):
+            active = self.store._db.in_transaction
+        else:
+            from psycopg.pq import TransactionStatus
+
+            active = self.store._db.info.transaction_status == TransactionStatus.INTRANS
+        if not active:
+            raise TrustJournalDenied("signing policy requires an active transaction")
         if isinstance(self.store, PostgresStore):
-            cur.execute("SELECT pg_advisory_xact_lock(%s)", (self._LOCK,))
+            cur.execute("SELECT pg_advisory_xact_lock_shared(%s)", (self._LOCK,))
+            self._policy_lock(cur, write=False)
         result = {}
         for domain, key_id in (
             ("destination", destination_key_id),

@@ -9,15 +9,15 @@ and counts reserved-but-not-committed spend.
 Store-backed so spend survives restarts.
 """
 
-import threading
 import math
+import threading
 import time
 import uuid
 from collections import deque
+from contextlib import nullcontext
 from typing import Deque, Dict, List, Optional, Tuple
 
-from .store import GovernanceStore, InMemoryStore
-
+from .store import GovernanceStore, InMemoryStore, PostgresStore, SqliteStore
 
 
 def _checked_cost(cost: float) -> float:
@@ -142,13 +142,18 @@ class BudgetManager:
         self._default_factory = default_factory or (lambda: Budget())
         self._lock = threading.RLock()
 
+    def _coordination_lock(self):
+        # SQL transactions may call back into the manager while holding the
+        # store lock. Use store -> manager consistently to avoid lock inversion.
+        return self.store._lock if isinstance(self.store, (InMemoryStore, SqliteStore, PostgresStore)) else nullcontext()
+
     def set_budget(self, agent_id: str, budget: Budget) -> None:
-        with self._lock:
+        with self._coordination_lock(), self._lock:
             self._budgets[agent_id] = budget
             self.store.upsert_budget(agent_id, budget.state())
 
     def get(self, agent_id: str) -> Budget:
-        with self._lock:
+        with self._coordination_lock(), self._lock:
             rec = self.store.get_budget(agent_id)
             if rec:
                 budget = Budget.from_state(rec)
@@ -160,7 +165,7 @@ class BudgetManager:
             return budget
 
     def persist(self, agent_id: str) -> None:
-        with self._lock:
+        with self._coordination_lock(), self._lock:
             if agent_id in self._budgets:
                 self.store.upsert_budget(agent_id, self._budgets[agent_id].state())
 
