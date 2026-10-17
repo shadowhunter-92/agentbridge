@@ -1,9 +1,9 @@
 # R4 release candidate: internal completion evidence and unresolved gates
 
-> **Historical checkpoint.** This record applies to its stated commits and test
-> environment. PRs #51, #52 and #41 subsequently merged; main baseline is
-> `483bc98234ced2b876a6b296a1e1fd292747942c`. See the
-> [current handoff register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md) for ongoing work.
+> **Historical checkpoint.** Baselines, test counts, pending PRs, branch counts
+> and cleanup statements below apply only to the recorded phase. They are not
+> current merge/release approval. See [current alpha status](CURRENT_ALPHA_STATUS.md)
+> and [branch documentation dispositions](BRANCH_DOCUMENTATION_DISPOSITIONS_2026-10-16.md).
 
 **Status: ALPHA; unrestricted production NO-GO.**
 This is the operating register for draft PR #34. Passing CI is not
