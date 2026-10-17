@@ -80,6 +80,13 @@ Immediate account revocation and operated workload identity remain explicit
 deployment/next-phase requirements. These process limits are not fleet-wide
 tenant quotas. Total historical-task retention and legal hold remain separate.
 
+The separately constructed [tenant-native status stream](tenant-task-streams.md)
+has shared authority-database/namespace allocation caps. Those caps do not apply
+to this legacy `/a2a` endpoint or establish A2A protocol resumability. The durable
+SDK's [retained-task count](TASK_HISTORY_CAPACITY_2026-10-16.md) and
+[event-byte](TASK_EVENT_CAPACITY_2026-10-16.md) admission caps also do not provide
+protected retention or legal-hold cleanup.
+
 ## Qualification and remaining scope
 
 Real loopback HTTP tests use the official A2A 0.3 SDK client, JWT signatures,

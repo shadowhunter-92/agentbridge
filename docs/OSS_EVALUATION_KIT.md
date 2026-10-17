@@ -17,11 +17,28 @@ count as unrelated developer evaluations or installation from a public registry.
 The separately prepared evaluator packet records the wheel hash and build tools.
 No independent custody or production acceptance is implied.
 
-## 1. Historical installation instructions (superseded pin)
+The wheel remains **local, unsigned and unpublished** at that older source pin;
+it is not rebuilt from the cumulative `46777f8` source. Source checkout commands
+below install the selected source and dependencies, not this wheel. Do not infer
+public-registry availability or trusted provenance from version `1.0.0`.
+See [current source/artifact distinction](CURRENT_ALPHA_STATUS.md).
 
-Download the source for the reviewed main commit `483bc98234ced2b876a6b296a1e1fd292747942c` and create a Python 3.11/3.12
-virtual environment. Install the local wheel using the built artifact from
-the CI release-review check. Run `agentbridge --version`, import
+## 1. Source installation for the pinned evaluator
+
+For source evaluation, use the exact older evaluator source explicitly:
+
+```bash
+git clone https://github.com/shadowhunter-92/agentbridge.git
+cd agentbridge
+git checkout --detach d0881b937d2568e4e01fb02044bf466aea609e9a
+python -m venv .venv
+# Activate the environment before installing.
+python -m pip install -e ".[test]"
+```
+
+For the separately prepared local wheel, use its packet manifest/hash and clean
+installation instructions; no public download is asserted here. The historical
+`483bc982` pin below remains historical. Run `agentbridge --version`, import
 `src.governance.trust_sdk.verify_action_evidence`, and run:
 
 ```bash
@@ -93,7 +110,7 @@ scope forbids unsupervised consequential actions until accepted.
 ## 5. Scope and nonclaims
 
 Supported protocol scope is limited to the documented SDK/wire subsets;
-see `docs/PROTOCOL_COMPATIBILITY_2026.md`. This alpha does not guarantee
+see [protocol compatibility](PROTOCOL_COMPATIBILITY_2026.md). This alpha does not guarantee
 exactly-once execution against arbitrary systems, complete MCP/A2A
 conformance, independent physical-outcome proof or enterprise certification.
 

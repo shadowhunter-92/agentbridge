@@ -18,8 +18,11 @@ application owns their destination selection and security controls.
 
 ## Governed execution
 
-The supported HTTP governance path is `/control/route`, using a signed agent
-request and an operator-configured `target_id`. Production configuration also
+The legacy HTTP governance path is `/control/route`, using a signed agent
+request and an operator-configured `target_id`. The separately constructed
+opt-in tenant factory provides `/v2/route` with enrolled tenant/agent/user
+authority; it does not tenant-enable the legacy endpoint. See
+[tenant runtime](TENANT_RUNTIME_2026-10-14.md). Production configuration also
 requires agent/target permissions, capability and cost policy, durable operation
 identity and the documented network boundary. Raw agent-selected target
 configurations are rejected. Governance covers only that enforced path.
@@ -31,7 +34,7 @@ lifecycle, destination enforcement and authoritative readback integration.
 
 See [protocol compatibility](PROTOCOL_COMPATIBILITY_2026.md),
 [security policy](../SECURITY.md), [framework integration](INTEGRATIONS.md), and
-[current handoff acceptance](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md).
+[current alpha status](CURRENT_ALPHA_STATUS.md).
 
 No server catalog is a promise that every tool or lifecycle feature works.
 Evaluate each integration with synthetic/read-only state before proposing a

@@ -1,5 +1,11 @@
 # Enrolled tenant runtime and HTTP boundary
 
+> **Runtime checkpoint with later bounded additions.** Test counts below apply
+> to their stated runtime SHAs. The cumulative draft also includes durable task
+> count/event-byte limits, shared status-stream allocations and policy/signing/SQL composition corrections; see
+> [current alpha status](CURRENT_ALPHA_STATUS.md). Broad storage/retention and
+> tenant service coverage remain incomplete.
+
 This is an opt-in engineering alpha layer over the existing Trust Kernel. It
 does not establish production acceptance or activate historical databases.
 
@@ -108,4 +114,4 @@ trusted release qualification and independent acceptance. The generic production
 target restriction remains in force, including standalone remote MCP tools. No
 main merge, deployment, release publication or external contact occurs here.
 
-Shared-SQL success settlement and pre-invocation abort now commit budget, operation state and audit together; see [atomic outcome accounting](ATOMIC_GOVERNANCE_STATE_2026-10-14.md). Shared-SQL admission now atomically binds reservation, approval and operation claim; see [atomic admission](ATOMIC_ADMISSION_2026-10-14.md). Operator-enabled durable aggregate admission quotas have a separate boundary: [tenant/user caps](DURABLE_ADMISSION_QUOTAS_2026-10-15.md). Storage quotas and qualified retention remain subsequent work.
+Shared-SQL success settlement and pre-invocation abort now commit budget, operation state and audit together; see [atomic outcome accounting](ATOMIC_GOVERNANCE_STATE_2026-10-14.md). Shared-SQL admission now atomically binds reservation, approval and operation claim; see [atomic admission](ATOMIC_ADMISSION_2026-10-14.md). Operator-enabled durable aggregate admission quotas have a separate boundary: [tenant/user caps](DURABLE_ADMISSION_QUOTAS_2026-10-15.md). Durable [task-count](TASK_HISTORY_CAPACITY_2026-10-16.md) and [event-byte](TASK_EVENT_CAPACITY_2026-10-16.md) bounds now cover their stated namespaces. [Tenant-native status streams](tenant-task-streams.md) separately bound active authorized allocations across the shared authority database/namespace; frontdoor physical connection limits and coordinated recovery still require qualification. Audit/evidence-byte bounds and qualified retention remain separate work.

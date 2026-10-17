@@ -1,7 +1,13 @@
 # AgentBridge execution plan — October 14, 2026
 
-> The [handoff register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md) is the current
-> requirement and priority authority. Milestone P0–P5 names below are development
+> **Historical checkpoint.** Baselines, test counts, pending PRs, branch counts
+> and cleanup statements below apply only to the recorded phase. They are not
+> current merge/release approval. See [current alpha status](CURRENT_ALPHA_STATUS.md)
+> and [branch documentation dispositions](BRANCH_DOCUMENTATION_DISPOSITIONS_2026-10-16.md).
+
+> The [88-row handoff register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md) records
+> this plan's original requirements. [Current alpha status](CURRENT_ALPHA_STATUS.md)
+> carries later bounded implementations and remaining work. Milestone P0–P5 names below are development
 > phases, distinct from the security release priorities P0/P1/P2. Protocol PR #53
 > is CI-verified for its bounded subset; broader conformance remains open.
 

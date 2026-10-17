@@ -1,5 +1,12 @@
 # Authenticated tenant authority foundation — October 14, 2026
 
+> **Foundation checkpoint.** Future-work statements below describe this first
+> unit. The cumulative draft now includes opt-in tenant runtime/HTTP, offline
+> migration, atomic admission/settlement and bounded admission/task capacity.
+> See [current alpha status](CURRENT_ALPHA_STATUS.md) for scope and exact pins.
+> Replay pruning remains explicit platform maintenance, not an automatic
+> frontdoor rate/storage limit or tenant quota on authentication requests.
+
 This is the first implementation unit after main73aafd60. It does **not** activate
 a multi-tenant control plane or declare tenant isolation complete. Existing
 single-tenant entry points and the generic production target restriction remain

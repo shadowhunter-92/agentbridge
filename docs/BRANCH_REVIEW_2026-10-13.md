@@ -1,5 +1,10 @@
 # Branch qualification and consolidation — October 13, 2026
 
+> **Historical checkpoint.** Baselines, test counts, pending PRs, branch counts
+> and cleanup statements below apply only to the recorded phase. They are not
+> current merge/release approval. See [current alpha status](CURRENT_ALPHA_STATUS.md)
+> and [branch documentation dispositions](BRANCH_DOCUMENTATION_DISPOSITIONS_2026-10-16.md).
+
 Read-only remote inventory froze 26 actual branch heads. The symbolic `origin/HEAD`
 alias is excluded from this count. Every frozen head was extracted and tested on
 Windows Python 3.12 and Linux Python 3.11 with a separate disposable PostgreSQL 16

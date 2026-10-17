@@ -1,9 +1,10 @@
 # Security-boundary integration audit — 13 October 2026
 
-> **Historical checkpoint.** This record applies to its stated commits and test
-> environment. PRs #51, #52 and #41 subsequently merged; main baseline is
-> `483bc98234ced2b876a6b296a1e1fd292747942c`. See the
-> [current handoff register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md) for ongoing work.
+> **Historical checkpoint.** Baselines, findings, test counts and pending PRs
+> below apply to this report's stated commits and environment. They are not a
+> current source assessment or merge/release approval. See
+> [current alpha status](CURRENT_ALPHA_STATUS.md) for later bounded source and
+> remaining gates; original results below are preserved.
 
 **Review class:** source inspection + exact-commit CI observation; **not** a penetration test, independent attestation, production certification, or comprehensive security approval.
 

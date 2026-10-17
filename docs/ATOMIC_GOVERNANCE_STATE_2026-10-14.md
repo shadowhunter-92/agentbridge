@@ -38,8 +38,13 @@ separate-connection visibility, nested savepoints, worker-process termination
 during success and pre-invocation abort, cancellation and telemetry failures on
 SQLite and PostgreSQL. Exact commit and CI evidence must accompany acceptance.
 
-Admission still has separate reservation, approval-consumption and operation-
-claim transactions. Crash-safe admission, aggregate tenant/user quotas, retention,
-tenant-aware authoritative reconciliation and durable task execution remain
-subsequent engineering work. This change does not remove the production target
-restriction or establish unrestricted production acceptance.
+At this settlement unit's original checkpoint, admission still used separate
+reservation, approval-consumption and operation-claim transactions. The cumulative
+draft subsequently adds [shared-SQL atomic admission](ATOMIC_ADMISSION_2026-10-14.md)
+and [aggregate tenant/human admission quotas](DURABLE_ADMISSION_QUOTAS_2026-10-15.md).
+Those contracts require the stated shared store and supported tenant composition;
+legacy separate/in-memory participants remain weaker. Retained task count and
+event-byte caps are separate from audit/evidence retention, tenant-aware
+reconciliation services and durable executable tasks, which remain open. See
+[current status](CURRENT_ALPHA_STATUS.md). Production target restrictions and
+unrestricted production NO-GO remain in force.

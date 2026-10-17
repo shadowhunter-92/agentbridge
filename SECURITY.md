@@ -9,7 +9,7 @@
 
 ## Supported scope and versions
 
-The reviewed integration PR #41 and audit fixes are incorporated in `main` at `483bc98234ced2b876a6b296a1e1fd292747942c`. Historical branch reports describe their own revisions. No version has completed the production acceptance process. The `pyproject.toml` package version alone is not proof of a published, supported, signed release. Quote the exact Git commit SHA, Python version and supported protocol subset in reports.
+The recorded `main` baseline is `73aafd60a0eec121a10245a307a4a8ee268f7ed5`. The cumulative tenant draft source is `46777f8c953690fca81c6d11e7b70372b8dd5c77` (PRs #56–#69); its recorded CI is distinct from main and from the older unsigned evaluator wheel. See [current source and remaining gates](docs/CURRENT_ALPHA_STATUS.md). Historical branch reports describe their own revisions. No version has completed the production acceptance process. The `pyproject.toml` package version alone is not proof of a published, supported, signed release. Quote the exact Git commit SHA, Python version and supported protocol subset in reports.
 
 ## Reporting vulnerabilities privately
 
@@ -33,6 +33,6 @@ Provide an affected commit, minimal non-sensitive reproduction, impact and expec
 
 Use least-privilege per-service principals, separate write and observer rights, secure key rotation/revocation, durable audit retention and off-system backup. Fail closed on unresolved external outcomes. Isolate synthetic testing from actual payment, employment, medical and other consequential workflows.
 
-For the latest engineering acceptance limitations see [integration security review](docs/INTEGRATION_SECURITY_REVIEW_2026.md), [AWS two-host evidence](docs/AWS_TWO_HOST_QUALIFICATION_2026-10-13.md), and [code/IP protection policy](docs/CODE_PROTECTION_AND_IP_POLICY_2026.md).
+For current engineering acceptance limitations start with [current alpha status](docs/CURRENT_ALPHA_STATUS.md). Historical evidence includes [integration security review](docs/INTEGRATION_SECURITY_REVIEW_2026.md), [AWS two-host evidence](docs/AWS_TWO_HOST_QUALIFICATION_2026-10-13.md), and [code/IP protection policy](docs/CODE_PROTECTION_AND_IP_POLICY_2026.md).
 
 This policy does not promise security certification, regulatory compliance or a fixed incident response SLA.
