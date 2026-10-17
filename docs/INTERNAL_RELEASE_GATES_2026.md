@@ -1,5 +1,10 @@
 # Internal release gate execution register — October 2026
 
+> **Historical checkpoint.** Baselines, test counts, pending PRs, branch counts
+> and cleanup statements below apply only to the recorded phase. They are not
+> current merge/release approval. See [current alpha status](CURRENT_ALPHA_STATUS.md)
+> and [branch documentation dispositions](BRANCH_DOCUMENTATION_DISPOSITIONS_2026-10-16.md).
+
 **Branch:** `release/r4-internal-gates-2026-10` (draft PR #34).
 **Decision:** NOT production-certified; keep `main` protected.
 

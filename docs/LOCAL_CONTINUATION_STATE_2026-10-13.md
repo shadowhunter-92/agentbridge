@@ -1,5 +1,10 @@
 # Local continuation status
 
+> **Historical checkpoint.** Baselines, test counts, pending PRs, branch counts
+> and cleanup statements below apply only to the recorded phase. They are not
+> current merge/release approval. See [current alpha status](CURRENT_ALPHA_STATUS.md)
+> and [branch documentation dispositions](BRANCH_DOCUMENTATION_DISPOSITIONS_2026-10-16.md).
+
 The October 13 repository audit supersedes the earlier local test counts and
 branch inventory. See [current acceptance](CURRENT_STATUS_2026-10-13.md) and
 [branch decisions](BRANCH_REVIEW_2026-10-13.md). The original uncommitted note

@@ -1,30 +1,22 @@
-"""
-Tamper-evident audit log.
+"""Hash-linked audit records with explicit trust and retention limits.
 
-Every governed call appends an entry whose hash chains to the previous entry's hash
-(like a mini blockchain). Any later edit/deletion breaks the chain, which
-`verify_integrity()` detects. This is the "audit trail" enterprises pay for.
+Durable stores serialize chained appends across workers. A self-consistent chain
+detects edits within its retained history; it is not WORM storage or independent
+proof of a destination effect. A signed checkpoint authenticates its signer's
+statement, not independent custody or authorization to delete history.
 
-Retention model (production-ready):
-  - The chain is hash-linked, so deleting an entry in the middle breaks verification.
-    We solve this with SIGNED CHECKPOINTS: a checkpoint signs (seq, head_hash) at a
-    point in time. After a checkpoint is recorded, entries BEFORE the checkpoint seq
-    can be truncated safely — anyone with the checkpoint signature can verify the
-    chain was intact at the checkpoint, and the remaining chain is verifiable from
-    the checkpoint head forward.
-  - `truncate_before(seq)`: removes entries with seq < N. Refuses if a legal hold
-    is active. The remaining chain stays internally verifiable — `verify_chain` /
-    `verify_durable` tolerate a chain that legitimately starts at seq>0; the signed
-    checkpoint is what proves the truncation point was authorized. Returns the count removed.
-  - `set_legal_hold(bool)`: when True, truncate_before refuses to remove anything.
-    Useful during investigations.
+Production truncation remains disabled pending qualified external anchoring.
+Controlled nonproduction truncation checks local and durable legal holds and
+requires the retained suffix to be interpreted against preserved checkpoints.
+Use AuditTrustStore for cross-process holds; an in-memory flag is process-local.
 """
 
 import hashlib
-import os
 import json
+import os
 import threading
-from dataclasses import dataclass, field, asdict
+from contextlib import nullcontext
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -67,9 +59,11 @@ class AuditLog:
         self.store = store or InMemoryStore()
         self._lock = threading.RLock()
         self._legal_hold = False
-        self._entries: List[AuditEntry] = [
+        # SQL remains authoritative. Do not eagerly duplicate all historical
+        # evidence in every worker; explicit verification/export loads it.
+        self._entries: List[AuditEntry] = ([
             AuditEntry(**rec) for rec in self.store.load_audit()
-        ]
+        ] if isinstance(self.store, InMemoryStore) else [])
 
     def record(self, *, actor: str, action: str, source_protocol: str,
                target_protocol: str, capability: str, decision: str,
@@ -87,10 +81,14 @@ class AuditLog:
             entry.entry_hash = entry.compute_hash()
             return asdict(entry)
 
-        with self._lock:
+        # Durable stores serialize the chain themselves. An extra audit lock
+        # would invert the store -> component order of an outer SQL transaction.
+        guard = self._lock if isinstance(self.store, InMemoryStore) else nullcontext()
+        with guard:
             rec = self.store.append_audit_chained(build)
             entry = AuditEntry(**rec)
-            self._entries.append(entry)        # local cache; the store is the source of truth
+            if isinstance(self.store, InMemoryStore):
+                self._entries.append(entry)
             return entry
 
     def entries(self) -> List[AuditEntry]:
@@ -99,9 +97,11 @@ class AuditLog:
         return [AuditEntry(**rec) for rec in self.store.load_audit()]
 
     def count(self) -> int:
-        """Number of audit entries currently cached — O(1), no list copy (hot path)."""
-        with self._lock:
-            return len(self.entries())
+        """Persisted count without transferring/deserializing historical records.
+
+        PostgreSQL COUNT observes MVCC rows and is not claimed to be O(1).
+        """
+        return self.store.audit_count()
 
     def export_jsonl(self) -> str:
         """Audit export for compliance (one JSON object per line)."""
@@ -160,9 +160,8 @@ class AuditLog:
     # --- signed checkpoints (compliance / third-party verifiable) ---------------------
     def head_hash(self) -> str:
         """The current chain head hash (GENESIS if empty)."""
-        with self._lock:
-            records = self.entries()
-            return records[-1].entry_hash if records else self.GENESIS
+        head = self.store.load_audit_head()
+        return head["entry_hash"] if head else self.GENESIS
 
     @staticmethod
     def _checkpoint_payload(seq: int, head_hash: str) -> bytes:
@@ -172,10 +171,9 @@ class AuditLog:
         """Sign the current audit head so a third party can later prove the log was not
         truncated or rewound past this point. `sign(bytes) -> bytes` is an Ed25519 signer
         (e.g. AgentIdentity.sign for an operator key)."""
-        with self._lock:
-            records = self.entries()
-            seq = records[-1].seq + 1 if records else 0
-            head = records[-1].entry_hash if records else self.GENESIS
+        record = self.store.load_audit_head()
+        seq = record["seq"] + 1 if record else 0
+        head = record["entry_hash"] if record else self.GENESIS
         sig = sign(self._checkpoint_payload(seq, head))
         return {"seq": seq, "head_hash": head, "algo": "ed25519",
                 "public_key_hex": public_key_hex, "signature_hex": sig.hex(),
@@ -184,8 +182,8 @@ class AuditLog:
     @staticmethod
     def verify_checkpoint(checkpoint: Dict[str, Any]) -> bool:
         """Verify a signed checkpoint's Ed25519 signature over (seq, head_hash)."""
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
         from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
         try:
             pub = Ed25519PublicKey.from_public_bytes(bytes.fromhex(checkpoint["public_key_hex"]))
             payload = AuditLog._checkpoint_payload(checkpoint["seq"], checkpoint["head_hash"])

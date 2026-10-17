@@ -1,8 +1,9 @@
 # Roadmap and supported scope
 
-AgentBridge is an engineering alpha. The current [acceptance register](CURRENT_STATUS_2026-10-13.md)
-records tested source and open work. Historical sprint reports describe their own
-commits; their test counts and pending-PR statements are not current status.
+AgentBridge is an engineering alpha. The [current alpha status](CURRENT_ALPHA_STATUS.md)
+records the separate main, cumulative draft and evaluator pins and open work.
+Historical sprint reports describe their own commits; their test counts and
+pending-PR statements are not current status.
 
 ## Implemented foundation
 
@@ -16,10 +17,26 @@ commits; their test counts and pending-PR statements are not current status.
 - The offline Evidence verifier is installed as `agentbridge-verify-evidence`.
   Trust roots and expected action inputs must come from the verifier's operator.
 - OIDC/RBAC, Prometheus metrics and optional OpenTelemetry already exist.
-- A durable task-status SDK adds atomic transitions, owner scoping, bounded
-  admission and cursor replay. It never executes a task or cancels an effect.
+- The cumulative draft adds opt-in enrolled tenant SDK/HTTP authority, private SQL
+  namespaces, bounded offline historical assignment and shared-SQL admission and
+  settlement. Selected operator policy/signing/task mutations compose with SQL.
+- Operator-enabled aggregate tenant/human admission spend, rate and active caps
+  persist across replicas. They preserve UNKNOWN exposure and historical usage.
+- The durable task-status SDK has namespace-wide retained-task count and UTF-8
+  event-byte caps with control-event headroom. It never executes a task or cancels
+  an external effect. These bounds do not include audit/evidence bytes.
+- The opt-in [tenant-native status stream](tenant-task-streams.md) adds shared
+  authority-database/namespace allocations across replicas, tenants and stable
+  owners. It observes existing task history and does not execute or resume work.
+  These allocations do not bound every physical connection or the legacy A2A
+  endpoint's process-local streams.
 
 ## Internal engineering still requiring qualification
+
+The [native queued-intent follow-up](TENANT_TASK_INTENTS_2026-10-17.md) accepts
+signed bounded provenance and submitted status/audit atomically. It does not
+implement execution admission, a worker, results or recovery. The executable
+task requirements below remain open.
 
 1. Reference transport interoperability for each advertised SDK/version and
    supported behavior. The opt-in A2A 0.3 observer streams existing task status;
@@ -34,8 +51,12 @@ commits; their test counts and pending-PR statements are not current status.
    two-version live-service migration/rollback.
 6. End-to-end service latency, overload behavior and operational resource limits.
    A synthetic translation benchmark or SQL smoke threshold is not an SLO.
-7. Service-level tenant isolation, retention/custody administration and incident
-   operations. SDK owner IDs are not authenticated HTTP tenant isolation.
+7. Complete tenant coverage for evidence, reconciliation and background services,
+   retained audit/evidence-byte bounds, protected retention/custody and incident
+   operations. The opt-in authenticated tenant HTTP factory is bounded; standalone
+   owner IDs do not authenticate a network caller. Qualify frontdoor physical
+   connection limits and coordinated stream stop/drain/restore; shared SQL
+   allocations alone do not establish those operational controls.
 
 ## External acceptance
 

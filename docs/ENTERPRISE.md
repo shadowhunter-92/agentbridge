@@ -4,7 +4,10 @@ These are experimental controls in one shared platform, not a released managed
 Enterprise service. Operator administration uses admin-key/OIDC authentication
 and RBAC. Durable approvals, policy and budgets exist; production retention,
 trusted checkpoint custody, tenant service isolation, support and SLA acceptance
-remain separate gates. See [current acceptance](CURRENT_STATUS_2026-10-13.md).
+remain separate gates. The operator examples below describe the legacy control
+plane; the enrolled tenant factory is opt-in and separately constructed. See
+[current alpha status](CURRENT_ALPHA_STATUS.md) and
+[tenant runtime](TENANT_RUNTIME_2026-10-14.md).
 
 ---
 
@@ -77,9 +80,11 @@ single PEM. The verifier interface stays the same.
 
 ## 4. Signed audit checkpoints (compliance / SIEM)
 
-The audit log is already hash-chained and tamper-evident. A **signed checkpoint** lets a
-third party prove the log was not truncated or rewound past a point in time — sign the chain
-head with an operator key and anyone can verify it later.
+The audit log is hash-chained. A **signed checkpoint** authenticates its signer's
+statement about a chain head. Detecting truncation or rollback requires an
+independently trusted, current checkpoint/witness anchor; a signature alone does
+not establish freshness or independent custody. See the
+[audit assurance boundary](adr/003-sha256-audit-chain.md).
 
 ```python
 cp = audit.checkpoint(sign=operator_identity.sign,

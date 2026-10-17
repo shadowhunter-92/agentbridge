@@ -18,11 +18,14 @@ budgets, approvals and audit history. The long-term goal is a portable trust
 layer that works **alongside** existing agent frameworks and gateways—not
 another all-in-one agent platform.
 
-> **Engineering alpha; production NO-GO.** The reviewed audit fixes and integration
-> merged through PRs #51, #52 and #41. The maintained baseline is
-> `483bc98234ced2b876a6b296a1e1fd292747942c` (October 14, 2026).
-> Source integration does not establish a signed package release or production acceptance.
-> [Current handoff register](docs/HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md) ·
+> **Engineering alpha; production NO-GO.** The recorded `main` baseline is
+> `73aafd60a0eec121a10245a307a4a8ee268f7ed5`. This documentation describes the
+> recorded cumulative draft baseline `46777f8c953690fca81c6d11e7b70372b8dd5c77`
+> (PRs #56–#69), followed by queued-intent source
+> `01376a59f13e7c4104ff0d2c507473ae334a9422`. These remain separate from `main`
+> and the older local unsigned evaluator wheel.
+> Source integration does not establish a signed release or production acceptance.
+> [Current source, evidence and open gates](docs/CURRENT_ALPHA_STATUS.md) ·
 > [Documentation index](docs/README.md) · [Security policy](SECURITY.md)
 
 ![Demonstration of a bounded AgentBridge workflow](demo.gif)
@@ -47,13 +50,14 @@ outcome, reconciliation and auditability questions. Those guarantees remain
 
 ## At a glance
 
-| Capability | Maintained baseline | Qualification remaining |
+| Capability | Cumulative draft scope | Qualification remaining |
 | --- | --- | --- |
 | Canonical tool-call translation across six adapter families | Limited subset with explicit unsupported-feature rejection | Full protocol lifecycle/version matrix |
-| Agent signatures, budgets, policies and approval controls | Implemented in selected paths | Durable and adversarial hardening |
-| SQLite / PostgreSQL support | Included | Recovery, concurrency and fencing drills |
+| Agent signatures, budgets, policies and approval controls | Selected paths; opt-in enrolled tenant SDK/HTTP and shared-SQL admission/settlement | Remaining ingress, destination and adversarial qualification |
+| SQLite / PostgreSQL support | Bounded tenant namespaces, offline migration, admission caps, retained-task/event-byte caps and shared tenant stream allocations | Large-history performance, protected retention, physical connection limits, live migration and HA |
 | Separately signed action receipt + readback verification | Tested in bounded sandbox / PostgreSQL paths | Independent administration and real destination acceptance |
 | Production network isolation, HA and full MCP/A2A conformance | **Not qualified** | **Still not qualified** |
+| Native queued task acceptance | Signed bounded intent, submitted status and audit committed together | Worker execution, operation linkage, results and recovery |
 | Enterprise managed service or formal certification | Not available | Not available |
 
 **Protocol families:** MCP, A2A, BeeAI ACP, OpenAI tool calling, Gemini tool
@@ -70,6 +74,8 @@ or non-sensitive data for the examples.
 ```bash
 git clone https://github.com/shadowhunter-92/agentbridge.git
 cd agentbridge
+# Pin the recorded main baseline for this basic example:
+git checkout --detach 73aafd60a0eec121a10245a307a4a8ee268f7ed5
 python -m venv .venv
 
 # Activate your virtual environment first:
@@ -80,6 +86,12 @@ python -m pip install -e ".[mcp]"
 python examples/quickstart.py
 python examples/demo_story.py
 ```
+
+This pins `main`, not the cumulative tenant draft. For that draft, select
+`01376a59f13e7c4104ff0d2c507473ae334a9422` explicitly and use its documented
+opt-in tenant factory. Editable source installation is not installation of the
+local evaluator wheel or a signed public release. The main CI badge above tracks
+`main`; it does not attest to the selected draft. See [source pins](docs/CURRENT_ALPHA_STATUS.md).
 
 To execute the local test suite:
 
@@ -197,8 +209,8 @@ See [engineering release register](docs/RC_INTERNAL_COMPLETION_AND_NOGO.md),
 
 ## Local continuation checks
 
-From this qualified local checkout, run `python -m examples.qualify_trust_evidence`
+From the pinned source checkout, run `python -m examples.qualify_trust_evidence`
 for the controller-signed Trust/Evidence workflow. The optional durable task SDK
 is documented in [task lifecycle](docs/DURABLE_TASK_LIFECYCLE.md).
 Run `python tools/check_documentation.py` to check local Markdown targets.
-Test and branch evidence is indexed in the [handoff acceptance register](docs/HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md).
+Current source and branch evidence is indexed in [current alpha status](docs/CURRENT_ALPHA_STATUS.md); the [88-row handoff register](docs/HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md) preserves its historical checkpoint.

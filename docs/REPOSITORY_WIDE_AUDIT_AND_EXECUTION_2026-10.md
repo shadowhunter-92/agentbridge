@@ -1,5 +1,10 @@
 # AgentBridge audit register — October 13, 2026
 
+> **Historical checkpoint.** Baselines, test counts, pending PRs, branch counts
+> and cleanup statements below apply only to the recorded phase. They are not
+> current merge/release approval. See [current alpha status](CURRENT_ALPHA_STATUS.md)
+> and [branch documentation dispositions](BRANCH_DOCUMENTATION_DISPOSITIONS_2026-10-16.md).
+
 **Scope:** inventory and reconciliations of live GitHub branches, CI, security/trust code and commercial follow-up. **Not** an independent code audit, license opinion, production sign-off or completed market validation.
 
 ## Verified live baseline

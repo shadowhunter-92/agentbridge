@@ -12,6 +12,11 @@ AgentBridge ships two run surfaces from one codebase:
 
 This guide covers running both, configuration, persistence backends, and a hardening
 checklist. It is intentionally honest about what is and isn't production-grade yet.
+The commands below start the legacy control plane, not the opt-in enrolled tenant
+factory. [Tenant runtime](TENANT_RUNTIME_2026-10-14.md) and
+[tenant-native status streams](tenant-task-streams.md) require explicit trusted
+construction and their own ingress/identity/coordination setup. See
+[current source and open gates](CURRENT_ALPHA_STATUS.md).
 
 ---
 
@@ -120,7 +125,7 @@ See `docs/ROADMAP_AND_MONETIZATION.md` for what's gated on demand vs. built next
 This is not authorization for consequential live actions. Bounded local/CI and
 AWS replication, promotion and rollback evidence exists. Automated split-brain
 safety, independent custody, external destination enforcement and production SLOs
-remain unaccepted. See [current acceptance](CURRENT_STATUS_2026-10-13.md).
+remain unaccepted. See [current alpha status](CURRENT_ALPHA_STATUS.md).
 
 Root Compose now requires `AGENTBRIDGE_ADMIN_KEY` explicitly and binds loopback.
 Generate a unique local secret in the current process, then run Compose:
