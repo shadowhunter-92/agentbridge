@@ -17,12 +17,16 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from ..governance.admission_quotas import quota_owner
 from ..governance.authority import AuthorityDenied
+from ..governance.durable_stream_leases import DurableStreamLeases, StreamCapacity
 from ..governance.gateway import GovernanceError
 from ..governance.operation_ledger import OperationConflict
 from ..governance.rbac import AccessDenied
 from ..governance.tenant_kernel import TenantKernel
 from ..protocols.task_lifecycle import LifecycleRejected
+from ..serve.a2a_status import StreamLimits, _accepts_stream, _Streams
+from ..serve.tenant_task_stream import TenantTaskStream, acquire_stream_lease
 from .trusted_targets import SecurityConfigurationError
 
 
@@ -49,6 +53,12 @@ class TaskBody(_Body):
     task_id: str = Field(min_length=1, max_length=128)
     after_sequence: int = Field(default=-1, ge=-1, lt=2**63)
     limit: int = Field(default=100, ge=1, le=100)
+
+
+class TaskStreamBody(_Body):
+    request_scope: Literal["task.stream"]
+    task_id: str = Field(min_length=1, max_length=128)
+    after_sequence: int = Field(default=-1, ge=-1, lt=2**63)
 
 
 class AgentBody(_Body):
@@ -139,7 +149,7 @@ def _header(request, name, *, required=True, limit=256):
     return values[0]
 
 
-def create_tenant_app(kernel: TenantKernel, *, max_body_bytes=1048576):
+def create_tenant_app(kernel: TenantKernel, *, max_body_bytes=1048576, stream_limits=None, fleet_stream_limits=None):
     if os.getenv("AGENTBRIDGE_AUTHORITY_MODE") != "multi_tenant":
         raise ValueError("explicit multi_tenant authority mode required")
     if not isinstance(kernel, TenantKernel) or type(max_body_bytes) is not int or not 256 <= max_body_bytes <= 1048576:
@@ -151,6 +161,16 @@ def create_tenant_app(kernel: TenantKernel, *, max_body_bytes=1048576):
         if os.getenv("AGENTBRIDGE_AUTHORITY_MODE") != "multi_tenant":
             return JSONResponse({"detail": "authority mode changed; restart required"}, status_code=503)
         return await call_next(request)
+
+    stream_limits = StreamLimits() if stream_limits is None else stream_limits
+    if not isinstance(stream_limits, StreamLimits):
+        raise ValueError("validated local stream limits required")
+    stream_leases = DurableStreamLeases(kernel.directory, limits=fleet_stream_limits)
+    if stream_limits.poll_seconds > stream_leases.limits.lease_seconds / 3:
+        raise ValueError("stream polling must fit the durable lease interval")
+    local_streams = _Streams(stream_limits)
+    app.state.stream_leases = stream_leases
+    app.state.status_streams = local_streams
 
     async def operator(request, *, platform=False):
         authorization = _header(request, "authorization", limit=16391)
@@ -239,6 +259,28 @@ def create_tenant_app(kernel: TenantKernel, *, max_body_bytes=1048576):
             session.task_events, value.task_id, after_sequence=value.after_sequence, limit=value.limit
         )
         return [asdict(row) for row in rows]
+
+    @app.post("/v2/tasks/stream")
+    async def stream(request: Request):
+        session, _, value, _ = await agent(request, TaskStreamBody)
+        current = await asyncio.to_thread(session.task, value.task_id)
+        if value.after_sequence > current.sequence:
+            raise HTTPException(400, "future task cursor")
+        if not _accepts_stream(request.headers.get("accept", "*/*")):
+            raise HTTPException(406, "text/event-stream must be accepted")
+        release_local = local_streams.acquire(quota_owner(session.principal))
+        if release_local is None:
+            raise HTTPException(429, "local stream capacity reached", headers={"Retry-After": "1"})
+        lease = await acquire_stream_lease(stream_leases, session.principal, release_local)
+        return TenantTaskStream(request, session, value.task_id,
+                                after_sequence=value.after_sequence,
+                                coordinator=stream_leases, lease=lease,
+                                limits=stream_limits, release_local=release_local)
+
+    @app.exception_handler(StreamCapacity)
+    async def stream_full(request, exc):
+        return JSONResponse({"detail": "shared stream allocation unavailable"}, status_code=429,
+                            headers={"Retry-After": "1"})
 
     @app.get("/v2/operator/identities")
     async def identities(request: Request):
