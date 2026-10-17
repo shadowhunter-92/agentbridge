@@ -23,6 +23,7 @@ from ..governance.durable_stream_leases import DurableStreamLeases, StreamCapaci
 from ..governance.gateway import GovernanceError
 from ..governance.operation_ledger import OperationConflict
 from ..governance.rbac import AccessDenied
+from ..governance.task_intents import TaskIntentCapacity, TaskSubmission
 from ..governance.tenant_kernel import TenantKernel
 from ..protocols.task_lifecycle import LifecycleRejected
 from ..serve.a2a_status import StreamLimits, _accepts_stream, _Streams
@@ -59,6 +60,18 @@ class TaskStreamBody(_Body):
     request_scope: Literal["task.stream"]
     task_id: str = Field(min_length=1, max_length=128)
     after_sequence: int = Field(default=-1, ge=-1, lt=2**63)
+
+
+class TaskIntentBody(_Body):
+    request_scope: Literal["task.intent.read"]
+    task_id: str = Field(min_length=1, max_length=128)
+
+
+class TaskIntentCapacityBody(_Body):
+    max_intent_bytes: int = Field(ge=256, le=1048576)
+    max_result_bytes: int = Field(ge=1, le=1048576)
+    max_intents: int = Field(ge=1, le=1000000)
+    max_retained_bytes: int = Field(ge=256, le=1073741824)
 
 
 class AgentBody(_Body):
@@ -217,6 +230,10 @@ def create_tenant_app(kernel: TenantKernel, *, max_body_bytes=1048576, stream_li
     async def conflict(request, exc):
         return JSONResponse({"detail": "operation conflict; reconcile before retry"}, status_code=409)
 
+    @app.exception_handler(TaskIntentCapacity)
+    async def intent_full(request, exc):
+        return JSONResponse({"detail": "retained task intent capacity unavailable"}, status_code=429)
+
     @app.exception_handler(SecurityConfigurationError)
     async def target_closed(request, exc):
         return JSONResponse({"detail": "target execution is not qualified"}, status_code=403)
@@ -249,6 +266,16 @@ def create_tenant_app(kernel: TenantKernel, *, max_body_bytes=1048576, stream_li
         if value.request_scope != "task.read":
             raise HTTPException(400, "request scope mismatch")
         return asdict(await asyncio.to_thread(session.task, value.task_id))
+
+    @app.post("/v2/tasks/submit", status_code=202)
+    async def submit_task(request: Request):
+        session, raw, _, nonce = await agent(request, TaskSubmission)
+        return await asyncio.to_thread(session.submit_task, raw, nonce=nonce)
+
+    @app.post("/v2/tasks/intents/read")
+    async def task_intent(request: Request):
+        session, _, value, _ = await agent(request, TaskIntentBody)
+        return await asyncio.to_thread(session.task_intent, value.task_id)
 
     @app.post("/v2/tasks/events")
     async def events(request: Request):
@@ -323,6 +350,17 @@ def create_tenant_app(kernel: TenantKernel, *, max_body_bytes=1048576, stream_li
     @app.get("/v2/operator/task-history-capacity")
     async def task_history_capacity(request: Request):
         return await asyncio.to_thread((await operator(request)).task_history_capacity)
+
+    @app.get("/v2/operator/task-intent-capacity")
+    async def task_intent_capacity(request: Request):
+        return await asyncio.to_thread((await operator(request)).task_intent_capacity)
+
+    @app.put("/v2/operator/task-intent-capacity")
+    async def set_task_intent_capacity(request: Request):
+        session = await operator(request)
+        _, value = await _body(request, TaskIntentCapacityBody, limit=max_body_bytes)
+        await asyncio.to_thread(session.set_task_intent_capacity, **value.model_dump())
+        return {"updated": True}
 
     @app.put("/v2/operator/task-history-capacity")
     async def set_task_history_capacity(request: Request):

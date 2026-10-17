@@ -1,5 +1,9 @@
 # Durable task-status SDK
 
+The additive native `agentbridge` provenance supports [queued tenant task
+intents](TENANT_TASK_INTENTS_2026-10-17.md). The lifecycle SDK remains
+non-executable; existing A2A snapshots are unchanged.
+
 `src.protocols.durable_task_lifecycle.DurableTaskLifecycle` extends the non-executable
 state model with SQLite/PostgreSQL snapshots and event history. It is a library
 component. The separate opt-in [A2A status observer](A2A_STATUS_STREAMING.md)

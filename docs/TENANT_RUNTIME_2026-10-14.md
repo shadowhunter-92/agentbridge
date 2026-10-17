@@ -3,6 +3,11 @@
 This is an opt-in engineering alpha layer over the existing Trust Kernel. It
 does not establish production acceptance or activate historical databases.
 
+Additive follow-up: [durable queued tenant task intents](TENANT_TASK_INTENTS_2026-10-17.md)
+accepts signed intent/provenance and submitted status. This first unit has no
+worker, operation linkage or execution; the async completion boundary below
+remains open.
+
 ## Authority and storage
 
 `TenantKernel` receives an operator-built `AuthorityDirectory`, explicit tenant

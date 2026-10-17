@@ -118,6 +118,19 @@ class TenantAgentClient:
             "/v2/operations/read", {"request_scope": "operation.read", "operation_id": operation_id}
         )
 
+    async def submit_task(self, src, dst, wire, *, task_id, context_id, operation_id, target_id):
+        """Queue immutable intent; acceptance does not execute or admit an operation."""
+        return await self._post(
+            "/v2/tasks/submit",
+            {"request_scope": "task.submit", "task_id": task_id, "context_id": context_id,
+             "src": src, "dst": dst, "wire": wire, "operation_id": operation_id, "target_id": target_id},
+        )
+
+    async def task_intent(self, task_id):
+        return await self._post(
+            "/v2/tasks/intents/read", {"request_scope": "task.intent.read", "task_id": task_id}
+        )
+
     async def task(self, task_id):
         return await self._post("/v2/tasks/read", {"request_scope": "task.read", "task_id": task_id})
 

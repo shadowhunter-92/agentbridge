@@ -65,8 +65,8 @@ class TaskLifecycle:
         _identifier(self.task_id, "task_id")
         _identifier(self.context_id, "context_id")
         _identifier(self.source_protocol, "source_protocol")
-        if self.source_protocol != "a2a":
-            raise LifecycleRejected("only the reviewed A2A task subset has a lifecycle adapter")
+        if self.source_protocol not in ("a2a", "agentbridge"):
+            raise LifecycleRejected("only reviewed A2A and native task provenance is supported")
         if not isinstance(self.state, TaskState) or type(self.sequence) is not int or self.sequence < 0:
             raise LifecycleRejected("invalid lifecycle state or sequence")
 

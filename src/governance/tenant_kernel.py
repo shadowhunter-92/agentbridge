@@ -28,8 +28,10 @@ from .gateway import GovernanceGateway
 from .identity import IdentityRegistry
 from .operation_ledger import OperationLedger
 from .policy import PolicyEngine
+from .policy_rules import PolicyContext
 from .rbac import require
 from .store import sql_atomic
+from .task_intents import IntentLimits, TaskIntentStore, parse_submission
 from .tenant_store import TenantStoreRegistry
 
 
@@ -78,6 +80,7 @@ class _Runtime:
     gateway: GovernanceGateway
     operations: OperationLedger
     tasks: DurableTaskLifecycle
+    task_intents: TaskIntentStore
     audit_trust: AuditTrustStore
 
 
@@ -132,10 +135,12 @@ class TenantKernel:
             )
             operations = gateway._operation_ledger()
             tasks = DurableTaskLifecycle(store)
+            task_intents = TaskIntentStore(store, tasks)
             audit_trust = AuditTrustStore(store)
             store.seal_writes()
             runtimes[tenant] = _Runtime(
-                store, identities, budgets, approvals, rules, audit, policy, gateway, operations, tasks, audit_trust
+                store, identities, budgets, approvals, rules, audit, policy, gateway, operations, tasks,
+                task_intents, audit_trust
             )
         self._runtimes = MappingProxyType(runtimes)
 
@@ -341,6 +346,89 @@ class TenantSession:
         return runtime.tasks.events(
             principal_owner(self.principal), task_id, after_sequence=after_sequence, limit=limit
         )
+
+    @_guarded(write=False)
+    def task_intent(self, task_id):
+        runtime = self._runtime()
+        return runtime.task_intents.get(principal_owner(self.principal), task_id)
+
+    @_guarded(write=False)
+    def task_intent_capacity(self):
+        return self._runtime("budgets:read").task_intents.capacity()
+
+    @_guarded(write=True)
+    def set_task_intent_capacity(self, **limits):
+        runtime = self._runtime("policy:write")
+        runtime.task_intents.set_capacity(
+            IntentLimits(**limits), audit=lambda: self._audit(runtime, "set_task_intent_capacity")
+        )
+
+    @_guarded(write=False)
+    def submit_task(self, body, *, nonce):
+        """Persist scope-authorized intent only; fresh execution admission is pending."""
+        runtime = self._runtime()
+        directory, principal = self.kernel.directory, self.principal
+        directory.assert_request(principal, body=body, nonce=nonce)
+        request = parse_submission(body)
+        try:
+            self.kernel.registry.get(request.dst)
+            call = self.kernel.registry.get(request.src).to_canonical_call(request.wire)
+            self.kernel.registry.translate_call(request.wire, request.src, request.dst)
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            raise ValueError("unsupported protocol or malformed action") from exc
+        directory.authorize(principal, call.capability, request.target_id)
+        with directory._transaction() as cur:
+            enrolled = directory._agent(cur, self.tenant_id, principal.agent_id)
+        identity = runtime.identities.get(principal.agent_id)
+        if not runtime.identities.is_registered(principal.agent_id) or identity is None or \
+                identity.public_key_hex != enrolled["public_key_hex"]:
+            raise AuthorityDenied("tenant identity and enrollment disagree")
+        schedule = self.kernel.costs.get(self.tenant_id, {})
+        if call.capability not in schedule:
+            raise AuthorityDenied("operator-owned tenant cost schedule missing")
+        cost = schedule[call.capability]
+        target = resolve_target(
+            request.target_id, request.dst, call.capability, agent_id=principal.agent_id,
+            env=self.kernel._target_env[self.tenant_id],
+        )
+        # The full PolicyEngine gate may seed/prune budget state and request
+        # approvals. Evaluate only existing pure rules here. Approval and budget
+        # admission, policy refresh and target revalidation belong to execution.
+        with sql_atomic(runtime.store):
+            rule = runtime.rules.evaluate(PolicyContext(
+                agent_id=principal.agent_id, capability=call.capability, cost=cost,
+                src_protocol=request.src, dst_protocol=request.dst,
+            ))
+            if not rule.allowed:
+                raise AuthorityDenied("current declarative policy denies queued intent")
+            provenance = {
+                "authentication": "enrolled-tenant-request-v2",
+                "authority": principal.binding(),
+                "authorization_expires_at": principal.valid_until,
+                "request_body": body.decode("utf-8"),
+                "request_body_sha256": hashlib.sha256(body).hexdigest(),
+                "request_nonce": nonce,
+                "signer_public_key_hex": enrolled["public_key_hex"],
+                "capability": call.capability,
+                "operator_cost": cost,
+                "target_configuration_sha256": hashlib.sha256(json.dumps(
+                    target, sort_keys=True, separators=(",", ":"), allow_nan=False
+                ).encode()).hexdigest(),
+                "approval_required_at_submission": bool(
+                    rule.needs_approval or runtime.approvals.requires_approval(call.capability)
+                ),
+            }
+
+            def accepted(fingerprint):
+                directory.authorize(principal, call.capability, request.target_id)
+                runtime.audit.record(
+                    actor="principal:v1:" + json.dumps(principal.binding(), sort_keys=True, separators=(",", ":")),
+                    action="task.submit", source_protocol=request.src, target_protocol=request.dst,
+                    capability=call.capability, decision="allow", cost=0.0,
+                    reason="queued intent sha256:" + fingerprint + "; fresh execution admission required",
+                )
+
+            return runtime.task_intents._accept(principal_owner(principal), request, provenance, audit=accepted)
 
     async def route(self, body, *, nonce):
         runtime = await asyncio.to_thread(self._runtime)
