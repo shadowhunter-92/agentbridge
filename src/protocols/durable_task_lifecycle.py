@@ -14,7 +14,7 @@ import math
 from contextlib import contextmanager
 from dataclasses import asdict
 
-from src.governance.store import PostgresStore, SqliteStore
+from src.governance.store import PostgresStore, SqliteStore, sql_atomic
 
 from .task_lifecycle import LifecycleRejected, TaskLifecycle, TaskState, _identifier
 
@@ -28,10 +28,12 @@ class DurableTaskLifecycle:
 
     SQLite serializes with BEGIN IMMEDIATE; PostgreSQL uses a transaction advisory
     lock across connections. Limits must be identical across service replicas.
+    Local status changes can join sql_atomic on the same store. Initialize the
+    service before admitting work; schema setup is not a request-path operation.
     This is application-level persistence, not tamper-proof database storage.
     """
 
-    def __init__(self, store, *, max_active_per_owner=128, max_events_per_task=1024):
+    def __init__(self, store, *, max_active_per_owner=128, max_events_per_task=1024, initial_max_event_bytes=None):
         if not isinstance(store, (SqliteStore, PostgresStore)):
             raise LifecycleRejected("durable SQL store required")
         for value, minimum in ((max_active_per_owner, 1), (max_events_per_task, 3)):
@@ -51,26 +53,29 @@ class DurableTaskLifecycle:
                 "owner_id TEXT NOT NULL, task_id TEXT NOT NULL, sequence BIGINT NOT NULL,"
                 "snapshot TEXT NOT NULL, PRIMARY KEY(owner_id,task_id,sequence))"
             )
+            self._bootstrap_history_capacity(cur)
+            self._bootstrap_event_capacity(cur, initial_max_event_bytes)
+            if getattr(store, "tenant_id", None):
+                from src.governance.tenant_store import _install_postgres_guards, _install_sqlite_guards
+
+                tables = ("task_lifecycle_snapshots", "task_lifecycle_events", "task_lifecycle_history_policy_v1", "task_lifecycle_capacity_meta_v1", "task_lifecycle_event_policy_v1", "task_lifecycle_event_meta_v1")
+                if isinstance(store, PostgresStore):
+                    _install_postgres_guards(cur, store.schema, tables)
+                else:
+                    _install_sqlite_guards(cur, tables)
 
     @contextmanager
     def _transaction(self):
-        with self.store._lock:
-            if isinstance(self.store, SqliteStore):
-                self.store._db.execute("BEGIN IMMEDIATE")
-                try:
-                    with_cursor = self.store._db.cursor()
-                    try:
-                        yield with_cursor
-                    finally:
-                        with_cursor.close()
-                    self.store._db.execute("COMMIT")
-                except BaseException:
-                    self.store._db.execute("ROLLBACK")
-                    raise
-            else:
-                with self.store._db.transaction(), self.store._db.cursor() as cur:
+        # Reuse the governance boundary: a nested lifecycle call owns only its
+        # savepoint, never the embedding admission transaction's commit.
+        with sql_atomic(self.store):
+            cur = self.store._db.cursor()
+            try:
+                if isinstance(self.store, PostgresStore):
                     cur.execute("SELECT pg_advisory_xact_lock(%s)", (911006,))
-                    yield cur
+                yield cur
+            finally:
+                cur.close()
 
     def _execute(self, cur, query, values):
         if isinstance(self.store, PostgresStore):
@@ -108,11 +113,14 @@ class DurableTaskLifecycle:
             if self._execute(cur, "SELECT 1 FROM task_lifecycle_snapshots "
                              "WHERE owner_id=? AND task_id=?", scope).fetchone():
                 raise LifecycleRejected("task identity already exists; no replay or replacement")
+            if self._history_count(cur) >= self._history_policy(cur):
+                raise LifecycleCapacity("historical-task capacity reached; reviewed capacity increase required")
             active = self._execute(cur, "SELECT count(*) AS n FROM task_lifecycle_snapshots "
                                    "WHERE owner_id=? AND terminal=0", (owner_id,)).fetchone()["n"]
             if active >= self.max_active:
                 raise LifecycleCapacity("active-task capacity reached; retry after terminal status")
             raw = self._encode(task)
+            self._check_event_append(cur, raw, reserve_delta=self._event_reserve(task))
             self._execute(cur, "INSERT INTO task_lifecycle_snapshots "
                           "(owner_id,task_id,snapshot,terminal) VALUES(?,?,?,0)", (*scope, raw))
             self._execute(cur, "INSERT INTO task_lifecycle_events "
@@ -139,6 +147,7 @@ class DurableTaskLifecycle:
             if count >= self.max_events or (not updated.terminal and count >= self.max_events - 1):
                 raise LifecycleCapacity("task event capacity reached; terminal update required")
             raw = self._encode(updated)
+            self._check_event_append(cur, raw, reserve_delta=self._event_reserve(updated) - self._event_reserve(current))
             self._execute(cur, "INSERT INTO task_lifecycle_events "
                           "(owner_id,task_id,sequence,snapshot) VALUES(?,?,?,?)",
                           (*scope, updated.sequence, raw))
@@ -188,3 +197,225 @@ class DurableTaskLifecycle:
                 if task.terminal:
                     return
             await asyncio.sleep(poll_seconds)
+
+    def _history_count(self, cur):
+        return self._execute(cur, "SELECT count(*) AS n FROM task_lifecycle_snapshots", ()).fetchone()["n"]
+
+    def _history_policy(self, cur):
+        row = self._execute(cur, "SELECT p.version,p.max_tasks FROM task_lifecycle_history_policy_v1 p "
+                            "JOIN task_lifecycle_capacity_meta_v1 m ON m.singleton=p.singleton AND m.version=1 "
+                            "WHERE p.singleton=1", ()).fetchone()
+        if not row or row["version"] != 1 or type(row["max_tasks"]) is not int or not 1 <= row["max_tasks"] <= 1000000:
+            raise LifecycleCapacity("missing or unsupported historical-task capacity policy")
+        return row["max_tasks"]
+
+    def _bootstrap_history_capacity(self, cur):
+        tables = ("task_lifecycle_history_policy_v1", "task_lifecycle_capacity_meta_v1")
+        if isinstance(self.store, PostgresStore):
+            rows = self._execute(cur,
+                "SELECT c.relname AS name,c.relkind AS kind FROM pg_catalog.pg_class c "
+                "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+                "WHERE n.nspname=current_schema() AND c.relname IN (?,?)", tables).fetchall()
+            kind = "r"
+        else:
+            rows = self._execute(cur, "SELECT name,type AS kind FROM sqlite_master WHERE name IN (?,?)", tables).fetchall()
+            kind = "table"
+        existing = {row["name"] for row in rows if row["kind"] == kind}
+        if len(existing) != len(rows) or (existing and existing != set(tables)):
+            raise LifecycleCapacity("incomplete or unsupported historical-task capacity schema")
+        cur.execute("CREATE TABLE IF NOT EXISTS task_lifecycle_history_policy_v1 ("
+                    "singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL,"
+                    "max_tasks INTEGER NOT NULL CHECK(max_tasks BETWEEN 1 AND 1000000))")
+        cur.execute("CREATE TABLE IF NOT EXISTS task_lifecycle_capacity_meta_v1 ("
+                    "singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL)")
+        if not existing:
+            cur.execute("INSERT INTO task_lifecycle_history_policy_v1 VALUES(1,1,10000)")
+            cur.execute("INSERT INTO task_lifecycle_capacity_meta_v1 VALUES(1,1)")
+        self._history_policy(cur)
+        # Private tenant namespaces enforce the bound for supported older task
+        # workers as well. Standalone legacy stores retain an application bound;
+        # source migration stays within its ordinary-table contract.
+        if not getattr(self.store, "tenant_id", None):
+            return
+        if isinstance(self.store, SqliteStore):
+            cur.execute("CREATE TRIGGER IF NOT EXISTS agentbridge_task_history_capacity_v1 "
+                "BEFORE INSERT ON task_lifecycle_snapshots WHEN "
+                "COALESCE((SELECT version FROM task_lifecycle_capacity_meta_v1 WHERE singleton=1),0)<>1 OR "
+                "COALESCE((SELECT version FROM task_lifecycle_history_policy_v1 WHERE singleton=1),0)<>1 OR "
+                "COALESCE((SELECT max_tasks FROM task_lifecycle_history_policy_v1 WHERE singleton=1),0)<1 OR "
+                "(SELECT count(*) FROM task_lifecycle_snapshots)>="
+                "(SELECT max_tasks FROM task_lifecycle_history_policy_v1 WHERE singleton=1) "
+                "BEGIN SELECT RAISE(ABORT,'historical-task capacity reached or policy unavailable'); END")
+        else:
+            from src.governance.tenant_store import _quote
+
+            namespace = _quote(self.store.schema) + "."
+            function = namespace + "agentbridge_task_history_capacity_v1"
+            cur.execute("CREATE OR REPLACE FUNCTION " + function + "() RETURNS trigger LANGUAGE plpgsql "
+                "SET search_path=pg_catalog AS $$ DECLARE v integer; cap integer; BEGIN "
+                "PERFORM pg_advisory_xact_lock(911006); SELECT p.version,p.max_tasks INTO v,cap FROM " + namespace +
+                "task_lifecycle_history_policy_v1 p JOIN " + namespace +
+                "task_lifecycle_capacity_meta_v1 m ON m.singleton=p.singleton AND m.version=1 WHERE p.singleton=1; "
+                "IF v IS DISTINCT FROM 1 OR cap IS NULL OR cap<1 OR cap>1000000 THEN "
+                "RAISE EXCEPTION 'historical-task capacity policy unavailable'; END IF; "
+                "IF (SELECT count(*) FROM " + namespace + "task_lifecycle_snapshots)>=cap THEN "
+                "RAISE EXCEPTION 'historical-task capacity reached'; END IF; RETURN NEW; END $$")
+            cur.execute("DROP TRIGGER IF EXISTS agentbridge_task_history_capacity_v1 ON " + namespace + "task_lifecycle_snapshots")
+            cur.execute("CREATE TRIGGER agentbridge_task_history_capacity_v1 BEFORE INSERT ON " + namespace +
+                "task_lifecycle_snapshots FOR EACH ROW EXECUTE FUNCTION " + function + "()")
+
+    def history_capacity(self):
+        with self._transaction() as cur:
+            return {"max_tasks": self._history_policy(cur), "used_tasks": self._history_count(cur)}
+
+    def set_history_capacity(self, max_tasks, *, audit=None):
+        """Trusted embedding operator only; never deletes history to make room."""
+        if type(max_tasks) is not int or not 1 <= max_tasks <= 1000000:
+            raise LifecycleRejected("bounded historical-task capacity required")
+        with self._transaction() as cur:
+            self._history_policy(cur)
+            if max_tasks < self._history_count(cur):
+                raise LifecycleCapacity("capacity cannot discard retained task history")
+            self._execute(cur, "UPDATE task_lifecycle_history_policy_v1 SET max_tasks=? WHERE singleton=1", (max_tasks,))
+            if audit is not None:
+                audit()
+
+
+    _TERMINAL_EVENT_BYTES = 4096
+
+    @staticmethod
+    def _validate_event_limit(value):
+        if type(value) is not int or not 4096 <= value <= 1073741824:
+            raise LifecycleRejected("event-byte limit must be an integer in [4096,1073741824]")
+        return value
+
+    def _event_policy(self, cur):
+        row = self._execute(cur, "SELECT p.version,p.max_bytes FROM task_lifecycle_event_policy_v1 p "
+                            "JOIN task_lifecycle_event_meta_v1 m ON m.singleton=p.singleton AND m.version=1 "
+                            "WHERE p.singleton=1", ()).fetchone()
+        try:
+            if not row or row["version"] != 1:
+                raise ValueError("event policy version unavailable")
+            return self._validate_event_limit(row["max_bytes"])
+        except ValueError as exc:
+            raise LifecycleCapacity("missing or unsupported event-byte capacity policy") from exc
+
+    @staticmethod
+    def _event_reserve(task):
+        if task.terminal:
+            return 0
+        return 4096 if task.state in (TaskState.INPUT_REQUIRED, TaskState.AUTH_REQUIRED) else 8192
+
+    @staticmethod
+    def _reserve_sql(*, postgres, prefix=""):
+        state = "(" + prefix + "snapshot::jsonb->>'state')" if postgres else "json_extract(" + prefix + "snapshot,'$.state')"
+        return "CASE WHEN " + prefix + "terminal<>0 THEN 0 WHEN " + state + " IN ('input-required','auth-required') THEN 4096 ELSE 8192 END"
+
+    def _event_usage(self, cur):
+        length = "octet_length(snapshot)" if isinstance(self.store, PostgresStore) else "length(CAST(snapshot AS BLOB))"
+        used = self._execute(cur, "SELECT COALESCE(SUM(" + length + "),0) AS n FROM task_lifecycle_events", ()).fetchone()["n"]
+        reserve = self._reserve_sql(postgres=isinstance(self.store, PostgresStore))
+        reserved = self._execute(cur, "SELECT COALESCE(SUM(" + reserve + "),0) AS n FROM task_lifecycle_snapshots", ()).fetchone()["n"]
+        return used, reserved
+
+    def _check_event_append(self, cur, raw, *, reserve_delta):
+        size = len(raw.encode("utf-8"))
+        if size > self._TERMINAL_EVENT_BYTES:
+            raise LifecycleRejected("canonical task event exceeds reserved terminal payload bound")
+        used, reserved = self._event_usage(cur)
+        if used + size + reserved + reserve_delta > self._event_policy(cur):
+            raise LifecycleCapacity("event-byte capacity reached; recovery and terminal capacity are reserved")
+
+    def _bootstrap_event_capacity(self, cur, initial):
+        if initial is not None:
+            self._validate_event_limit(initial)
+        tables = ("task_lifecycle_event_policy_v1", "task_lifecycle_event_meta_v1")
+        if isinstance(self.store, PostgresStore):
+            rows = self._execute(cur,
+                "SELECT c.relname AS name,c.relkind AS kind FROM pg_catalog.pg_class c "
+                "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+                "WHERE n.nspname=current_schema() AND c.relname IN (?,?)", tables).fetchall()
+            kind = "r"
+        else:
+            rows = self._execute(cur, "SELECT name,type AS kind FROM sqlite_master WHERE name IN (?,?)", tables).fetchall()
+            kind = "table"
+        existing = {row["name"] for row in rows if row["kind"] == kind}
+        if len(existing) != len(rows) or (existing and existing != set(tables)):
+            raise LifecycleCapacity("incomplete or unsupported event-byte capacity schema")
+        cur.execute("CREATE TABLE IF NOT EXISTS task_lifecycle_event_policy_v1 ("
+                    "singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL,"
+                    "max_bytes BIGINT NOT NULL CHECK(max_bytes BETWEEN 4096 AND 1073741824))")
+        cur.execute("CREATE TABLE IF NOT EXISTS task_lifecycle_event_meta_v1 ("
+                    "singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL)")
+        if not existing:
+            self._execute(cur, "INSERT INTO task_lifecycle_event_policy_v1 VALUES(1,1,?)", (initial if initial is not None else 67108864,))
+            cur.execute("INSERT INTO task_lifecycle_event_meta_v1 VALUES(1,1)")
+        cap = self._event_policy(cur)
+        if existing and initial is not None and initial != cap:
+            raise LifecycleCapacity("initial event-byte limit cannot overwrite persisted policy")
+        used, reserved = self._event_usage(cur)
+        if used + reserved > cap:
+            raise LifecycleCapacity("existing event history requires reviewed event-byte capacity recovery")
+        if getattr(self.store, "tenant_id", None):
+            self._install_event_capacity_guards(cur)
+
+    def _install_event_capacity_guards(self, cur):
+        terminal = "('completed','failed','canceled','rejected')"
+        if isinstance(self.store, SqliteStore):
+            used = "(SELECT COALESCE(SUM(length(CAST(snapshot AS BLOB))),0) FROM task_lifecycle_events)"
+            reserve = "(SELECT COALESCE(SUM(" + self._reserve_sql(postgres=False) + "),0) FROM task_lifecycle_snapshots)"
+            invalid = ("COALESCE((SELECT version FROM task_lifecycle_event_meta_v1 WHERE singleton=1),0)<>1 OR "
+                       "COALESCE((SELECT version FROM task_lifecycle_event_policy_v1 WHERE singleton=1),0)<>1 OR "
+                       "COALESCE((SELECT max_bytes FROM task_lifecycle_event_policy_v1 WHERE singleton=1),0)<4096 OR ")
+            cap = "(SELECT max_bytes FROM task_lifecycle_event_policy_v1 WHERE singleton=1)"
+            state = "json_extract(NEW.snapshot,'$.state')"
+            after = "CASE WHEN " + state + " IN " + terminal + " THEN 0 WHEN " + state + " IN ('input-required','auth-required') THEN 4096 ELSE 8192 END"
+            prior = "COALESCE((SELECT " + self._reserve_sql(postgres=False) + " FROM task_lifecycle_snapshots WHERE owner_id=NEW.owner_id AND task_id=NEW.task_id),0)"
+            for table, adjustment in (("task_lifecycle_snapshots", self._reserve_sql(postgres=False, prefix="NEW.")),
+                                      ("task_lifecycle_events", "(" + after + ")-(" + prior + ")")):
+                name = "agentbridge_event_bytes_" + table
+                cur.execute("CREATE TRIGGER IF NOT EXISTS " + name + " BEFORE INSERT ON " + table + " WHEN " + invalid +
+                            "length(CAST(NEW.snapshot AS BLOB))>4096 OR " + used + "+" + reserve + "+(" + adjustment +
+                            ")+length(CAST(NEW.snapshot AS BLOB))>" + cap +
+                            " BEGIN SELECT RAISE(ABORT,'event-byte capacity reached or policy unavailable'); END")
+        else:
+            from src.governance.tenant_store import _quote
+
+            namespace = _quote(self.store.schema) + "."
+            function = namespace + "agentbridge_task_event_capacity_v1"
+            cur.execute("CREATE OR REPLACE FUNCTION " + function + "() RETURNS trigger LANGUAGE plpgsql "
+                "SET search_path=pg_catalog AS $$ DECLARE v integer; cap bigint; used bigint; reserved bigint; sz integer; "
+                "BEGIN PERFORM pg_advisory_xact_lock(911006); "
+                "SELECT p.version,p.max_bytes INTO v,cap FROM " + namespace + "task_lifecycle_event_policy_v1 p "
+                "JOIN " + namespace + "task_lifecycle_event_meta_v1 m ON m.singleton=p.singleton AND m.version=1 WHERE p.singleton=1; "
+                "IF v IS DISTINCT FROM 1 OR cap IS NULL OR cap<4096 OR cap>1073741824 THEN "
+                "RAISE EXCEPTION 'event-byte capacity policy unavailable'; END IF; "
+                "SELECT COALESCE(SUM(octet_length(snapshot)),0) INTO used FROM " + namespace + "task_lifecycle_events; "
+                "SELECT COALESCE(SUM(" + self._reserve_sql(postgres=True) + "),0) INTO reserved FROM " + namespace + "task_lifecycle_snapshots; "
+                "IF TG_TABLE_NAME='task_lifecycle_snapshots' THEN reserved:=reserved+(" + self._reserve_sql(postgres=True,prefix="NEW.") + "); "
+                "ELSE reserved:=reserved+CASE WHEN (NEW.snapshot::jsonb->>'state') IN " + terminal +
+                " THEN 0 WHEN (NEW.snapshot::jsonb->>'state') IN ('input-required','auth-required') THEN 4096 ELSE 8192 END "
+                "-COALESCE((SELECT " + self._reserve_sql(postgres=True) + " FROM " + namespace +
+                "task_lifecycle_snapshots WHERE owner_id=NEW.owner_id AND task_id=NEW.task_id),0); END IF; sz:=octet_length(NEW.snapshot); "
+                "IF sz>4096 OR used+reserved+sz>cap THEN RAISE EXCEPTION 'event-byte capacity reached'; END IF; RETURN NEW; END $$")
+            for table in ("task_lifecycle_snapshots", "task_lifecycle_events"):
+                trigger = "agentbridge_event_bytes_" + table
+                target = namespace + table
+                cur.execute("DROP TRIGGER IF EXISTS " + trigger + " ON " + target)
+                cur.execute("CREATE TRIGGER " + trigger + " BEFORE INSERT ON " + target + " FOR EACH ROW EXECUTE FUNCTION " + function + "()")
+
+    def event_capacity(self):
+        with self._transaction() as cur:
+            used, reserved = self._event_usage(cur)
+            return {"max_event_bytes": self._event_policy(cur), "used_event_bytes": used, "reserved_control_bytes": reserved}
+
+    def set_event_capacity(self, max_event_bytes, *, audit=None):
+        self._validate_event_limit(max_event_bytes)
+        with self._transaction() as cur:
+            self._event_policy(cur)
+            used, reserved = self._event_usage(cur)
+            if max_event_bytes < used + reserved:
+                raise LifecycleCapacity("event-byte capacity cannot discard history or control reservations")
+            self._execute(cur, "UPDATE task_lifecycle_event_policy_v1 SET max_bytes=? WHERE singleton=1", (max_event_bytes,))
+            if audit is not None:
+                audit()
