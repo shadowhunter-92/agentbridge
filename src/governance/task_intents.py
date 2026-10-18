@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import re
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from typing import Literal
@@ -266,6 +268,65 @@ class TaskIntentStore:
                 raise AuthorityDenied("task intent unavailable for authenticated owner")
             return {**json.loads(row["record"]), "intent_sha256": row["fingerprint"],
                     "result_limit_bytes": row["result_limit_bytes"]}
+
+    def _load_for_execution(self, owner_id, task_id, expected_intent_sha256):
+        """Read accepted history, without acquiring an operation/lifecycle lock.
+
+        This is integrity/ownership validation, never authority to execute. The
+        caller must subsequently use the private enrolled-authority guard.
+        """
+        from .queued_intent_preparation import _StoredIntent
+        from .tenant_kernel import binding_owner
+
+        _identifier(owner_id, "authenticated owner_id")
+        _identifier(task_id, "task_id")
+        if not isinstance(expected_intent_sha256, str) or not re.fullmatch("[0-9a-f]{64}", expected_intent_sha256):
+            raise AuthorityDenied("exact retained intent digest required")
+        self.store.assert_scope()
+        with self.store._lock:
+            if self.postgres and self._execute("SHOW transaction_isolation").fetchone()["transaction_isolation"] != "read committed":
+                raise AuthorityDenied("queued intent readback requires PostgreSQL READ COMMITTED")
+            row = self._execute(
+                "SELECT i.*,s.snapshot AS current_snapshot,e.snapshot AS initial_snapshot "
+                "FROM task_intents_v1 i LEFT JOIN task_lifecycle_snapshots s "
+                "ON s.owner_id=i.owner_id AND s.task_id=i.task_id LEFT JOIN task_lifecycle_events e "
+                "ON e.owner_id=i.owner_id AND e.task_id=i.task_id AND e.sequence=0 "
+                "WHERE i.owner_id=? AND i.task_id=?", (owner_id, task_id),
+            ).fetchone()
+        try:
+            if row is None or row["fingerprint"] != expected_intent_sha256 or \
+                    hashlib.sha256(row["record"].encode()).hexdigest() != expected_intent_sha256:
+                raise ValueError("intent digest mismatch")
+            record = json.loads(row["record"])
+            provenance = record["provenance"]
+            authority = provenance["authority"]
+            body = provenance["request_body"].encode("utf-8")
+            submission = parse_submission(body)
+            deadline = provenance["authorization_expires_at"]
+            accepted = record["accepted_at"]
+            if record["domain"] != "agentbridge.queued-task-intent.v1" or record["phase"] != "queued" or \
+                    record["execution_admitted"] is not False or provenance["authentication"] != "enrolled-tenant-request-v2":
+                raise ValueError("unsupported retained intent")
+            if type(deadline) not in (int, float) or not math.isfinite(deadline) or \
+                    type(accepted) not in (int, float) or not math.isfinite(accepted) or not 0 < accepted < deadline:
+                raise ValueError("invalid original authorization interval")
+            if hashlib.sha256(body).hexdigest() != provenance["request_body_sha256"] or \
+                    _json(submission.model_dump()) != _json(record["submission"]):
+                raise ValueError("original body binding mismatch")
+            if authority["tenant_id"] != self.store.tenant_id or authority["agent_id"] != row["agent_id"] or \
+                    authority["kind"] not in ("machine", "delegated_human") or binding_owner(authority) != owner_id or \
+                    submission.task_id != task_id or submission.operation_id != row["operation_id"]:
+                raise ValueError("retained owner or action mismatch")
+            if type(row["result_limit_bytes"]) is not int or not 1 <= row["result_limit_bytes"] <= 1048576:
+                raise ValueError("invalid immutable result allowance")
+            initial = self.tasks._decode(row["initial_snapshot"])
+            current = self.tasks._decode(row["current_snapshot"])
+            if initial != TaskLifecycle(task_id, submission.context_id, "agentbridge") or current != initial:
+                raise ValueError("retained intent is not an initial native queued task")
+            return _StoredIntent(owner_id, task_id, row["agent_id"], row["operation_id"],
+                                 expected_intent_sha256, row["record"], row["result_limit_bytes"])
+        except (KeyError, TypeError, ValueError, AttributeError, UnicodeError, RecursionError) as exc:
+            raise AuthorityDenied("retained queued intent integrity or ownership unavailable") from exc
 
     def _install_guards(self):
         # Database bounds count encoded payloads plus each immutable result

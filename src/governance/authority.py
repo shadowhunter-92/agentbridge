@@ -267,6 +267,38 @@ class AuthorityDirectory:
         principal = Principal(**values)
         return replace(principal, _proof=self._seal(principal))
 
+    def _agent_principal(self, tenant, agent, grant, *, valid_until, request_body_sha256="", request_nonce=""):
+        """Derive a process context from already validated enrollment rows."""
+        common = dict(
+            tenant_id=tenant["tenant_id"], tenant_revision=tenant["revision"],
+            agent_id=agent["agent_id"], agent_revision=agent["revision"],
+            revision=agent["revision"], request_body_sha256=request_body_sha256, request_nonce=request_nonce,
+        )
+        if grant is not None:
+            return self._mint(
+                **common, subject=grant["user_subject"], issuer=grant["user_issuer"], kind="delegated_human",
+                delegation_id=grant["grant_id"], delegation_revision=grant["revision"],
+                user_revision=grant["user_revision"], grantor_revision=grant["grantor_revision"],
+                valid_until=min(grant["expires_at"], valid_until),
+                capabilities=tuple(json.loads(grant["capabilities"])), targets=tuple(json.loads(grant["targets"])),
+            )
+        return self._mint(
+            **common, subject=agent["agent_id"], issuer="urn:agentbridge:enrollment", kind="machine",
+            valid_until=valid_until, capabilities=tuple(json.loads(agent["capabilities"])),
+            targets=tuple(json.loads(agent["targets"])),
+        )
+
+    def _guard_queued_intent(self, bound_intents, owner_id, task_id, expected_intent_sha256):
+        """Private retained-row preparation guard; never authenticates a request."""
+        from .queued_intent_preparation import _guard_queued_intent
+
+        return _guard_queued_intent(self, bound_intents, owner_id, task_id, expected_intent_sha256)
+
+    def _assert_queued_intent(self, context, bound_intents):
+        from .queued_intent_preparation import _assert_queued_intent
+
+        return _assert_queued_intent(self, context, bound_intents)
+
     def _seal(self, principal):
         values = asdict(principal)
         values.pop("_proof")
@@ -634,38 +666,9 @@ class AuthorityDirectory:
             ).rowcount
             if changed != 1:
                 raise AuthorityDenied("signed request replay denied")
-            common = dict(
-                tenant_id=tenant_id,
-                tenant_revision=tenant["revision"],
-                agent_id=agent_id,
-                agent_revision=agent["revision"],
-                request_body_sha256=hashlib.sha256(body).hexdigest(),
-                request_nonce=nonce,
-            )
-            if grant:
-                return self._mint(
-                    **common,
-                    subject=grant["user_subject"],
-                    issuer=grant["user_issuer"],
-                    kind="delegated_human",
-                    revision=agent["revision"],
-                    delegation_id=delegation_id,
-                    delegation_revision=grant["revision"],
-                    user_revision=grant["user_revision"],
-                    grantor_revision=grant["grantor_revision"],
-                    valid_until=min(grant["expires_at"], stamp + 300),
-                    capabilities=tuple(json.loads(grant["capabilities"])),
-                    targets=tuple(json.loads(grant["targets"])),
-                )
-            return self._mint(
-                **common,
-                subject=agent_id,
-                issuer="urn:agentbridge:enrollment",
-                kind="machine",
-                revision=agent["revision"],
-                valid_until=stamp + 300,
-                capabilities=tuple(json.loads(agent["capabilities"])),
-                targets=tuple(json.loads(agent["targets"])),
+            return self._agent_principal(
+                tenant, agent, grant, valid_until=stamp + 300,
+                request_body_sha256=hashlib.sha256(body).hexdigest(), request_nonce=nonce,
             )
 
     def authorize(self, principal, capability, target_id=None):

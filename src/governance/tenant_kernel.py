@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import os
+import secrets
 from dataclasses import dataclass
 from functools import wraps
 from types import MappingProxyType
@@ -97,6 +98,7 @@ class TenantKernel:
         self.storage = TenantStoreRegistry(directory, stores)
         self.deadline_seconds = deadline_seconds
         self.registry = default_registry
+        self._queued_preparation_key = secrets.token_bytes(32)
         self.environment = os.getenv("AGENTBRIDGE_ENV", "development").lower()
         self.costs = MappingProxyType(
             {t: MappingProxyType({c: validate_cost(v) for c, v in schedule.items()}) for t, schedule in costs.items()}
@@ -147,6 +149,17 @@ class TenantKernel:
     def session(self, principal, *, tenant_id=None):
         store = self.storage.resolve(principal, tenant_id=tenant_id)
         return TenantSession(self, principal, store.tenant_id)
+
+    def _prepare_queued_intent(self, tenant_id, owner_id, task_id, expected_intent_sha256):
+        """Private preparation only; no execution or reusable request authority."""
+        from .queued_intent_preparation import _prepare
+
+        return _prepare(self, tenant_id, owner_id, task_id, expected_intent_sha256)
+
+    def _assert_prepared_queued_intent(self, prepared):
+        from .queued_intent_preparation import _assert_prepared
+
+        return _assert_prepared(self, prepared)
 
 
 def _guarded(*, write=False):

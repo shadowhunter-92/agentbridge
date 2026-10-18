@@ -1,4 +1,4 @@
-# Current engineering alpha status — October 17, 2026
+# Current engineering alpha status — October 18, 2026
 
 **Overall: PARTIALLY TESTED; unrestricted consequential-action production NO-GO.**
 This is the current documentation entry point for the recorded source snapshot.
@@ -12,7 +12,7 @@ release, deployment or deletion. Apache 2.0 remains in force.
 | --- | --- | --- |
 | Recorded main | `73aafd60a0eec121a10245a307a4a8ee268f7ed5` | Main baseline, before the tenant draft stack |
 | Cumulative draft source | `46777f8c953690fca81c6d11e7b70372b8dd5c77` | PR #69 plus dependencies #56–#68; recorded as draft/unmerged |
-| Queued-acceptance follow-up source | `01376a59f13e7c4104ff0d2c507473ae334a9422` | Native queued intent unit, locally tested; not executable tasks or an extension of prior exact-head CI |
+| Queued-acceptance follow-up source | `de1194a0b568c820205ac0abaa7f774eb530ae83` | Native queued intent plus documentation integration; seven successful workflows / 24 jobs recorded, queued acceptance only |
 | Local evaluator source | `d0881b937d2568e4e01fb02044bf466aea609e9a` | Older PR #63 source used for the separate local wheel |
 | Recorded local evaluator wheel SHA-256 | `2367045ebfbe0fa502d4f8f59183696181834a847d2d309f1894e48667deb703` | Local, unsigned, unpublished; not built from `46777f8` |
 
@@ -20,8 +20,10 @@ The main badge, package version `1.0.0`, source installation and local wheel
 are different evidence. None establishes a signed public artifact or an
 independent evaluation. Use Python 3.11/3.12 and record the exact selected SHA.
 [Evaluator instructions](OSS_EVALUATION_KIT.md) retain their older artifact pin.
-The queued-intent source pin excludes the subsequent documentation-only
-integration. Record the actual selected Git head and its own CI evidence.
+The queued-intent source pin includes source `01376a59f13e7c4104ff0d2c507473ae334a9422`
+and the subsequent reviewed documentation integration. Record the actual selected
+Git head and its own CI evidence; later private preparation changes remain
+outside that baseline CI result.
 
 ## Cumulative draft dependencies and recorded CI
 
@@ -100,15 +102,27 @@ deletes UNKNOWN state, reservations or held evidence to regain room.
 
 The stream unit is **VERIFIED IN CI for active authorized allocations only**.
 The [queued-intent follow-up](TENANT_TASK_INTENTS_2026-10-17.md) is
-**PARTIALLY TESTED**: its corrected-source affected regression passed 151 tests
+**VERIFIED IN CI for queued acceptance only** at
+`de1194a0b568c820205ac0abaa7f774eb530ae83`: seven workflows / 24 jobs succeeded,
+including [CI](https://github.com/shadowhunter-92/agentbridge/actions/runs/39013120802).
+Its earlier corrected-source local affected regression passed 151 tests
 with one expected SQLite skip of a PostgreSQL-only test. Ten retained pre-fix
 HTTP reproductions failed as expected; the corrected API/replica cases passed
-14 tests. These overlapping receipts are separate, and prior stream CI does
-not verify the new feature. Acceptance commits immutable intent, SUBMITTED
+14 tests. These overlapping local receipts remain separate. Acceptance commits immutable intent, SUBMITTED
 status/event and audit only. It claims no operation, reserves no budget,
 consumes no approval and invokes no target. Original provenance is not a
 reusable principal; execution admission, worker/results, recovery and external
 cancellation remain unimplemented.
+
+The later [private preparation unit](QUEUED_INTENT_PREPARATION_2026-10-18.md)
+revalidates retained intents against current enrolled authority and the original
+deadline within a sealed guard. This unit requires its own exact selected-head
+evidence; queued-acceptance CI does not verify later preparation changes. Current
+qualification is recorded in the selected head's
+[PR #70 checks](https://github.com/shadowhunter-92/agentbridge/pull/70/checks)
+and phase receipt. Preparation
+adds no public execution path, operation admission/linkage, worker, results,
+execution recovery or remote cancellation.
 
 The stream unit's recorded final local SQLite/PostgreSQL regression had 228 passed and 2
 SQLite-only skips for PostgreSQL trigger-visibility checks; the PostgreSQL cases

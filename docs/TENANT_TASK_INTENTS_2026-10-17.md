@@ -68,6 +68,11 @@ It cannot deserialize the old principal or authenticate the old nonce again.
 Fresh same-scope authentication may inspect history after the original request
 expires; it does not extend or renew the intent's execution authorization.
 
+The next [private preparation unit](QUEUED_INTENT_PREPARATION_2026-10-18.md)
+implements restricted enrolled-row revalidation inside a process/thread-bound
+guard. It adds no public execution API or admission and does not extend this
+queued-acceptance unit's evidence to executable tasks.
+
 Retained task IDs are unique per exact owner; operation IDs are unique per
 tenant-local agent within retained intents. Existing lifecycle identities and
 operations are rejected at acceptance. Exact duplicates also conflict, without
