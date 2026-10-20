@@ -106,7 +106,8 @@ not an execution authority.
 | [Signing-policy coordination with tenant authority](TENANT_SIGNING_COORDINATION_2026-10-16.md) |
 | [Tenant-native task streams and shared allocations](tenant-task-streams.md) |
 | [Native queued tenant task acceptance](TENANT_TASK_INTENTS_2026-10-17.md) |
-| [Current engineering alpha status — October 17, 2026](CURRENT_ALPHA_STATUS.md) |
+| [Private queued-intent preparation and first admission](QUEUED_INTENT_PREPARATION_2026-10-18.md) |
+| [Current engineering alpha status — October 20, 2026](CURRENT_ALPHA_STATUS.md) |
 | [Branch documentation dispositions — October 16, 2026](BRANCH_DOCUMENTATION_DISPOSITIONS_2026-10-16.md) |
 | [Architecture decision records](adr/README.md) |
 | [ADR-001: Canonical Hub-and-Spoke Model for Protocol Translation](adr/001-canonical-hub-and-spoke.md) |

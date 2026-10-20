@@ -32,6 +32,7 @@ from .policy import PolicyEngine
 from .policy_rules import PolicyContext
 from .rbac import require
 from .store import sql_atomic
+from .task_admission import TaskAdmissionStore
 from .task_intents import IntentLimits, TaskIntentStore, parse_submission
 from .tenant_store import TenantStoreRegistry
 
@@ -82,6 +83,7 @@ class _Runtime:
     operations: OperationLedger
     tasks: DurableTaskLifecycle
     task_intents: TaskIntentStore
+    task_admissions: TaskAdmissionStore
     audit_trust: AuditTrustStore
 
 
@@ -138,13 +140,16 @@ class TenantKernel:
             operations = gateway._operation_ledger()
             tasks = DurableTaskLifecycle(store)
             task_intents = TaskIntentStore(store, tasks)
+            task_admissions = TaskAdmissionStore(store)
             audit_trust = AuditTrustStore(store)
             store.seal_writes()
             runtimes[tenant] = _Runtime(
                 store, identities, budgets, approvals, rules, audit, policy, gateway, operations, tasks,
-                task_intents, audit_trust
+                task_intents, task_admissions, audit_trust
             )
         self._runtimes = MappingProxyType(runtimes)
+        for runtime in runtimes.values():
+            runtime.gateway._queued_kernel = self
 
     def session(self, principal, *, tenant_id=None):
         store = self.storage.resolve(principal, tenant_id=tenant_id)
@@ -160,6 +165,22 @@ class TenantKernel:
         from .queued_intent_preparation import _assert_prepared
 
         return _assert_prepared(self, prepared)
+
+    def _admit_queued_intent(self, tenant_id, owner_id, task_id, expected_intent_sha256):
+        """Private first admission only; returns durable metadata, never an action."""
+        with self._prepare_queued_intent(tenant_id, owner_id, task_id, expected_intent_sha256) as prepared:
+            return self._runtimes[tenant_id].gateway._admit_queued_intent(prepared)
+
+    def _queued_admission(self, tenant_id, owner_id, task_id, expected_intent_sha256):
+        runtime = self._runtimes.get(tenant_id)
+        if runtime is None or self.storage._stores.get(tenant_id) is not runtime.store:
+            raise AuthorityDenied("operator-bound admission store required")
+        return runtime.task_admissions.get(owner_id, task_id, expected_intent_sha256)
+
+    def _link_queued_admission(self, gateway, prepared, request_scope, token, decision):
+        from .task_admission import _link
+
+        return _link(gateway, prepared, request_scope, token, decision)
 
 
 def _guarded(*, write=False):

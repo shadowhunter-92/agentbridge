@@ -6,6 +6,9 @@ an action.** No worker, result writer, operation linkage, reservation, approval
 consumption, cancellation command or successful completion is implemented.
 Executable recovery and tenant-aware reconciliation remain required before P04
 can be complete. The production target restriction remains in force.
+Later [private preparation and first-admission units](QUEUED_INTENT_PREPARATION_2026-10-18.md)
+add current-authority revalidation and atomic task/operation/event linkage.
+They retain separate evidence and do not add a worker or public execution API.
 
 ## Signed acceptance and inspection
 
@@ -70,8 +73,10 @@ expires; it does not extend or renew the intent's execution authorization.
 
 The next [private preparation unit](QUEUED_INTENT_PREPARATION_2026-10-18.md)
 implements restricted enrolled-row revalidation inside a process/thread-bound
-guard. It adds no public execution API or admission and does not extend this
-queued-acceptance unit's evidence to executable tasks.
+guard. Preparation itself adds no admission. The later private first-admission
+extension in that document uses the actual sealed object and has its own
+qualification boundary. Neither extends this queued-acceptance unit's evidence
+to executable tasks.
 
 Retained task IDs are unique per exact owner; operation IDs are unique per
 tenant-local agent within retained intents. Existing lifecycle identities and
@@ -81,10 +86,11 @@ replacing history.
 **Submission reserves neither an operation row nor its identity against ordinary
 gateway routing.** The initial lookup is not a claim or concurrency lock. A
 concurrent or later synchronous route can claim that ID, leaving the queued
-intent unchanged. First execution admission must atomically handle collisions
-and refuse dispatch. Existing UNKNOWN operations must never be replayed, even
-if a local marker suggests they were not sent. No action fingerprint or
-task-operation correlation is established in this unit.
+intent unchanged. The private first-admission extension atomically rejects any
+existing claim and binds its own new operation fingerprint to the retained
+intent/owner/task. Existing UNKNOWN operations must never be replayed, even if
+a local marker suggests they were not sent. No action fingerprint or
+task-operation correlation is established by queued acceptance itself.
 
 ## Durable bounds and transactions
 

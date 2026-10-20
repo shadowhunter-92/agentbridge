@@ -34,9 +34,13 @@ pending-PR statements are not current status.
 ## Internal engineering still requiring qualification
 
 The [native queued-intent follow-up](TENANT_TASK_INTENTS_2026-10-17.md) accepts
-signed bounded provenance and submitted status/audit atomically. It does not
-implement execution admission, a worker, results or recovery. The executable
-task requirements below remain open.
+signed bounded provenance and submitted status/audit atomically. The later
+[private preparation and first-admission units](QUEUED_INTENT_PREPARATION_2026-10-18.md)
+revalidate current enrolled authority and atomically link a new operation,
+reservation and WORKING event. This is internal admission awaiting dispatch;
+UNKNOWN and its exposure remain. No public executable-task API, worker, results,
+settlement, tenant-aware recovery or remote cancellation is added. Each unit
+requires its own exact-head evidence; the executable task requirements remain open.
 
 1. Reference transport interoperability for each advertised SDK/version and
    supported behavior. The opt-in A2A 0.3 observer streams existing task status;

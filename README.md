@@ -21,9 +21,10 @@ another all-in-one agent platform.
 > **Engineering alpha; production NO-GO.** The recorded `main` baseline is
 > `73aafd60a0eec121a10245a307a4a8ee268f7ed5`. This documentation describes the
 > recorded cumulative draft baseline `46777f8c953690fca81c6d11e7b70372b8dd5c77`
-> (PRs #56–#69), followed by queued-intent source
-> `01376a59f13e7c4104ff0d2c507473ae334a9422`. These remain separate from `main`
-> and the older local unsigned evaluator wheel.
+> (PRs #56–#69), followed by queued acceptance and private preparation at
+> `893fdba4d3d1928bd66491affcb87e01a263b063` (draft PR #70). The later private
+> first-admission extension requires its own selected-head checks and evidence.
+> These remain separate from `main` and the older local unsigned evaluator wheel.
 > Source integration does not establish a signed release or production acceptance.
 > [Current source, evidence and open gates](docs/CURRENT_ALPHA_STATUS.md) ·
 > [Documentation index](docs/README.md) · [Security policy](SECURITY.md)
@@ -57,7 +58,7 @@ outcome, reconciliation and auditability questions. Those guarantees remain
 | SQLite / PostgreSQL support | Bounded tenant namespaces, offline migration, admission caps, retained-task/event-byte caps and shared tenant stream allocations | Large-history performance, protected retention, physical connection limits, live migration and HA |
 | Separately signed action receipt + readback verification | Tested in bounded sandbox / PostgreSQL paths | Independent administration and real destination acceptance |
 | Production network isolation, HA and full MCP/A2A conformance | **Not qualified** | **Still not qualified** |
-| Native queued task acceptance | Signed bounded intent, submitted status and audit committed together | Worker execution, operation linkage, results and recovery |
+| Native queued tasks | Signed bounded acceptance; private current-authority preparation and atomic first admission with immutable operation linkage | Worker invocation, results, settlement, recovery and destination cancellation |
 | Enterprise managed service or formal certification | Not available | Not available |
 
 **Protocol families:** MCP, A2A, BeeAI ACP, OpenAI tool calling, Gemini tool
@@ -88,10 +89,13 @@ python examples/demo_story.py
 ```
 
 This pins `main`, not the cumulative tenant draft. For that draft, select
-`01376a59f13e7c4104ff0d2c507473ae334a9422` explicitly and use its documented
+`893fdba4d3d1928bd66491affcb87e01a263b063` explicitly and use its documented
 opt-in tenant factory. Editable source installation is not installation of the
 local evaluator wheel or a signed public release. The main CI badge above tracks
 `main`; it does not attest to the selected draft. See [source pins](docs/CURRENT_ALPHA_STATUS.md).
+That pin qualifies queued acceptance and preparation only; later private
+[first-admission linkage](docs/QUEUED_INTENT_PREPARATION_2026-10-18.md)
+requires its own exact-head evidence and adds no executable task API.
 
 To execute the local test suite:
 

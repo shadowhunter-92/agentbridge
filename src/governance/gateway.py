@@ -47,9 +47,9 @@ class GovernanceError(PermissionError):
 
 
 class _AdmissionRejected(Exception):
-    def __init__(self, reason):
+    def __init__(self, reason, *, decision=None):
         super().__init__(reason)
-        self.decision = Decision(False, reason)
+        self.decision = decision if decision is not None else Decision(False, reason)
 
 
 class GovernanceGateway:
@@ -431,67 +431,20 @@ class GovernanceGateway:
             # Translation is pure preparation: reject unsupported semantics before
             # reserving budget, consuming a grant or creating a durable claim.
             dst_wire = self.registry.translate_call(src_wire, src_proto, dst_proto)
-            ledger = self._operation_ledger() if operation_id is not None else None
-            store = self._shared_sql_store(ledger)
-            token, claimed = None, False
-            binding = {"authority_binding": principal.binding()} if self.authority is not None else {}
             try:
-                with sql_atomic(store) if store is not None else nullcontext():
-                    if store is not None and ledger is not None:
-                        # Lock/claim operation before budget, matching outcome
-                        # settlement and reconciliation. Nothing is visible until
-                        # reservation, approval and its token link commit together.
-                        quota_hook = None
-                        if self._quotas is not None:
-                            def quota_hook():
-                                from .admission_quotas import QuotaDenied
-                                try:
-                                    self._quotas.admit(principal, agent_id, operation_id, request_scope, cost)
-                                except QuotaDenied as exc:
-                                    raise _AdmissionRejected(str(exc)) from exc
-                        ledger.claim(agent_id, operation_id, request_scope, before_insert=quota_hook, **binding)
-                        claimed = True
-                    token, why = self.budgets.reserve(agent_id, cost)
-                    if token is None:
-                        raise _AdmissionRejected(why)
-                    if self.authority is not None:
-                        self.authority.authorize(principal, capability, target_id)
-                    if ledger is not None and claimed:
-                        ledger.attach_reservation(agent_id, operation_id, token)
-                    if decision.approval_required and (
-                        not self.approvals or not self.approvals.consume(agent_id, capability, request_scope)
-                    ):
-                        raise _AdmissionRejected("approval grant already consumed")
-                    if ledger is not None and not claimed:
-                        # Preserve the explicitly weaker legacy embedding path
-                        # when its participants do not share one SQL connection.
-                        ledger.claim(agent_id, operation_id, request_scope, reservation_token=token, **binding)
-                        claimed = True
-                    if self.authority is not None:
-                        self.authority.authorize(principal, capability, target_id)
-            except BaseException as exc:
-                if store is None:
-                    if token is not None:
-                        self.budgets.release(agent_id, token)
-                    if ledger is not None and claimed:
-                        ledger.finish(agent_id, operation_id, "failed")
-                if isinstance(exc, _AdmissionRejected):
-                    # Denials are durable after rollback; do not commit partial
-                    # reservation/approval state just to retain an audit entry.
-                    entry = audit_record(
-                        actor=agent_id,
-                        action="route_call",
-                        source_protocol=src_proto,
-                        target_protocol=dst_proto,
-                        capability=capability,
-                        decision="deny",
-                        reason=exc.decision.reason,
-                        cost=0.0,
-                    )
-                    update_audit_count(self.audit.count())
-                    record_call(src_proto, dst_proto, capability, "deny", time.monotonic() - t0)
-                    raise GovernanceError(exc.decision, entry) from exc
-                raise
+                token, ledger, decision, _ = self._admit_transaction(
+                    agent_id=agent_id, capability=capability, cost=cost, target_id=target_id,
+                    operation_id=operation_id, request_scope=request_scope, principal=principal, decision=decision,
+                )
+            except _AdmissionRejected as exc:
+                entry = audit_record(
+                    actor=agent_id, action="route_call", source_protocol=src_proto,
+                    target_protocol=dst_proto, capability=capability, decision="deny",
+                    reason=exc.decision.reason, cost=0.0,
+                )
+                update_audit_count(self.audit.count())
+                record_call(src_proto, dst_proto, capability, "deny", time.monotonic() - t0)
+                raise GovernanceError(exc.decision, entry) from exc
             return SimpleNamespace(
                 agent_id=agent_id,
                 src=src_proto,
@@ -506,3 +459,122 @@ class GovernanceGateway:
                 actor=audit_actor,
                 started=t0,
             )
+
+    def _admit_transaction(self, *, agent_id, capability, cost, target_id, operation_id,
+                           request_scope, principal, decision, queued_preparation=None):
+        """Shared owned claim/quota/reservation/approval boundary, before invocation."""
+        receipt = None
+        ledger = self._operation_ledger() if operation_id is not None else None
+        store = self._shared_sql_store(ledger)
+        token, claimed = None, False
+        binding = {"authority_binding": principal.binding()} if self.authority is not None else {}
+        try:
+            with sql_atomic(store) if store is not None else nullcontext():
+                if store is not None and ledger is not None:
+                    # Lock/claim operation before budget, matching outcome
+                    # settlement and reconciliation. Nothing is visible until
+                    # reservation, approval and its token link commit together.
+                    quota_hook = None
+                    if self._quotas is not None:
+                        def quota_hook():
+                            from .admission_quotas import QuotaDenied
+                            try:
+                                self._quotas.admit(principal, agent_id, operation_id, request_scope, cost)
+                            except QuotaDenied as exc:
+                                raise _AdmissionRejected(str(exc)) from exc
+                    ledger.claim(agent_id, operation_id, request_scope, before_insert=quota_hook, **binding)
+                    claimed = True
+                if queued_preparation is not None:
+                    decision = self._queued_policy(queued_preparation, request_scope)
+                    if not decision.allowed:
+                        raise _AdmissionRejected(decision.reason, decision=decision)
+                token, why = self.budgets.reserve(agent_id, cost)
+                if token is None:
+                    raise _AdmissionRejected(why)
+                if self.authority is not None:
+                    self.authority.authorize(principal, capability, target_id)
+                if ledger is not None and claimed:
+                    ledger.attach_reservation(agent_id, operation_id, token)
+                if decision.approval_required and (
+                    not self.approvals or not self.approvals.consume(agent_id, capability, request_scope)
+                ):
+                    raise _AdmissionRejected("approval grant already consumed")
+                if ledger is not None and not claimed:
+                    # Preserve the explicitly weaker legacy embedding path
+                    # when its participants do not share one SQL connection.
+                    ledger.claim(agent_id, operation_id, request_scope, reservation_token=token, **binding)
+                    claimed = True
+                if self.authority is not None:
+                    self.authority.authorize(principal, capability, target_id)
+                if queued_preparation is not None:
+                    receipt = self._queued_kernel._link_queued_admission(
+                        self, queued_preparation, request_scope, token, decision
+                    )
+        except BaseException:
+            if store is None:
+                if token is not None:
+                    self.budgets.release(agent_id, token)
+                if ledger is not None and claimed:
+                    ledger.finish(agent_id, operation_id, "failed")
+            raise
+        return token, ledger, decision, receipt
+
+    def _queued_policy(self, prepared, request_scope):
+        from .authority import AuthorityDenied
+        from .task_admission import _gateway_preparation
+
+        _, runtime = _gateway_preparation(self, prepared)
+        plan, principal = prepared.plan, prepared._authority.principal
+        # The common transaction already owns operation/quota. Take the same
+        # per-agent budget fence as mutate_budget before checking presence:
+        # queued work must not create operator budget policy from defaults.
+        if isinstance(runtime.store, PostgresStore):
+            runtime.store._db.execute("SELECT pg_advisory_xact_lock(hashtext(%s))",
+                                      ("budget:" + principal.agent_id,))
+        budget = runtime.store.get_budget(principal.agent_id)
+        if not isinstance(budget, dict) or not {"spend_limit", "rate_limit", "window_seconds"} <= budget.keys():
+            return Decision(False, "operator budget required for queued admission")
+        decision = self.policy.authorize(
+            agent_id=principal.agent_id, capability=plan["capability"], cost=plan["cost"],
+            src_protocol=plan["src"], dst_protocol=plan["dst"], request_scope=request_scope,
+            principal=principal, target_id=plan["target_id"],
+        )
+        floor = prepared._authority.intent.record["provenance"]["approval_required_at_submission"]
+        if type(floor) is not bool:
+            raise AuthorityDenied("original approval requirement unavailable")
+        if decision.allowed and floor and not decision.approval_required:
+            if not self.approvals or not self.approvals.is_granted(principal.agent_id, plan["capability"], request_scope):
+                return Decision(False, "original queued approval required", needs_approval=True)
+            return Decision(True, decision.reason, approval_required=True)
+        return decision
+
+    def _admit_queued_intent(self, prepared):
+        from .task_admission import _gateway_preparation, _queued_scope
+
+        _, runtime = _gateway_preparation(self, prepared)
+        plan, principal = prepared.plan, prepared._authority.principal
+        request_scope, _ = _queued_scope(prepared)
+        try:
+            _, _, _, receipt = self._admit_transaction(
+                agent_id=principal.agent_id, capability=plan["capability"], cost=plan["cost"],
+                target_id=plan["target_id"], operation_id=plan["operation_id"], request_scope=request_scope,
+                principal=principal, decision=None, queued_preparation=prepared,
+            )
+        except _AdmissionRejected as exc:
+            # The failed admission has rolled back. Pending approval and denial
+            # audit form their own transaction, never a partial operation claim.
+            with sql_atomic(runtime.store):
+                _gateway_preparation(self, prepared)
+                approval_id = None
+                if exc.decision.needs_approval and self.approvals:
+                    approval_id = self.approvals.request(
+                        principal.agent_id, plan["capability"], plan["cost"], request_scope
+                    ).id
+                entry = self.audit.record(
+                    actor="principal:v1:" + json.dumps(principal.binding(), sort_keys=True, separators=(",", ":")),
+                    action="task.admit", source_protocol=plan["src"], target_protocol=plan["dst"],
+                    capability=plan["capability"], decision="deny", cost=0.0,
+                    reason=exc.decision.reason + "; queued action sha256:" + request_scope,
+                )
+            raise GovernanceError(exc.decision, entry, approval_id=approval_id) from exc
+        return receipt

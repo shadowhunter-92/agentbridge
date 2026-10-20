@@ -127,7 +127,7 @@ def _guard_queued_intent(directory, bound_intents, owner_id, task_id, expected_i
                 del directory._transaction_context.queued_intent_guards
 
 
-def _assert_queued_intent(directory, context, bound_intents):
+def _verify_queued_scope(directory, context, bound_intents):
     try:
         guards = getattr(directory._transaction_context, "queued_intent_guards", ())
         valid = isinstance(context, _QueuedIntentAuthority) and type(context._lease) is object and \
@@ -137,6 +137,23 @@ def _assert_queued_intent(directory, context, bound_intents):
         valid = False
     if not valid:
         raise AuthorityDenied("unverified or inactive queued intent context")
+
+
+def _assert_queued_lifetime(directory, context, bound_intents):
+    """Final admission gate only: no assertion that status is still SUBMITTED."""
+    _verify_queued_scope(directory, context, bound_intents)
+    with directory._transaction() as cur:
+        _require_read_committed(cur)
+        directory._current(cur, context.principal)
+        principal, deadline = _derive(
+            directory, cur, bound_intents, context.intent, valid_until=context.principal.valid_until
+        )
+        if principal != context.principal or deadline != context.original_deadline:
+            raise AuthorityDenied("queued admission scope or lifetime changed")
+
+
+def _assert_queued_intent(directory, context, bound_intents):
+    _verify_queued_scope(directory, context, bound_intents)
     with directory._transaction() as cur:
         _require_read_committed(cur)
         if context._lease not in getattr(directory._transaction_context, "queued_intent_guards", ()):
@@ -227,7 +244,7 @@ def _prepare(kernel, tenant_id, owner_id, task_id, expected_intent_sha256):
         yield prepared
 
 
-def _assert_prepared(kernel, prepared):
+def _prepared_runtime(kernel, prepared):
     try:
         valid = isinstance(prepared, _PreparedQueuedIntent) and isinstance(prepared._proof, bytes) and \
             hmac.compare_digest(prepared._proof, _prepared_seal(kernel, prepared))
@@ -238,6 +255,16 @@ def _assert_prepared(kernel, prepared):
     runtime = kernel._runtimes.get(prepared.tenant_id)
     if runtime is None or kernel.storage._stores.get(prepared.tenant_id) is not runtime.store:
         raise AuthorityDenied("prepared tenant runtime changed")
+    return runtime
+
+
+def _assert_admission_lifetime(kernel, prepared):
+    runtime = _prepared_runtime(kernel, prepared)
+    _assert_queued_lifetime(kernel.directory, prepared._authority, runtime.task_intents)
+
+
+def _assert_prepared(kernel, prepared):
+    runtime = _prepared_runtime(kernel, prepared)
     kernel.directory._assert_queued_intent(prepared._authority, runtime.task_intents)
     if _plan(kernel, runtime, prepared._authority) != prepared.plan_json:
         raise AuthorityDenied("queued preparation changed")

@@ -1,4 +1,4 @@
-# Current engineering alpha status — October 18, 2026
+# Current engineering alpha status — October 20, 2026
 
 **Overall: PARTIALLY TESTED; unrestricted consequential-action production NO-GO.**
 This is the current documentation entry point for the recorded source snapshot.
@@ -13,6 +13,7 @@ release, deployment or deletion. Apache 2.0 remains in force.
 | Recorded main | `73aafd60a0eec121a10245a307a4a8ee268f7ed5` | Main baseline, before the tenant draft stack |
 | Cumulative draft source | `46777f8c953690fca81c6d11e7b70372b8dd5c77` | PR #69 plus dependencies #56–#68; recorded as draft/unmerged |
 | Queued-acceptance follow-up source | `de1194a0b568c820205ac0abaa7f774eb530ae83` | Native queued intent plus documentation integration; seven successful workflows / 24 jobs recorded, queued acceptance only |
+| Private preparation follow-up source | `893fdba4d3d1928bd66491affcb87e01a263b063` | Draft PR #70; seven successful workflows / 24 jobs recorded, preparation without admission or execution |
 | Local evaluator source | `d0881b937d2568e4e01fb02044bf466aea609e9a` | Older PR #63 source used for the separate local wheel |
 | Recorded local evaluator wheel SHA-256 | `2367045ebfbe0fa502d4f8f59183696181834a847d2d309f1894e48667deb703` | Local, unsigned, unpublished; not built from `46777f8` |
 
@@ -22,8 +23,8 @@ independent evaluation. Use Python 3.11/3.12 and record the exact selected SHA.
 [Evaluator instructions](OSS_EVALUATION_KIT.md) retain their older artifact pin.
 The queued-intent source pin includes source `01376a59f13e7c4104ff0d2c507473ae334a9422`
 and the subsequent reviewed documentation integration. Record the actual selected
-Git head and its own CI evidence; later private preparation changes remain
-outside that baseline CI result.
+Git head and its own CI evidence. The later private first-admission/linkage
+extension is outside both the queued-acceptance and preparation CI results.
 
 ## Cumulative draft dependencies and recorded CI
 
@@ -42,6 +43,12 @@ head before a merge.
 The later queued-intent and documentation continuation is outside that frozen
 inventory; the table below preserves its original heads rather than implying
 that later branches were part of the query.
+The separate October 18 post-preparation inventory records 20 remote heads and
+15 open draft/unmerged PRs, #56–#70, with PR #70 at `893fdba`. That head's seven
+successful workflows / 24 jobs include
+[CI](https://github.com/shadowhunter-92/agentbridge/actions/runs/39116757207).
+These historical inventories do not authorize consolidation or verify later
+admission changes. Refresh the actual proposed head and current PR state.
 
 | Draft PR | Source head | Bounded unit |
 | --- | --- | --- |
@@ -85,7 +92,7 @@ UNKNOWN retains exposure and is not automatically replayed or refunded.
 | Admission | Operator-enabled tenant/human spend, admission-rate and active-operation caps, durable attribution | Frontdoor shedding/rate limits, authentication storage bounds, custom per-user limits and large-history performance |
 | Task history | Namespace-wide retained count, default 10,000; terminal history included | Safe protected cleanup/retention and capacity sizing |
 | Task event bytes | Actual retained UTF-8 snapshot bytes, default 64 MiB; bounded recovery/terminal reservations | Audit/evidence bytes, indexes/WAL/copies and large-history contention |
-| Task lifecycle | Durable owner-scoped non-executable status, events, compare-and-update and replay; native signed queued acceptance in the follow-up source | Execution admission linked to operations, worker/results/recovery and acknowledged destination cancellation |
+| Task lifecycle | Durable owner-scoped status/events; signed queued acceptance; private current-authority preparation and atomic first admission with immutable task/operation/event linkage | Worker invocation, results, settlement, tenant-aware execution recovery and acknowledged destination cancellation |
 | Queued intent capacity | Immutable provenance, default 64 KiB intent / 64 KiB future result allowance / 1,024 retained intents / 128 MiB aggregate, plus existing lifecycle bounds | Result writer, protected retention and sustained resource qualification; reserved result capacity is not a result payload |
 | Tenant status streams | Signed existing-task/cursor observation; shared authority-database allocation caps, defaults 64 fleet / 16 tenant / 4 stable owner; 5-second lease and 60-second absolute lifetime | Frontdoor physical connection/rate/body limits, contention/resource qualification and coordinated stop/drain/restore; legacy `/a2a` limits remain process-local |
 | Migration | Bounded offline ordinary-table assignment and conservative rollback | Large databases, rolling/live workload migration and active-work rollback |
@@ -111,8 +118,8 @@ HTTP reproductions failed as expected; the corrected API/replica cases passed
 14 tests. These overlapping local receipts remain separate. Acceptance commits immutable intent, SUBMITTED
 status/event and audit only. It claims no operation, reserves no budget,
 consumes no approval and invokes no target. Original provenance is not a
-reusable principal; execution admission, worker/results, recovery and external
-cancellation remain unimplemented.
+reusable principal. Later preparation and first admission have separate evidence;
+worker invocation/results, execution recovery and external cancellation remain open.
 
 The later [private preparation unit](QUEUED_INTENT_PREPARATION_2026-10-18.md)
 revalidates retained intents against current enrolled authority and the original
@@ -123,6 +130,19 @@ qualification is recorded in the selected head's
 and phase receipt. Preparation
 adds no public execution path, operation admission/linkage, worker, results,
 execution recovery or remote cancellation.
+
+The separate [private first-admission extension](QUEUED_INTENT_PREPARATION_2026-10-18.md)
+uses that preparation object with the exact operator-bound gateway. Current
+policy, original/current approval requirements, explicit persisted operator
+budget policy, quota, target and fixed authorization deadlines are checked under
+the shared transaction locks. A successful transaction records one immutable
+task/operation/event link, holds the reservation and changes SUBMITTED to WORKING.
+WORKING means awaiting dispatch; the operation remains UNKNOWN. Existing claims
+in any operation state are rejected. There is no worker, invocation, result,
+settlement, automatic reconciliation or remote-cancellation path in this unit.
+Its selected-head CI and source-associated phase receipts must qualify these
+changes independently of the preparation head's results. Overall P04 remains
+PARTIALLY TESTED.
 
 The stream unit's recorded final local SQLite/PostgreSQL regression had 228 passed and 2
 SQLite-only skips for PostgreSQL trigger-visibility checks; the PostgreSQL cases
@@ -155,6 +175,6 @@ not override this page or broaden the source's supported contract.
 
 [Branch documentation dispositions](BRANCH_DOCUMENTATION_DISPOSITIONS_2026-10-16.md)
 records the October 17 remote inventory, the older cached comparison and
-historical cleanup separately. Updating this local documentation branch does not
-rewrite maintained or historical branch heads. Local unpublished work after the
-source pin is outside this page's tested source scope.
+historical cleanup separately. Maintained and historical branch heads retain
+their separate dispositions. Later units require exact selected-head checks and
+source-associated receipts; descriptions here do not extend earlier test scope.
