@@ -22,8 +22,10 @@ another all-in-one agent platform.
 > `73aafd60a0eec121a10245a307a4a8ee268f7ed5`. This documentation describes the
 > recorded cumulative draft baseline `46777f8c953690fca81c6d11e7b70372b8dd5c77`
 > (PRs #56–#69), followed by queued acceptance and private preparation at
-> `893fdba4d3d1928bd66491affcb87e01a263b063` (draft PR #70). The later private
-> first-admission extension requires its own selected-head checks and evidence.
+> `893fdba4d3d1928bd66491affcb87e01a263b063` (draft PR #70). Private atomic
+> admission is separately verified at `08355255ee3fc96461d3d33942cb8f730e8d924b`
+> by seven workflows / 24 jobs. Later changes require their own selected-head
+> checks; see [audit payload capacity and retention](docs/AUDIT_CAPACITY_AND_RETENTION_2026.md).
 > These remain separate from `main` and the older local unsigned evaluator wheel.
 > Source integration does not establish a signed release or production acceptance.
 > [Current source, evidence and open gates](docs/CURRENT_ALPHA_STATUS.md) ·
@@ -55,7 +57,7 @@ outcome, reconciliation and auditability questions. Those guarantees remain
 | --- | --- | --- |
 | Canonical tool-call translation across six adapter families | Limited subset with explicit unsupported-feature rejection | Full protocol lifecycle/version matrix |
 | Agent signatures, budgets, policies and approval controls | Selected paths; opt-in enrolled tenant SDK/HTTP and shared-SQL admission/settlement | Remaining ingress, destination and adversarial qualification |
-| SQLite / PostgreSQL support | Bounded tenant namespaces, offline migration, admission caps, retained-task/event-byte caps and shared tenant stream allocations | Large-history performance, protected retention, physical connection limits, live migration and HA |
+| SQLite / PostgreSQL support | Bounded tenant namespaces, offline migration, admission caps, retained-task/event/audit-payload caps and shared tenant stream allocations | Remaining evidence bytes, large-history performance, protected retention, physical connection limits, live migration and HA |
 | Separately signed action receipt + readback verification | Tested in bounded sandbox / PostgreSQL paths | Independent administration and real destination acceptance |
 | Production network isolation, HA and full MCP/A2A conformance | **Not qualified** | **Still not qualified** |
 | Native queued tasks | Signed bounded acceptance; private current-authority preparation and atomic first admission with immutable operation linkage | Worker invocation, results, settlement, recovery and destination cancellation |
@@ -89,13 +91,14 @@ python examples/demo_story.py
 ```
 
 This pins `main`, not the cumulative tenant draft. For that draft, select
-`893fdba4d3d1928bd66491affcb87e01a263b063` explicitly and use its documented
+`08355255ee3fc96461d3d33942cb8f730e8d924b` explicitly and use its documented
 opt-in tenant factory. Editable source installation is not installation of the
 local evaluator wheel or a signed public release. The main CI badge above tracks
 `main`; it does not attest to the selected draft. See [source pins](docs/CURRENT_ALPHA_STATUS.md).
-That pin qualifies queued acceptance and preparation only; later private
-[first-admission linkage](docs/QUEUED_INTENT_PREPARATION_2026-10-18.md)
-requires its own exact-head evidence and adds no executable task API.
+That pin includes queued acceptance, private preparation and
+[first-admission linkage](docs/QUEUED_INTENT_PREPARATION_2026-10-18.md).
+It adds no executable task API. The later audit-capacity follow-up is outside
+that pin and needs the selected follow-up head's own evidence.
 
 To execute the local test suite:
 

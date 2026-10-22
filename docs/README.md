@@ -93,6 +93,7 @@ not an execution authority.
 | [Production destination qualification](PRODUCTION_TARGET_QUALIFICATION_2026-10-14.md) |
 | [Atomic local admission](ATOMIC_ADMISSION_2026-10-14.md) |
 | [Atomic local outcome settlement](ATOMIC_GOVERNANCE_STATE_2026-10-14.md) |
+| [Audit payload capacity and conservative retention](AUDIT_CAPACITY_AND_RETENTION_2026.md) |
 | [Durable aggregate admission quotas](DURABLE_ADMISSION_QUOTAS_2026-10-15.md) |
 | [Legacy SQLite mutation boundaries — October 16, 2026](SQLITE_ATOMIC_MUTATIONS_2026-10-16.md) |
 | [Task status transaction composition and tenant guards — October 16, 2026](TASK_ATOMIC_SCOPE_2026-10-16.md) |
@@ -107,7 +108,7 @@ not an execution authority.
 | [Tenant-native task streams and shared allocations](tenant-task-streams.md) |
 | [Native queued tenant task acceptance](TENANT_TASK_INTENTS_2026-10-17.md) |
 | [Private queued-intent preparation and first admission](QUEUED_INTENT_PREPARATION_2026-10-18.md) |
-| [Current engineering alpha status — October 20, 2026](CURRENT_ALPHA_STATUS.md) |
+| [Current engineering alpha status — October 21, 2026](CURRENT_ALPHA_STATUS.md) |
 | [Branch documentation dispositions — October 16, 2026](BRANCH_DOCUMENTATION_DISPOSITIONS_2026-10-16.md) |
 | [Architecture decision records](adr/README.md) |
 | [ADR-001: Canonical Hub-and-Spoke Model for Protocol Translation](adr/001-canonical-hub-and-spoke.md) |

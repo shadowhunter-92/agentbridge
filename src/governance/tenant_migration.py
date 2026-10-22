@@ -94,10 +94,16 @@ def _supported_schema(store, cur):
         )
         unknown = cur.fetchone()
         if not unknown:
+            from .audit_capacity import AuditCapacityDenied, qualified_postgres_routines
+
+            try:
+                qualified = qualified_postgres_routines(cur)
+            except AuditCapacityDenied as exc:
+                raise TenantMigrationDenied("unsupported audit capacity migration routine") from exc
             cur.execute(
                 "SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace "
                 "WHERE n.nspname=current_schema() AND NOT (p.proname=ANY(%s)) LIMIT 1",
-                (["ab_migration_freeze", "agentbridge_tenant_write_guard"] if migrated else [],),
+                (qualified + (["ab_migration_freeze", "agentbridge_tenant_write_guard"] if migrated else []),),
             )
             unknown = cur.fetchone()
         if not unknown:
@@ -109,6 +115,12 @@ def _supported_schema(store, cur):
 
 def _snapshot(store, cur, *, tables=None):
     _supported_schema(store, cur)
+    from .audit_capacity import AuditCapacityDenied, verify_retained_usage
+
+    try:
+        verify_retained_usage(cur, postgres=isinstance(store, PostgresStore))
+    except AuditCapacityDenied as exc:
+        raise TenantMigrationDenied("audit capacity counters do not preserve stored history") from exc
     selected = _tables(store, cur) if tables is None else tables
     manifest = {}
     for table in selected:

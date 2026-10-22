@@ -1,4 +1,4 @@
-# Current engineering alpha status — October 20, 2026
+# Current engineering alpha status — October 21, 2026
 
 **Overall: PARTIALLY TESTED; unrestricted consequential-action production NO-GO.**
 This is the current documentation entry point for the recorded source snapshot.
@@ -14,6 +14,7 @@ release, deployment or deletion. Apache 2.0 remains in force.
 | Cumulative draft source | `46777f8c953690fca81c6d11e7b70372b8dd5c77` | PR #69 plus dependencies #56–#68; recorded as draft/unmerged |
 | Queued-acceptance follow-up source | `de1194a0b568c820205ac0abaa7f774eb530ae83` | Native queued intent plus documentation integration; seven successful workflows / 24 jobs recorded, queued acceptance only |
 | Private preparation follow-up source | `893fdba4d3d1928bd66491affcb87e01a263b063` | Draft PR #70; seven successful workflows / 24 jobs recorded, preparation without admission or execution |
+| Private atomic-admission follow-up source | `08355255ee3fc96461d3d33942cb8f730e8d924b` | Draft PR #70; seven successful workflows / 24 jobs, private admission and task/operation/event linkage without dispatch |
 | Local evaluator source | `d0881b937d2568e4e01fb02044bf466aea609e9a` | Older PR #63 source used for the separate local wheel |
 | Recorded local evaluator wheel SHA-256 | `2367045ebfbe0fa502d4f8f59183696181834a847d2d309f1894e48667deb703` | Local, unsigned, unpublished; not built from `46777f8` |
 
@@ -23,8 +24,10 @@ independent evaluation. Use Python 3.11/3.12 and record the exact selected SHA.
 [Evaluator instructions](OSS_EVALUATION_KIT.md) retain their older artifact pin.
 The queued-intent source pin includes source `01376a59f13e7c4104ff0d2c507473ae334a9422`
 and the subsequent reviewed documentation integration. Record the actual selected
-Git head and its own CI evidence. The later private first-admission/linkage
-extension is outside both the queued-acceptance and preparation CI results.
+Git head and its own CI evidence. Private first-admission/linkage has its own
+`08355255` results, separate from queued-acceptance and preparation CI. The
+audit-capacity follow-up described below is later source and requires its own
+selected-head evidence; it is not covered by the admission head's checks.
 
 ## Cumulative draft dependencies and recorded CI
 
@@ -47,8 +50,13 @@ The separate October 18 post-preparation inventory records 20 remote heads and
 15 open draft/unmerged PRs, #56–#70, with PR #70 at `893fdba`. That head's seven
 successful workflows / 24 jobs include
 [CI](https://github.com/shadowhunter-92/agentbridge/actions/runs/39116757207).
-These historical inventories do not authorize consolidation or verify later
-admission changes. Refresh the actual proposed head and current PR state.
+The October 20 inventory also records 20 remote heads and 15 open draft PRs,
+with PR #70 advanced to `08355255`; all 20 recorded heads were ancestors of it.
+Its seven workflows / 24 jobs passed, including
+[CI](https://github.com/shadowhunter-92/agentbridge/actions/runs/39399999492).
+The October 21 read-only PR refresh still recorded that head, open/draft and
+unmerged. These inventories do not authorize consolidation or qualify later
+changes. Refresh the actual proposed head and current PR state.
 
 | Draft PR | Source head | Bounded unit |
 | --- | --- | --- |
@@ -91,7 +99,8 @@ UNKNOWN retains exposure and is not automatically replayed or refunded.
 | --- | --- | --- |
 | Admission | Operator-enabled tenant/human spend, admission-rate and active-operation caps, durable attribution | Frontdoor shedding/rate limits, authentication storage bounds, custom per-user limits and large-history performance |
 | Task history | Namespace-wide retained count, default 10,000; terminal history included | Safe protected cleanup/retention and capacity sizing |
-| Task event bytes | Actual retained UTF-8 snapshot bytes, default 64 MiB; bounded recovery/terminal reservations | Audit/evidence bytes, indexes/WAL/copies and large-history contention |
+| Task event bytes | Actual retained UTF-8 snapshot bytes, default 64 MiB; bounded recovery/terminal reservations | Remaining evidence bytes, indexes/WAL/copies and large-history contention |
+| Audit payload capacity | SQL-trigger row/UTF-8 byte/per-entry limits, persisted counters and conservative store-API retention refusal | Remaining evidence journals/checkpoints, reference-indexed retention, mixed-version operation, independent custody and sustained performance |
 | Task lifecycle | Durable owner-scoped status/events; signed queued acceptance; private current-authority preparation and atomic first admission with immutable task/operation/event linkage | Worker invocation, results, settlement, tenant-aware execution recovery and acknowledged destination cancellation |
 | Queued intent capacity | Immutable provenance, default 64 KiB intent / 64 KiB future result allowance / 1,024 retained intents / 128 MiB aggregate, plus existing lifecycle bounds | Result writer, protected retention and sustained resource qualification; reserved result capacity is not a result payload |
 | Tenant status streams | Signed existing-task/cursor observation; shared authority-database allocation caps, defaults 64 fleet / 16 tenant / 4 stable owner; 5-second lease and 60-second absolute lifetime | Frontdoor physical connection/rate/body limits, contention/resource qualification and coordinated stop/drain/restore; legacy `/a2a` limits remain process-local |
@@ -140,9 +149,24 @@ task/operation/event link, holds the reservation and changes SUBMITTED to WORKIN
 WORKING means awaiting dispatch; the operation remains UNKNOWN. Existing claims
 in any operation state are rejected. There is no worker, invocation, result,
 settlement, automatic reconciliation or remote-cancellation path in this unit.
-Its selected-head CI and source-associated phase receipts must qualify these
-changes independently of the preparation head's results. Overall P04 remains
-PARTIALLY TESTED.
+Its `08355255` selected-head CI and source-associated phase receipts qualify
+these changes independently of the preparation head's results. Final-runtime
+affected regression recorded 490 passing cases and ten expected SQLite skips
+for PostgreSQL-only checks; final budget-policy and process-crash cases recorded
+14 passes separately. Earlier overlapping draft receipts retain their own source
+associations. Overall P04 remains PARTIALLY TESTED.
+
+The later [audit-capacity unit](AUDIT_CAPACITY_AND_RETENTION_2026.md) adds a
+default 100,000 rows / 64 MiB actual UTF-8 JSON / 16 KiB new-entry limit at the
+existing SQL boundary. It preserves historical rows and rejects saturation in
+the same governance transaction. Startup and offline migration verify initialized
+counters against retained data without resetting discrepancies. Store-API prefix
+retention refuses holds, retained operations/links, nonterminal tasks and pending
+reservations, and keeps the chain head. Privileged raw SQL deletion and old
+retention binaries remain outside that API guarantee; production deletion stays
+forbidden. Local SQLite/PostgreSQL test receipts are source-associated separately;
+consult the selected follow-up head for CI. This is PARTIALLY TESTED retention,
+not independently accepted custody or a bound on all database/evidence storage.
 
 The stream unit's recorded final local SQLite/PostgreSQL regression had 228 passed and 2
 SQLite-only skips for PostgreSQL trigger-visibility checks; the PostgreSQL cases

@@ -10,6 +10,7 @@ behaviour SqliteStore guarantees. Run a disposable Postgres first, e.g.:
 """
 
 import os
+
 import pytest
 
 PG_DSN = os.getenv("AGENTBRIDGE_TEST_PG")
@@ -23,7 +24,7 @@ def store():
     s = PostgresStore(PG_DSN)
     # clean slate
     with s._lock, s._db.cursor() as cur:
-        cur.execute("DROP TABLE IF EXISTS identities, budgets, audit")
+        cur.execute("DROP TABLE IF EXISTS identities, budgets, audit, audit_capacity_policy_v1")
     s._init_schema()
     yield s
     s.close()
@@ -51,10 +52,12 @@ def test_audit_is_append_only_and_ordered(store):
     rows = store.load_audit()
     assert [r["seq"] for r in rows] == [0, 1, 2]
     assert rows[0]["decision"] == "allow"  # original preserved, not overwritten
+    from src.governance.audit_trust import AuditTrustStore
+    assert AuditTrustStore(store).capacity()["used_records"] == 3
 
 
 def test_make_store_selects_postgres():
-    from src.governance.store import make_store, PostgresStore
+    from src.governance.store import PostgresStore, make_store
     s = make_store(PG_DSN)
     assert isinstance(s, PostgresStore)
     s.close()
@@ -72,7 +75,7 @@ def _reset_schema():
     from src.governance.store import PostgresStore
     s = PostgresStore(PG_DSN)
     with s._lock, s._db.cursor() as cur:
-        cur.execute("DROP TABLE IF EXISTS identities, budgets, audit")
+        cur.execute("DROP TABLE IF EXISTS identities, budgets, audit, audit_capacity_policy_v1")
     s._init_schema()
     s.close()
 
@@ -84,8 +87,8 @@ def _run(workers):
 
 
 def test_pg_audit_chain_does_not_fork_across_connections():
-    from src.governance.store import PostgresStore
     from src.governance.audit import AuditLog
+    from src.governance.store import PostgresStore
     _reset_schema()
     stores, slock = [], threading.Lock()
     n_workers, per_worker = 6, 20
@@ -116,8 +119,8 @@ def test_pg_audit_chain_does_not_fork_across_connections():
 
 
 def test_pg_budget_never_overspends_across_connections():
+    from src.governance.budget import Budget, BudgetManager
     from src.governance.store import PostgresStore
-    from src.governance.budget import BudgetManager, Budget
     _reset_schema()
     seed = BudgetManager(PostgresStore(PG_DSN))
     seed.set_budget("agent-X", Budget(spend_limit=10.0, rate_limit=10_000))

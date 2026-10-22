@@ -24,7 +24,9 @@ pending-PR statements are not current status.
   persist across replicas. They preserve UNKNOWN exposure and historical usage.
 - The durable task-status SDK has namespace-wide retained-task count and UTF-8
   event-byte caps with control-event headroom. It never executes a task or cancels
-  an external effect. These bounds do not include audit/evidence bytes.
+  an external effect. Separate [audit payload limits](AUDIT_CAPACITY_AND_RETENTION_2026.md)
+  count retained audit rows and UTF-8 JSON at the SQL boundary; other evidence
+  journals, database/index/WAL/backup overhead and custody remain separate gates.
 - The opt-in [tenant-native status stream](tenant-task-streams.md) adds shared
   authority-database/namespace allocations across replicas, tenants and stable
   owners. It observes existing task history and does not execute or resume work.
@@ -56,7 +58,7 @@ requires its own exact-head evidence; the executable task requirements remain op
 6. End-to-end service latency, overload behavior and operational resource limits.
    A synthetic translation benchmark or SQL smoke threshold is not an SLO.
 7. Complete tenant coverage for evidence, reconciliation and background services,
-   retained audit/evidence-byte bounds, protected retention/custody and incident
+   remaining evidence-byte bounds, reference-indexed retention/custody and incident
    operations. The opt-in authenticated tenant HTTP factory is bounded; standalone
    owner IDs do not authenticate a network caller. Qualify frontdoor physical
    connection limits and coordinated stream stop/drain/restore; shared SQL

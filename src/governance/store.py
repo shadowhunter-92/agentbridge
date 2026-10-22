@@ -24,6 +24,10 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
 
+from .audit_capacity import install_postgres as _install_postgres_audit_capacity
+from .audit_capacity import install_sqlite as _install_sqlite_audit_capacity
+from .audit_capacity import retention_guard as _audit_retention_guard
+from .audit_capacity import verify_retained_usage as _verify_audit_retained_usage
 from .resilience import retry_transient
 
 
@@ -217,7 +221,11 @@ class SqliteStore(GovernanceStore):
         _enable_wal()
         # Compatible with main's bounded WAL startup retry; retain the R4
         # resilience helper and preserve the same fail-closed retry scope.
-        self._init_schema()
+        try:
+            self._init_schema()
+        except BaseException:
+            self._db.close()
+            raise
 
     def _init_schema(self):
         with self._lock:
@@ -248,7 +256,9 @@ class SqliteStore(GovernanceStore):
                 CREATE INDEX IF NOT EXISTS idx_approvals_agent ON approvals(agent_id);
                 """
             )
-            self._db.commit()
+            with sql_atomic(self):
+                _install_sqlite_audit_capacity(self._db)
+                _verify_audit_retained_usage(self._db, postgres=False)
 
     def upsert_identity(self, agent_id, public_key_hex, revoked=False):
         with sql_atomic(self):
@@ -324,6 +334,11 @@ class SqliteStore(GovernanceStore):
                 "SELECT 1 FROM audit_holds WHERE enabled=1 LIMIT 1"
             ).fetchone():
                 raise PermissionError("durable legal hold blocks audit deletion")
+            _audit_retention_guard(self._db, postgres=False)
+            # Keep a durable head so a later append cannot restart at genesis.
+            head = self._db.execute("SELECT max(seq) AS seq FROM audit").fetchone()["seq"]
+            if head is not None and seq > head:
+                raise PermissionError("audit retention must preserve the current chain head")
             cur = self._db.execute("DELETE FROM audit WHERE seq < ?", (seq,))
             return cur.rowcount or 0
 
@@ -475,6 +490,9 @@ class PostgresStore(GovernanceStore):
         # using one database-wide transaction-scoped advisory lock.
         with self._lock, self._db.transaction(), self._db.cursor() as cur:
             cur.execute("SELECT pg_advisory_xact_lock(%s)", (911004,))
+            # Fence before DDL/table ownership as well as the counter scan.
+            # Managed and direct audit writers acquire the same fence first.
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (911001,))
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS identities (
@@ -502,6 +520,8 @@ class PostgresStore(GovernanceStore):
                 CREATE INDEX IF NOT EXISTS idx_approvals_agent ON approvals(agent_id);
                 """
             )
+            _install_postgres_audit_capacity(cur)
+            _verify_audit_retained_usage(cur, postgres=True)
 
     def upsert_identity(self, agent_id, public_key_hex, revoked=False):
         with self._lock, self._db.cursor() as cur:
@@ -581,6 +601,12 @@ class PostgresStore(GovernanceStore):
                 cur.execute("SELECT 1 FROM audit_holds WHERE enabled=true LIMIT 1")
                 if cur.fetchone():
                     raise PermissionError("durable legal hold blocks audit deletion")
+            _audit_retention_guard(cur, postgres=True)
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (self._AUDIT_LOCK_KEY,))
+            cur.execute("SELECT max(seq) AS seq FROM audit")
+            head = cur.fetchone()["seq"]
+            if head is not None and seq > head:
+                raise PermissionError("audit retention must preserve the current chain head")
             cur.execute("DELETE FROM audit WHERE seq < %s", (seq,))
             return cur.rowcount or 0
 
