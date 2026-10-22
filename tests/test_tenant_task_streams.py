@@ -406,9 +406,32 @@ async def test_stalled_asgi_body_send_times_out_and_releases_capacity(tenant_app
 @pytest.mark.asyncio
 async def test_quiet_stream_renews_across_multiple_leases_and_client_disconnect_releases(tenant_app, monkeypatch, loopback_server):
     seed_task(tenant_app)
-    local = StreamLimits(poll_seconds=.01, heartbeat_seconds=.03, max_seconds=2)
-    first = application(tenant_app, monkeypatch, local_limits=local, max_streams=1, max_seconds=2)
-    second = application(tenant_app, monkeypatch, local_limits=local, max_streams=1, max_seconds=2)
+    lease_seconds = 1
+    local = StreamLimits(poll_seconds=.01, heartbeat_seconds=.03, max_seconds=15)
+    first = application(tenant_app, monkeypatch, local_limits=local, max_streams=1, lease_seconds=lease_seconds, max_seconds=15)
+    second = application(tenant_app, monkeypatch, local_limits=local, max_streams=1, lease_seconds=lease_seconds, max_seconds=15)
+    service = first.state.stream_leases
+    renewed, released = threading.Event(), threading.Event()
+    renewal_lock, renewal_expiries = threading.Lock(), []
+    renew, release = service.renew, service.release
+
+    def observe_renewal(principal, lease):
+        renew(principal, lease)
+        with service._atomic() as cur:
+            expiry = service._execute(cur, "SELECT expires FROM stream_leases_v1 WHERE identity=?", (lease.identity,)).fetchone()["expires"]
+        with renewal_lock:
+            renewal_expiries.append(expiry)
+            # Observe committed DB-time progress, not buffered client bytes or
+            # a count of renewals that could all occur within a single lease.
+            if expiry - renewal_expiries[0] > 2 * lease_seconds:
+                renewed.set()
+
+    def observe_release(lease):
+        release(lease)
+        released.set()
+
+    monkeypatch.setattr(service, "renew", observe_renewal)
+    monkeypatch.setattr(service, "release", observe_release)
     with loopback_server(lambda _: first) as (url_a, _), loopback_server(lambda _: second) as (url_b, _):
         async with httpx.AsyncClient(trust_env=False, timeout=3) as client:
             raw, headers = signed(tenant_app, data={"request_scope":"task.stream","task_id":"task"})
@@ -416,15 +439,24 @@ async def test_quiet_stream_renews_across_multiple_leases_and_client_disconnect_
                 assert response.status_code == 200
                 lines = response.aiter_lines()
                 assert (await first_event(lines))["sequence"] == 0
-                started, heartbeats = time.monotonic(), 0
-                async for line in lines:
-                    heartbeats += line == ": keep-alive"
-                    if time.monotonic()-started >= .5:
-                        break
+                heartbeats = 0
+                # Leave headroom below the independent absolute lifetime. EOF
+                # is a failure here, even if earlier heartbeats were buffered.
+                async with asyncio.timeout(8):
+                    async for line in lines:
+                        heartbeats += line == ": keep-alive"
+                        if renewed.is_set() and heartbeats >= 2:
+                            break
+                    else:
+                        pytest.fail("stream closed before renewal across two full lease windows")
                 assert heartbeats >= 2
+                with renewal_lock:
+                    assert renewal_expiries[-1] - renewal_expiries[0] > 2 * lease_seconds
+                assert not released.is_set()
                 assert first.state.stream_leases.usage()["active_stream_allocations"] == 1
                 raw2, headers2 = signed(tenant_app, data={"request_scope":"task.stream","task_id":"task"})
                 assert (await client.post(url_b+"/v2/tasks/stream", content=raw2, headers=headers2)).status_code == 429
+            assert await asyncio.to_thread(released.wait, 2)
             deadline = time.monotonic()+2
             while first.state.stream_leases.usage()["active_stream_allocations"] or first.state.status_streams.total:
                 assert time.monotonic() < deadline
