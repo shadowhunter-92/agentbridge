@@ -100,6 +100,14 @@ def _supported_schema(store, cur):
                 qualified = qualified_postgres_routines(cur)
             except AuditCapacityDenied as exc:
                 raise TenantMigrationDenied("unsupported audit capacity migration routine") from exc
+            from .checkpoint_capacity import TABLE as checkpoint_policy_table
+            if checkpoint_policy_table in _tables(store, cur):
+                from .checkpoint_capacity import CheckpointCapacityDenied
+                from .checkpoint_capacity import qualified_postgres_routines as checkpoint_routines
+                try:
+                    qualified += checkpoint_routines(cur)
+                except CheckpointCapacityDenied as exc:
+                    raise TenantMigrationDenied("unsupported checkpoint capacity migration routine") from exc
             cur.execute(
                 "SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace "
                 "WHERE n.nspname=current_schema() AND NOT (p.proname=ANY(%s)) LIMIT 1",
@@ -121,6 +129,11 @@ def _snapshot(store, cur, *, tables=None):
         verify_retained_usage(cur, postgres=isinstance(store, PostgresStore))
     except AuditCapacityDenied as exc:
         raise TenantMigrationDenied("audit capacity counters do not preserve stored history") from exc
+    from .checkpoint_capacity import CheckpointCapacityDenied, verify_if_installed
+    try:
+        verify_if_installed(cur, postgres=isinstance(store, PostgresStore))
+    except CheckpointCapacityDenied as exc:
+        raise TenantMigrationDenied("unsupported checkpoint capacity snapshot") from exc
     selected = _tables(store, cur) if tables is None else tables
     manifest = {}
     for table in selected:
