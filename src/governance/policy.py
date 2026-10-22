@@ -56,6 +56,66 @@ class PolicyEngine:
                   dst_protocol: Optional[str] = None,
                   request_scope: Optional[str] = None,
                   principal=None, target_id=None) -> Decision:
+        denial = self._current_identity_policy(
+            agent_id=agent_id, capability=capability, signed_data=signed_data,
+            signature=signature, principal=principal, target_id=target_id,
+        )
+        if denial is not None:
+            return denial
+
+        approval_required = False
+        # Keep public admission's approval/rule/budget order and reasons exact.
+        if self.approvals and self.approvals.requires_approval(capability):
+            approval_required = True
+            if not self.approvals.is_granted(agent_id, capability, request_scope):
+                return Decision(False, f"approval required for '{capability}'", needs_approval=True)
+
+        rule = self._current_rule(agent_id, capability, cost, src_protocol, dst_protocol)
+        if rule is not None:
+            if not rule.allowed:
+                return Decision(False, rule.reason)
+            if rule.needs_approval:
+                approval_required = True
+                granted = self.approvals and self.approvals.is_granted(agent_id, capability, request_scope)
+                if not granted:
+                    return Decision(False, rule.reason, needs_approval=True)
+
+        ok, why = self.budgets.can_afford(agent_id, cost)
+        if not ok:
+            return Decision(False, why)
+        return Decision(True, "authorized", approval_required=approval_required)
+
+    def current_dispatch_policy(self, *, agent_id, capability, cost, src_protocol, dst_protocol,
+                                principal, target_id):
+        """Current identity/scope/rules only; this is not another admission.
+
+        The concrete dispatcher must validate its sealed admission, already
+        consumed grant and held reservation. This observation issues no grant,
+        reserves nothing, and must never be accepted as execution capability.
+        """
+        denial = self._current_identity_policy(
+            agent_id=agent_id, capability=capability, principal=principal, target_id=target_id,
+        )
+        if denial is not None:
+            return denial
+        required = bool(self.approvals and self.approvals.requires_approval(capability))
+        rule = self._current_rule(agent_id, capability, cost, src_protocol, dst_protocol)
+        if rule is not None:
+            if not rule.allowed:
+                return Decision(False, rule.reason)
+            required |= bool(rule.needs_approval)
+        return Decision(True, "current dispatch policy allowed", approval_required=required)
+
+    def _current_rule(self, agent_id, capability, cost, src_protocol, dst_protocol):
+        if self.policy_set is None:
+            return None
+        return self.policy_set.evaluate(PolicyContext(
+            agent_id=agent_id, capability=capability, cost=cost,
+            src_protocol=src_protocol, dst_protocol=dst_protocol,
+        ))
+
+    def _current_identity_policy(self, *, agent_id, capability, signed_data=None, signature=None,
+                                 principal=None, target_id=None):
         if self.authority is None:
             from ..authority_mode import require_legacy_authority
             require_legacy_authority()
@@ -102,29 +162,4 @@ class PolicyEngine:
             if allowed is not None and capability not in allowed:
                 return Decision(False, f"capability '{capability}' not permitted for '{agent_id}'")
 
-        approval_required = False
-        # 3) human approval for sensitive capabilities
-        if self.approvals and self.approvals.requires_approval(capability):
-            approval_required = True
-            if not self.approvals.is_granted(agent_id, capability, request_scope):
-                return Decision(False, f"approval required for '{capability}'", needs_approval=True)
-
-        # 4) declarative policy rules (policy engine v2), if configured
-        if self.policy_set is not None:
-            ctx = PolicyContext(agent_id=agent_id, capability=capability, cost=cost,
-                                src_protocol=src_protocol, dst_protocol=dst_protocol)
-            r = self.policy_set.evaluate(ctx)
-            if not r.allowed:
-                return Decision(False, r.reason)
-            if r.needs_approval:
-                approval_required = True
-                granted = self.approvals and self.approvals.is_granted(agent_id, capability, request_scope)
-                if not granted:
-                    return Decision(False, r.reason, needs_approval=True)
-
-        # 5) budget (capacity pre-check; the atomic reservation happens in the gateway)
-        ok, why = self.budgets.can_afford(agent_id, cost)
-        if not ok:
-            return Decision(False, why)
-
-        return Decision(True, "authorized", approval_required=approval_required)
+        return None

@@ -14,12 +14,14 @@ import time
 from dataclasses import asdict
 
 from .audit import AuditEntry, AuditLog, _now
+from .budget import BudgetManager
 from .destination_receipts import UntrustedReceipt, verify_destination_receipt
-from .operation_ledger import OperationLedger
+from .operation_ledger import OperationConflict, OperationLedger
 from .operator_review import UntrustedReviewer, verify_operator_review
+from .owned_settlement import lock_unknown_operation, settle_owned_reservation
 from .readback_attestations import UntrustedReadback, verify_readback_attestation
 from .signing_trust_journal import SigningTrustJournal, TrustJournalDenied
-from .store import PostgresStore, SqliteStore
+from .store import PostgresStore, SqliteStore, sql_atomic
 
 
 class ReconciliationError(ValueError):
@@ -35,27 +37,49 @@ class Reconciliation:
         self.trust_journal = trust_journal
         self.store = store
         self.operations = OperationLedger(store)
-        if isinstance(store, SqliteStore):
-            with store._lock:
-                store._db.execute(
-                    "CREATE TABLE IF NOT EXISTS operation_reconciliations "
-                    "(agent_id TEXT NOT NULL, operation_id TEXT NOT NULL, "
-                    "result TEXT NOT NULL, external_reference TEXT NOT NULL, "
-                    "evidence_sha256 TEXT NOT NULL, reviewer TEXT NOT NULL, "
-                    "created REAL NOT NULL, PRIMARY KEY(agent_id, operation_id))"
-                )
-        elif isinstance(store, PostgresStore):
-            with store._lock, store._db.transaction(), store._db.cursor() as cur:
-                cur.execute("SELECT pg_advisory_xact_lock(%s)", (911004,))
-                cur.execute(
-                    "CREATE TABLE IF NOT EXISTS operation_reconciliations "
-                    "(agent_id TEXT NOT NULL, operation_id TEXT NOT NULL, "
-                    "result TEXT NOT NULL, external_reference TEXT NOT NULL, "
-                    "evidence_sha256 TEXT NOT NULL, reviewer TEXT NOT NULL, "
-                    "created DOUBLE PRECISION NOT NULL, PRIMARY KEY(agent_id, operation_id))"
-                )
-        else:
+        if not isinstance(store, (SqliteStore, PostgresStore)):
             raise ReconciliationError("durable database required")
+        with sql_atomic(store):
+            execute = store._db.execute
+            if isinstance(store, PostgresStore):
+                execute("SELECT pg_advisory_xact_lock(%s)", (911004,))
+            stamp = "DOUBLE PRECISION" if isinstance(store, PostgresStore) else "REAL"
+            execute("CREATE TABLE IF NOT EXISTS operation_reconciliations ("
+                    "agent_id TEXT NOT NULL,operation_id TEXT NOT NULL,result TEXT NOT NULL,"
+                    "external_reference TEXT NOT NULL,evidence_sha256 TEXT NOT NULL,reviewer TEXT NOT NULL,"
+                    "created " + stamp + " NOT NULL,PRIMARY KEY(agent_id,operation_id))")
+            execute("CREATE TABLE IF NOT EXISTS reconciliation_readbacks (agent_id TEXT NOT NULL,"
+                    "operation_id TEXT NOT NULL,digest TEXT NOT NULL,PRIMARY KEY(agent_id,operation_id))")
+            execute("CREATE TABLE IF NOT EXISTS reconciliation_evidence (agent_id TEXT NOT NULL,"
+                    "operation_id TEXT NOT NULL,bundle TEXT NOT NULL,PRIMARY KEY(agent_id,operation_id))")
+
+    def _execute(self, query, values=()):
+        return self.store._db.execute(query.replace("?", "%s") if isinstance(self.store, PostgresStore) else query, values)
+
+    def record_task(self, kernel, completion, *, review, operator_session):
+        """Task-aware settlement requires sealed RO evidence and signed review."""
+        from .queued_task_dispatch import _finish_verified
+        runtime = kernel._runtimes.get(completion.tenant_id)
+        if runtime is None or runtime.store is not self.store or review is None:
+            raise ReconciliationError("same-store task evidence and independent operator review required")
+        return _finish_verified(kernel, completion, review=review, operator_session=operator_session)
+
+    def _has_task_links(self):
+        if isinstance(self.store, PostgresStore):
+            return self._execute("SELECT to_regclass(current_schema()||'.task_operation_links_v1') AS name").fetchone()["name"] is not None
+        return self._execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='task_operation_links_v1'").fetchone() is not None
+
+    def _trust_before_operation(self, cur, destination_key_id, observer_key_id):
+        # A trust writer can queue on the authority-compatibility fence. Acquire
+        # it before operation/budget, and never while a separate execution guard
+        # is retained by this worker during queued completion.
+        if self.trust_journal is None:
+            return {}
+        try:
+            return self.trust_journal.settlement_keys(cur, destination_key_id=destination_key_id,
+                                                       observer_key_id=observer_key_id)
+        except TrustJournalDenied as exc:
+            raise ReconciliationError("signing trust policy denied settlement") from exc
 
     def record(
         self,
@@ -86,183 +110,52 @@ class Reconciliation:
         ):
             raise ReconciliationError("independent evidence SHA256 digest required")
         store = self.store
-        if isinstance(store, SqliteStore):
-            with store._lock:
-                db = store._db
-                db.execute("BEGIN IMMEDIATE")
+        with sql_atomic(store):
+            cur = store._db.cursor()
+            try:
+                trust_context = self._trust_before_operation(cur, destination_key_id, observer_key_id)
                 try:
-                    row = db.execute(
-                        "SELECT state FROM agent_operations WHERE agent_id=? AND operation_id=?",
-                        (agent_id, operation_id),
-                    ).fetchone()
-                    if not row or row["state"] != "unknown":
-                        raise ReconciliationError("operation missing or no longer unknown")
-                    readback_digest, trust_context = self._verify_evidence(
-                        db.cursor(),
-                        agent_id=agent_id,
-                        operation_id=operation_id,
-                        result=result,
-                        external_reference=external_reference,
-                        evidence_sha256=evidence_sha256,
-                        reviewer=reviewer,
-                        destination_receipt=destination_receipt,
-                        readback_attestation=readback_attestation,
-                        reviewer_signature_hex=reviewer_signature_hex,
-                        destination_key_id=destination_key_id,
-                        observer_key_id=observer_key_id,
-                    )
-                    db.execute(
-                        "INSERT INTO operation_reconciliations VALUES(?,?,?,?,?,?,?)",
-                        (
-                            agent_id,
-                            operation_id,
-                            result,
-                            external_reference,
-                            evidence_sha256,
-                            reviewer,
-                            time.time(),
-                        ),
-                    )
-                    db.execute(
-                        "UPDATE agent_operations SET state=?,updated=? WHERE agent_id=? AND operation_id=?",
-                        (result, time.time(), agent_id, operation_id),
-                    )
-                    reservation = db.execute(
-                        "SELECT token FROM operation_reservations WHERE agent_id=? AND operation_id=?",
-                        (agent_id, operation_id),
-                    ).fetchone()
-                    if reservation:
-                        budget_row = db.execute("SELECT state FROM budgets WHERE agent_id=?", (agent_id,)).fetchone()
-                        if not budget_row:
-                            raise ReconciliationError("budget missing; cannot settle")
-                        state = json.loads(budget_row["state"])
-                        token = reservation["token"]
-                        amount = state.get("reserved", {}).pop(token, None)
-                        if amount is None:
-                            raise ReconciliationError("reserved budget token missing; cannot settle")
-                        if result == "succeeded":
-                            state["spent"] = state.get("spent", 0.0) + amount
-                            state.setdefault("calls", []).append(time.time())
-                        db.execute(
-                            "UPDATE budgets SET state=? WHERE agent_id=?",
-                            (json.dumps(state), agent_id),
-                        )
-                    if readback_digest:
-                        db.execute(
-                            "CREATE TABLE IF NOT EXISTS reconciliation_readbacks (agent_id TEXT NOT NULL, operation_id TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(agent_id,operation_id))"
-                        )
-                        db.execute(
-                            "INSERT INTO reconciliation_readbacks VALUES(?,?,?)",
-                            (agent_id, operation_id, readback_digest),
-                        )
-                    self._append_settlement_evidence(
-                        db.cursor(),
-                        agent_id=agent_id,
-                        operation_id=operation_id,
-                        result=result,
-                        external_reference=external_reference,
-                        evidence_sha256=evidence_sha256,
-                        reviewer=reviewer,
-                        destination_receipt=destination_receipt,
-                        readback_attestation=readback_attestation,
-                        reviewer_signature_hex=reviewer_signature_hex,
-                        readback_digest=readback_digest,
-                        trust_context=trust_context,
-                    )
-                    db.execute("COMMIT")
-                except BaseException:
-                    db.execute("ROLLBACK")
-                    raise
-        else:
-            with store._lock, store._db.transaction(), store._db.cursor() as cur:
-                cur.execute(
-                    "SELECT state FROM agent_operations WHERE agent_id=%s AND operation_id=%s FOR UPDATE",
-                    (agent_id, operation_id),
-                )
-                row = cur.fetchone()
-                if not row or row["state"] != "unknown":
-                    raise ReconciliationError("operation missing or no longer unknown")
+                    lock_unknown_operation(store, agent_id, operation_id)
+                except OperationConflict as exc:
+                    raise ReconciliationError("operation missing or no longer unknown") from exc
+                # A task-linked operation needs its concrete result/history
+                # participant, not this legacy manual digest-only path.
+                if getattr(store, "tenant_id", None) and self._has_task_links():
+                    row = self._execute("SELECT 1 FROM task_operation_links_v1 WHERE agent_id=? AND operation_id=? LIMIT 1",
+                                        (agent_id, operation_id)).fetchone()
+                    if row is not None:
+                        raise ReconciliationError("task-linked operation requires task-aware verified reconciliation")
                 readback_digest, trust_context = self._verify_evidence(
-                    cur,
-                    agent_id=agent_id,
-                    operation_id=operation_id,
-                    result=result,
-                    external_reference=external_reference,
-                    evidence_sha256=evidence_sha256,
-                    reviewer=reviewer,
-                    destination_receipt=destination_receipt,
-                    readback_attestation=readback_attestation,
-                    reviewer_signature_hex=reviewer_signature_hex,
-                    destination_key_id=destination_key_id,
-                    observer_key_id=observer_key_id,
+                    cur, agent_id=agent_id, operation_id=operation_id, result=result,
+                    external_reference=external_reference, evidence_sha256=evidence_sha256, reviewer=reviewer,
+                    destination_receipt=destination_receipt, readback_attestation=readback_attestation,
+                    reviewer_signature_hex=reviewer_signature_hex, destination_key_id=destination_key_id,
+                    observer_key_id=observer_key_id, trust_context=trust_context,
                 )
-                cur.execute(
-                    "INSERT INTO operation_reconciliations VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                    (
-                        agent_id,
-                        operation_id,
-                        result,
-                        external_reference,
-                        evidence_sha256,
-                        reviewer,
-                        time.time(),
-                    ),
-                )
-                cur.execute(
-                    "UPDATE agent_operations SET state=%s,updated=%s WHERE agent_id=%s AND operation_id=%s",
-                    (result, time.time(), agent_id, operation_id),
-                )
-                cur.execute(
-                    "SELECT token FROM operation_reservations WHERE agent_id=%s AND operation_id=%s",
-                    (agent_id, operation_id),
-                )
-                reservation = cur.fetchone()
-                if reservation:
-                    cur.execute(
-                        "SELECT pg_advisory_xact_lock(hashtext(%s))",
-                        (f"budget:{agent_id}",),
-                    )
-                    cur.execute(
-                        "SELECT state FROM budgets WHERE agent_id=%s FOR UPDATE",
-                        (agent_id,),
-                    )
-                    budget_row = cur.fetchone()
-                    if not budget_row:
-                        raise ReconciliationError("budget missing; cannot settle")
-                    state = json.loads(budget_row["state"])
-                    token = reservation["token"]
-                    amount = state.get("reserved", {}).pop(token, None)
-                    if amount is None:
-                        raise ReconciliationError("reserved budget token missing; cannot settle")
-                    if result == "succeeded":
-                        state["spent"] = state.get("spent", 0.0) + amount
-                        state.setdefault("calls", []).append(time.time())
-                    cur.execute(
-                        "UPDATE budgets SET state=%s WHERE agent_id=%s",
-                        (json.dumps(state), agent_id),
-                    )
+                self._execute("INSERT INTO operation_reconciliations VALUES(?,?,?,?,?,?,?)",
+                              (agent_id, operation_id, result, external_reference, evidence_sha256, reviewer, time.time()))
+                reservation = self._execute("SELECT token FROM operation_reservations WHERE agent_id=? AND operation_id=?",
+                                            (agent_id, operation_id)).fetchone()
+                if reservation is not None:
+                    try:
+                        settle_owned_reservation(store, BudgetManager(store), self.operations,
+                                                 agent_id=agent_id, operation_id=operation_id,
+                                                 token=reservation["token"], outcome=result)
+                    except (OperationConflict, ValueError) as exc:
+                        raise ReconciliationError("reserved budget token missing; cannot settle") from exc
+                else:
+                    self.operations.finish(agent_id, operation_id, result)
                 if readback_digest:
-                    cur.execute(
-                        "CREATE TABLE IF NOT EXISTS reconciliation_readbacks (agent_id TEXT NOT NULL, operation_id TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(agent_id,operation_id))"
-                    )
-                    cur.execute(
-                        "INSERT INTO reconciliation_readbacks VALUES(%s,%s,%s)",
-                        (agent_id, operation_id, readback_digest),
-                    )
+                    self._execute("INSERT INTO reconciliation_readbacks VALUES(?,?,?)", (agent_id, operation_id, readback_digest))
                 self._append_settlement_evidence(
-                    cur,
-                    agent_id=agent_id,
-                    operation_id=operation_id,
-                    result=result,
-                    external_reference=external_reference,
-                    evidence_sha256=evidence_sha256,
-                    reviewer=reviewer,
-                    destination_receipt=destination_receipt,
-                    readback_attestation=readback_attestation,
-                    reviewer_signature_hex=reviewer_signature_hex,
-                    readback_digest=readback_digest,
+                    cur, agent_id=agent_id, operation_id=operation_id, result=result,
+                    external_reference=external_reference, evidence_sha256=evidence_sha256, reviewer=reviewer,
+                    destination_receipt=destination_receipt, readback_attestation=readback_attestation,
+                    reviewer_signature_hex=reviewer_signature_hex, readback_digest=readback_digest,
                     trust_context=trust_context,
                 )
+            finally:
+                cur.close()
         return {
             "agent_id": agent_id,
             "operation_id": operation_id,
@@ -288,21 +181,13 @@ class Reconciliation:
         reviewer_signature_hex,
         destination_key_id,
         observer_key_id,
+        trust_context=None,
     ):
-        trust_context = {}
         require_evidence = self.trust_journal is not None or os.getenv("AGENTBRIDGE_ENV", "").lower() in (
-            "prod",
-            "production",
+            "prod", "production",
         )
-        if self.trust_journal is not None:
-            try:
-                trust_context = self.trust_journal.settlement_keys(
-                    cur,
-                    destination_key_id=destination_key_id,
-                    observer_key_id=observer_key_id,
-                )
-            except TrustJournalDenied as exc:
-                raise ReconciliationError("signing trust policy denied settlement") from exc
+        if trust_context is None:
+            trust_context = self._trust_before_operation(cur, destination_key_id, observer_key_id)
         if require_evidence:
             key = trust_context.get("destination_key_hex") or os.getenv("AGENTBRIDGE_TRUSTED_DESTINATION_KEY_HEX")
             operation = self.operations.get(agent_id, operation_id)
@@ -389,11 +274,6 @@ class Reconciliation:
         p = "?" if isinstance(self.store, SqliteStore) else "%s"
         if isinstance(self.store, PostgresStore):
             cur.execute("SELECT pg_advisory_xact_lock(%s)", (self.store._AUDIT_LOCK_KEY,))
-        cur.execute(
-            "CREATE TABLE IF NOT EXISTS reconciliation_evidence ("
-            "agent_id TEXT NOT NULL, operation_id TEXT NOT NULL, bundle TEXT NOT NULL, "
-            "PRIMARY KEY(agent_id, operation_id))"
-        )
         cur.execute(
             f"INSERT INTO reconciliation_evidence VALUES({p},{p},{p})",
             (agent_id, operation_id, bundle_json),

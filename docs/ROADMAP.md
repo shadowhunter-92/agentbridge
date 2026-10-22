@@ -1,7 +1,7 @@
 # Roadmap and supported scope
 
 AgentBridge is an engineering alpha. The [current alpha status](CURRENT_ALPHA_STATUS.md)
-records the separate main, cumulative draft and evaluator pins and open work.
+records the merged main, historical source/evaluator pins and open work.
 Historical sprint reports describe their own commits; their test counts and
 pending-PR statements are not current status.
 
@@ -17,7 +17,7 @@ pending-PR statements are not current status.
 - The offline Evidence verifier is installed as `agentbridge-verify-evidence`.
   Trust roots and expected action inputs must come from the verifier's operator.
 - OIDC/RBAC, Prometheus metrics and optional OpenTelemetry already exist.
-- The cumulative draft adds opt-in enrolled tenant SDK/HTTP authority, private SQL
+- Maintained main includes opt-in enrolled tenant SDK/HTTP authority, private SQL
   namespaces, bounded offline historical assignment and shared-SQL admission and
   settlement. Selected operator policy/signing/task mutations compose with SQL.
 - Operator-enabled aggregate tenant/human admission spend, rate and active caps
@@ -39,10 +39,13 @@ The [native queued-intent follow-up](TENANT_TASK_INTENTS_2026-10-17.md) accepts
 signed bounded provenance and submitted status/audit atomically. The later
 [private preparation and first-admission units](QUEUED_INTENT_PREPARATION_2026-10-18.md)
 revalidate current enrolled authority and atomically link a new operation,
-reservation and WORKING event. This is internal admission awaiting dispatch;
-UNKNOWN and its exposure remain. No public executable-task API, worker, results,
-settlement, tenant-aware recovery or remote cancellation is added. Each unit
-requires its own exact-head evidence; the executable task requirements remain open.
+reservation and WORKING event. The [private dispatch follow-up](QUEUED_DISPATCH_AND_RECOVERY_2026-10-22.md)
+adds one-shot synthetic execution, bounded immutable results and read-only
+success reconciliation on SQLite or PostgreSQL tenant accounting. It never
+automatically replays an uncertain effect. Local final qualification records
+830 passed/31 expected backend-specific skips, separate from selected-head CI.
+Public worker/network dispatch, historical-key recovery, authoritative absence
+proof and acknowledged remote cancellation remain open. Production remains NO-GO.
 
 1. Reference transport interoperability for each advertised SDK/version and
    supported behavior. The opt-in A2A 0.3 observer streams existing task status;

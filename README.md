@@ -18,16 +18,17 @@ budgets, approvals and audit history. The long-term goal is a portable trust
 layer that works **alongside** existing agent frameworks and gateways—not
 another all-in-one agent platform.
 
-> **Engineering alpha; production NO-GO.** The recorded `main` baseline is
-> `73aafd60a0eec121a10245a307a4a8ee268f7ed5`. This documentation describes the
-> recorded cumulative draft baseline `46777f8c953690fca81c6d11e7b70372b8dd5c77`
-> (PRs #56–#69), followed by queued acceptance and private preparation at
-> `893fdba4d3d1928bd66491affcb87e01a263b063` (draft PR #70). Private atomic
-> admission is separately verified at `08355255ee3fc96461d3d33942cb8f730e8d924b`
-> by seven workflows / 24 jobs. Later changes require their own selected-head
-> checks; see [audit payload capacity and retention](docs/AUDIT_CAPACITY_AND_RETENTION_2026.md).
-> These remain separate from `main` and the older local unsigned evaluator wheel.
-> Source integration does not establish a signed release or production acceptance.
+> **Engineering alpha; production NO-GO.** The recorded `main` is
+> `b0afb7f1da1634330747389e19c896fd7002bd83`, the approved merge of PR #70.
+> Tenant governance, queued acceptance/preparation/atomic admission and audit
+> payload capacity are incorporated there. Its 16 main CI jobs passed;
+> reviewed source `7415718` separately passed 24 jobs across seven workflows.
+> The [private dispatch follow-up](docs/QUEUED_DISPATCH_AND_RECOVERY_2026-10-22.md)
+> adds a bounded synthetic destination and readback recovery. Its exact selected
+> head needs its own checks; local tests are not production acceptance.
+> The [approved consolidation](docs/BRANCH_CONSOLIDATION_2026-10-22.md) retained
+> six remote branches and preserved all deleted heads in history and backup.
+> The older local evaluator wheel remains unsigned and unpublished.
 > [Current source, evidence and open gates](docs/CURRENT_ALPHA_STATUS.md) ·
 > [Documentation index](docs/README.md) · [Security policy](SECURITY.md)
 
@@ -53,14 +54,14 @@ outcome, reconciliation and auditability questions. Those guarantees remain
 
 ## At a glance
 
-| Capability | Cumulative draft scope | Qualification remaining |
+| Capability | Maintained implementation scope | Qualification remaining |
 | --- | --- | --- |
 | Canonical tool-call translation across six adapter families | Limited subset with explicit unsupported-feature rejection | Full protocol lifecycle/version matrix |
 | Agent signatures, budgets, policies and approval controls | Selected paths; opt-in enrolled tenant SDK/HTTP and shared-SQL admission/settlement | Remaining ingress, destination and adversarial qualification |
 | SQLite / PostgreSQL support | Bounded tenant namespaces, offline migration, admission caps, retained-task/event/audit-payload caps and shared tenant stream allocations | Remaining evidence bytes, large-history performance, protected retention, physical connection limits, live migration and HA |
 | Separately signed action receipt + readback verification | Tested in bounded sandbox / PostgreSQL paths | Independent administration and real destination acceptance |
 | Production network isolation, HA and full MCP/A2A conformance | **Not qualified** | **Still not qualified** |
-| Native queued tasks | Signed bounded acceptance; private current-authority preparation and atomic first admission with immutable operation linkage | Worker invocation, results, settlement, recovery and destination cancellation |
+| Native queued tasks | Signed acceptance and atomic admission; private one-shot synthetic dispatch, bounded result and read-only recovery | Public worker/transport, historical-key recovery, acknowledged remote cancellation and production qualification |
 | Enterprise managed service or formal certification | Not available | Not available |
 
 **Protocol families:** MCP, A2A, BeeAI ACP, OpenAI tool calling, Gemini tool
@@ -77,8 +78,8 @@ or non-sensitive data for the examples.
 ```bash
 git clone https://github.com/shadowhunter-92/agentbridge.git
 cd agentbridge
-# Pin the recorded main baseline for this basic example:
-git checkout --detach 73aafd60a0eec121a10245a307a4a8ee268f7ed5
+# Pin the recorded reviewed main for this basic example:
+git checkout --detach b0afb7f1da1634330747389e19c896fd7002bd83
 python -m venv .venv
 
 # Activate your virtual environment first:
@@ -90,15 +91,13 @@ python examples/quickstart.py
 python examples/demo_story.py
 ```
 
-This pins `main`, not the cumulative tenant draft. For that draft, select
-`08355255ee3fc96461d3d33942cb8f730e8d924b` explicitly and use its documented
-opt-in tenant factory. Editable source installation is not installation of the
-local evaluator wheel or a signed public release. The main CI badge above tracks
-`main`; it does not attest to the selected draft. See [source pins](docs/CURRENT_ALPHA_STATUS.md).
-That pin includes queued acceptance, private preparation and
-[first-admission linkage](docs/QUEUED_INTENT_PREPARATION_2026-10-18.md).
-It adds no executable task API. The later audit-capacity follow-up is outside
-that pin and needs the selected follow-up head's own evidence.
+This pins reviewed `main`, including opt-in tenant governance, queued acceptance,
+private preparation, [first-admission linkage](docs/QUEUED_INTENT_PREPARATION_2026-10-18.md)
+and audit payload limits. Use the documented opt-in tenant factory for tenant
+features. The private dispatch addition belongs to this later follow-up and
+requires its own selected-head evidence. Editable source installation is separate
+from the older local evaluator wheel or a signed public release. The CI badge
+tracks `main`; see [exact source pins](docs/CURRENT_ALPHA_STATUS.md).
 
 To execute the local test suite:
 

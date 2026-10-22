@@ -13,11 +13,12 @@ import json
 import math
 import os
 import secrets
+import threading
 from dataclasses import dataclass
 from functools import wraps
 from types import MappingProxyType
 
-from ..api.trusted_targets import resolve_target, validate_cost
+from ..api.trusted_targets import resolve_queued_target, resolve_target, validate_cost
 from ..protocols import default_registry
 from ..protocols.durable_task_lifecycle import DurableTaskLifecycle
 from .audit import AuditLog
@@ -30,9 +31,11 @@ from .identity import IdentityRegistry
 from .operation_ledger import OperationLedger
 from .policy import PolicyEngine
 from .policy_rules import PolicyContext
+from .queued_sqlite_adapter import QueuedSqliteAdapter
 from .rbac import require
 from .store import sql_atomic
 from .task_admission import TaskAdmissionStore
+from .task_execution_store import TaskExecutionStore
 from .task_intents import IntentLimits, TaskIntentStore, parse_submission
 from .tenant_store import TenantStoreRegistry
 
@@ -84,11 +87,12 @@ class _Runtime:
     tasks: DurableTaskLifecycle
     task_intents: TaskIntentStore
     task_admissions: TaskAdmissionStore
+    task_executions: TaskExecutionStore
     audit_trust: AuditTrustStore
 
 
 class TenantKernel:
-    def __init__(self, directory, stores, *, costs, targets=None, deadline_seconds=30):
+    def __init__(self, directory, stores, *, costs, targets=None, deadline_seconds=30, queued_dispatch_adapters=None):
         if (
             isinstance(deadline_seconds, bool)
             or not isinstance(deadline_seconds, (int, float))
@@ -101,7 +105,23 @@ class TenantKernel:
         self.deadline_seconds = deadline_seconds
         self.registry = default_registry
         self._queued_preparation_key = secrets.token_bytes(32)
+        self._queued_dispatch_key = secrets.token_bytes(32)
+        self._queued_dispatch_slots = threading.BoundedSemaphore(1)
         self.environment = os.getenv("AGENTBRIDGE_ENV", "development").lower()
+        configured = queued_dispatch_adapters or {}
+        if configured and self.environment in ("prod", "production"):
+            raise AuthorityDenied("queued demo dispatch is nonproduction only")
+        self._queued_adapters = MappingProxyType({
+            tenant: MappingProxyType(dict(adapters)) for tenant, adapters in configured.items()
+        })
+        for tenant, adapters in self._queued_adapters.items():
+            for target_id, adapter in adapters.items():
+                if type(adapter) is not QueuedSqliteAdapter or tenant not in stores or \
+                        adapter.descriptor["tenant_id"] != tenant or adapter.descriptor["target_id"] != target_id or \
+                        (adapter.trust_journal is not None and adapter.trust_journal.store is not stores[tenant]):
+                    raise AuthorityDenied("exact operator-bound queued adapter required")
+        from .queued_manual_settlement import capture_authority_reader
+        self._queued_authority_reader = capture_authority_reader(directory) if self._queued_adapters else None
         self.costs = MappingProxyType(
             {t: MappingProxyType({c: validate_cost(v) for c, v in schedule.items()}) for t, schedule in costs.items()}
         )
@@ -141,11 +161,12 @@ class TenantKernel:
             tasks = DurableTaskLifecycle(store)
             task_intents = TaskIntentStore(store, tasks)
             task_admissions = TaskAdmissionStore(store)
+            task_executions = TaskExecutionStore(store)
             audit_trust = AuditTrustStore(store)
             store.seal_writes()
             runtimes[tenant] = _Runtime(
                 store, identities, budgets, approvals, rules, audit, policy, gateway, operations, tasks,
-                task_intents, task_admissions, audit_trust
+                task_intents, task_admissions, task_executions, audit_trust
             )
         self._runtimes = MappingProxyType(runtimes)
         for runtime in runtimes.values():
@@ -154,6 +175,70 @@ class TenantKernel:
     def session(self, principal, *, tenant_id=None):
         store = self.storage.resolve(principal, tenant_id=tenant_id)
         return TenantSession(self, principal, store.tenant_id)
+
+    def _queued_adapter(self, tenant_id, target_id, descriptor):
+        adapter = self._queued_adapters.get(tenant_id, {}).get(target_id)
+        if self.environment in ("prod", "production") or type(adapter) is not QueuedSqliteAdapter or \
+                adapter.descriptor != descriptor:
+            raise AuthorityDenied("current operator-bound nonproduction queued adapter required")
+        return adapter
+
+    def _dispatch_queued_once(self, tenant_id, owner_id, task_id, intent_sha256, admission_link_sha256):
+        from .queued_task_dispatch import dispatch_once
+        return dispatch_once(self, tenant_id, owner_id, task_id, intent_sha256, admission_link_sha256)
+
+    def _recover_queued(self, tenant_id, owner_id, task_id, intent_sha256, admission_link_sha256):
+        from .queued_task_dispatch import recover
+        return recover(self, tenant_id, owner_id, task_id, intent_sha256, admission_link_sha256)
+
+    def _cancel_queued(self, tenant_id, owner_id, task_id, intent_sha256, admission_link_sha256, *, reason="operator cancellation"):
+        from .queued_task_dispatch import cancel
+        return cancel(self, tenant_id, owner_id, task_id, intent_sha256, admission_link_sha256, reason=reason)
+
+    def _queued_execution(self, tenant_id, owner_id, task_id, intent_sha256, admission_link_sha256):
+        from .queued_task_dispatch import execution
+        return execution(self, tenant_id, owner_id, task_id, intent_sha256, admission_link_sha256)
+
+    def _prepare_queued_reconciliation(self, operator_session, owner_id, task_id, intent_sha256, admission_link_sha256):
+        """Bound RO evidence to review; no execution or settlement permission."""
+        from .queued_destination_contract import canonical_demo_action
+        from .queued_task_dispatch import _linked_history, _observe
+        from .trust_sdk import verify_queued_action_evidence
+        if not isinstance(operator_session, TenantSession) or operator_session.kernel is not self:
+            raise AuthorityDenied("current operator session required")
+        with self.directory.guard(operator_session.principal, write=False):
+            from .queued_manual_settlement import assert_authority_reader_configuration
+            assert_authority_reader_configuration(self)
+            runtime = operator_session._runtime("budgets:write")
+            refs = owner_id, task_id, intent_sha256, admission_link_sha256
+            _linked_history(self, runtime, *refs)
+            decision = runtime.task_executions.decision(owner_id, task_id)
+            if decision is None or decision["kind"] != "attempt":
+                raise AuthorityDenied("immutable attempted task required")
+            completion = _observe(self, runtime, refs, decision)
+            intent, _, _, _, _ = _linked_history(self, runtime, *refs)
+            verified = verify_queued_action_evidence(authorization=decision["authorization"], descriptor=decision["descriptor"],
+                action_bytes=canonical_demo_action(intent.record["submission"]["wire"]), **json.loads(completion.evidence_json))
+            return {"completion": completion, "review_material": {
+                "agent_id": verified.agent_id, "operation_id": verified.operation_id,
+                "fingerprint": verified.fingerprint, "outcome": verified.outcome,
+                "external_reference": verified.external_reference,
+                "destination_receipt_sha256": verified.destination_receipt_sha256, "readback_sha256": verified.readback_sha256}}
+
+    def _reconcile_queued(self, operator_session, completion, *, reviewer, reviewer_signature_hex):
+        """Private operator path; review never authorizes another destination call."""
+        from .reconciliation import Reconciliation
+        if not isinstance(operator_session, TenantSession) or operator_session.kernel is not self:
+            raise AuthorityDenied("current operator session required")
+        with self.directory.guard(operator_session.principal, write=False):
+            from .queued_manual_settlement import assert_authority_reader_configuration
+            assert_authority_reader_configuration(self)
+            runtime = operator_session._runtime("budgets:write")
+            if completion.tenant_id != operator_session.tenant_id:
+                raise AuthorityDenied("same tenant reconciliation required")
+        return Reconciliation(runtime.store).record_task(self, completion, operator_session=operator_session, review={
+            "reviewer": reviewer, "signature_hex": reviewer_signature_hex,
+        })
 
     def _prepare_queued_intent(self, tenant_id, owner_id, task_id, expected_intent_sha256):
         """Private preparation only; no execution or reusable request authority."""
@@ -201,18 +286,21 @@ class TenantSession:
     principal: Principal
     tenant_id: str
 
-    def _runtime(self, permission=None):
-        store = self.kernel.storage.resolve(self.principal, tenant_id=self.tenant_id)
-        if permission is not None:
-            role = {
+    def _require_permission(self, permission):
+        role = {
                 "platform_admin": "admin",
                 "tenant_admin": "admin",
                 "tenant_operator": "operator",
                 "tenant_viewer": "viewer",
             }.get(self.principal.kind)
-            if role is None:
-                raise AuthorityDenied("operator authority required")
-            require(role, permission)
+        if role is None:
+            raise AuthorityDenied("operator authority required")
+        require(role, permission)
+
+    def _runtime(self, permission=None):
+        store = self.kernel.storage.resolve(self.principal, tenant_id=self.tenant_id)
+        if permission is not None:
+            self._require_permission(permission)
         runtime = self.kernel._runtimes[self.tenant_id]
         if runtime.store is not store:
             raise AuthorityDenied("tenant runtime binding changed")
@@ -421,10 +509,12 @@ class TenantSession:
         if call.capability not in schedule:
             raise AuthorityDenied("operator-owned tenant cost schedule missing")
         cost = schedule[call.capability]
-        target = resolve_target(
+        target = resolve_queued_target(
             request.target_id, request.dst, call.capability, agent_id=principal.agent_id,
-            env=self.kernel._target_env[self.tenant_id],
+            env=self.kernel._target_env[self.tenant_id], tenant_id=self.tenant_id, wire=request.wire,
         )
+        if target is not None and target.get("kind") == "queued_fenced_sqlite_v2":
+            self.kernel._queued_adapter(self.tenant_id, request.target_id, target)
         # The full PolicyEngine gate may seed/prune budget state and request
         # approvals. Evaluate only existing pure rules here. Approval and budget
         # admission, policy refresh and target revalidation belong to execution.

@@ -27,9 +27,11 @@ from ..protocols import default_registry
 from ..protocols.registry import ProtocolRegistry
 from .approvals import ApprovalQueue
 from .audit import AuditEntry, AuditLog
+from .authority import AuthorityDenied
 from .budget import BudgetManager, _checked_cost
 from .identity import IdentityRegistry
 from .operation_ledger import OperationConflict, OperationLedger
+from .owned_settlement import lock_unknown_operation, settle_owned_reservation
 from .policy import Decision, PolicyEngine
 from .request_auth import canonical_payload
 from .store import PostgresStore, SqliteStore, sql_atomic
@@ -53,6 +55,15 @@ class _AdmissionRejected(Exception):
 
 
 class GovernanceGateway:
+    def _settle_queued_result(self, completion):
+        """Concrete bound RO evidence; no caller-supplied settlement callback."""
+        from .queued_task_dispatch import _finish_verified
+        kernel = getattr(self, "_queued_kernel", None)
+        if kernel is None or kernel._runtimes.get(completion.tenant_id, None) is None or \
+                kernel._runtimes[completion.tenant_id].gateway is not self:
+            raise AuthorityDenied("exact queued runtime gateway required")
+        return _finish_verified(kernel, completion)
+
     def __init__(self, *, identities: Optional[IdentityRegistry] = None,
                  budgets: Optional[BudgetManager] = None,
                  approvals: Optional[ApprovalQueue] = None,
@@ -105,12 +116,7 @@ class GovernanceGateway:
                 if admission.ledger is not None:
                     # Reconciliation locks operation -> budget -> audit. Match
                     # that order and never overwrite an already settled result.
-                    query = "SELECT state FROM agent_operations WHERE agent_id=? AND operation_id=?"
-                    if isinstance(store, PostgresStore):
-                        query = query.replace("?", "%s") + " FOR UPDATE"
-                    row = store._db.execute(query, (admission.agent_id, admission.operation_id)).fetchone()
-                    if not row or row["state"] != "unknown":
-                        raise OperationConflict("operation missing or already settled; inspect its durable outcome")
+                    lock_unknown_operation(store, admission.agent_id, admission.operation_id)
                 yield
             return
         # Caller-owned legacy embeddings with separate/in-memory participants
@@ -240,10 +246,16 @@ class GovernanceGateway:
 
     def _settle(self, admission):
         with self._atomic_state(admission):
-            if not self.budgets.commit(admission.agent_id, admission.token):
-                raise RuntimeError("budget reservation missing after invocation; reconcile outcome")
-            if admission.ledger is not None:
-                admission.ledger.finish(admission.agent_id, admission.operation_id, "succeeded")
+            store = self._shared_sql_store(admission.ledger)
+            if store is not None and admission.ledger is not None:
+                settle_owned_reservation(store, self.budgets, admission.ledger, agent_id=admission.agent_id,
+                                         operation_id=admission.operation_id, token=admission.token,
+                                         outcome="succeeded", expected_cost=admission.cost)
+            else:
+                if not self.budgets.commit(admission.agent_id, admission.token):
+                    raise RuntimeError("budget reservation missing after invocation; reconcile outcome")
+                if admission.ledger is not None:
+                    admission.ledger.finish(admission.agent_id, admission.operation_id, "succeeded")
             self._audit_admission(admission, "allow", admission.decision.reason, admission.cost, observe=False)
         self._observe_admission(admission, "allow")
         try:

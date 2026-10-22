@@ -1,4 +1,9 @@
-**New seven-workstream evidence register:** [INTERNAL_RELEASE_GATES_2026.md](INTERNAL_RELEASE_GATES_2026.md). Current internal release-gate additions are on draft PR #34 and have not been merged to main. Full production acceptance is still NO-GO.
+> Historical hardening-branch checkpoint. PR state, configuration examples and
+> pending-work statements below describe that earlier source. Use
+> [current alpha status](CURRENT_ALPHA_STATUS.md) for maintained behavior and
+> present execution restrictions. Production acceptance remains NO-GO.
+
+**Then-new seven-workstream evidence register:** [INTERNAL_RELEASE_GATES_2026.md](INTERNAL_RELEASE_GATES_2026.md). At this checkpoint, internal release-gate additions were on draft PR #34 and had not been merged to main.
 
 # AgentBridge: hardening release gates (October 2026)
 
