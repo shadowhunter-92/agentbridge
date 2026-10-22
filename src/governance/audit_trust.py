@@ -5,9 +5,9 @@ Never delete production audit history without an independently preserved and
 reviewed checkpoint and an authorized retention transaction.
 """
 import json
-import time
-from .store import SqliteStore, PostgresStore
+
 from .audit import AuditLog
+from .store import PostgresStore, SqliteStore
 
 
 class AuditTrustError(ValueError):
@@ -50,6 +50,16 @@ class AuditTrustStore:
         with store._lock,store._db.cursor() as c:
             c.execute("SELECT name FROM audit_holds WHERE enabled=true ORDER BY name")
             return [r["name"] for r in c.fetchall()]
+
+    def capacity(self):
+        """Inspect durable retained audit payload limits and accounted usage."""
+        from .audit_capacity import policy
+        return policy(self.store)
+
+    def set_capacity(self, *, max_records, max_bytes, max_entry_bytes, audit=None):
+        """Trusted operator library configuration; never prunes existing rows."""
+        from .audit_capacity import AuditLimits, policy
+        return policy(self.store, limits=AuditLimits(max_records, max_bytes, max_entry_bytes), audit=audit)
 
     def save_checkpoint(self,checkpoint,trusted_public_key_hex):
         if not isinstance(checkpoint,dict) or checkpoint.get("public_key_hex")!=trusted_public_key_hex:

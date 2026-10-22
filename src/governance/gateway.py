@@ -1,42 +1,55 @@
+"""Governance admission and conservative outcome accounting.
+
+Authorization, budget reservation, required approval consumption and operation
+claim precede invocation. An uncertain post-dispatch outcome retains UNKNOWN
+and reserved exposure; it is never automatically replayed. A pre-invocation
+abort releases its owned reservation and marks its claim failed.
+
+For one shared SQL store, definite-success settlement and pre-invocation abort
+commit budget, operation state and chained audit together. A remote effect is
+outside that local transaction. Legacy embeddings with separate/in-memory
+participants retain their weaker accounting contract.
 """
-GovernanceGateway — governance enforced IN the call path of the meta-bridge mesh.
 
-For every cross-protocol call:
-    authorize (identity + capability + approval + budget)
-      -> denied: audit(deny); if approval needed, open a pending request; raise.
-      -> allowed: RESERVE budget -> translate (any->any) -> invoke target
-                  -> success: COMMIT budget, consume approval grant, audit(allow)
-                  -> failure: RELEASE budget, audit(error), re-raise.
-
-Atomic reserve/commit closes the TOCTOU race. Protocol-agnostic — the moat in action.
-"""
-
-import time
-import json
+import asyncio
 import hashlib
+import json
+import logging
 import os
+import threading
+import time
+from contextlib import contextmanager, nullcontext
+from types import SimpleNamespace
 from typing import Any, Awaitable, Callable, Dict, Optional
 
+from ..observability import record_call, span, update_audit_count, update_budget_gauge
 from ..protocols import default_registry
 from ..protocols.registry import ProtocolRegistry
-from .identity import IdentityRegistry
-from .budget import BudgetManager
 from .approvals import ApprovalQueue
-from .policy import PolicyEngine, Decision
-from .audit import AuditLog, AuditEntry
-from .operation_ledger import OperationLedger, OperationConflict
+from .audit import AuditEntry, AuditLog
+from .budget import BudgetManager, _checked_cost
+from .identity import IdentityRegistry
+from .operation_ledger import OperationConflict, OperationLedger
+from .policy import Decision, PolicyEngine
 from .request_auth import canonical_payload
-from ..observability import span, record_call, update_audit_count, update_budget_gauge
+from .store import PostgresStore, SqliteStore, sql_atomic
 
 
 class GovernanceError(PermissionError):
     """Raised when a call is denied by policy."""
+
     def __init__(self, decision: Decision, audit_entry: AuditEntry,
                  approval_id: Optional[str] = None):
         super().__init__(decision.reason)
         self.decision = decision
         self.audit_entry = audit_entry
         self.approval_id = approval_id
+
+
+class _AdmissionRejected(Exception):
+    def __init__(self, reason, *, decision=None):
+        super().__init__(reason)
+        self.decision = decision if decision is not None else Decision(False, reason)
 
 
 class GovernanceGateway:
@@ -46,15 +59,78 @@ class GovernanceGateway:
                  policy: Optional[PolicyEngine] = None,
                  audit: Optional[AuditLog] = None,
                  registry: Optional[ProtocolRegistry] = None,
-                 require_verified: bool = True):
+                 require_verified: bool = True,
+                 authority=None, tenant_id=None):
+        if authority is None:
+            from ..authority_mode import require_legacy_authority
+            require_legacy_authority()
+        if (authority is None) != (tenant_id is None):
+            raise ValueError("authority and tenant_id must be configured together")
+        self.authority, self.tenant_id = authority, tenant_id
         self.identities = identities or IdentityRegistry()
         self.budgets = budgets or BudgetManager()
         self.approvals = approvals
         self.policy = policy or PolicyEngine(self.identities, self.budgets,
                                              approvals=approvals,
-                                             require_verified=require_verified)
+                                             require_verified=require_verified,
+                                             authority=authority, tenant_id=tenant_id)
         self.audit = audit or AuditLog()
         self.registry = registry or default_registry
+        self._operations = None
+        self._quotas = None
+        self._operations_init_lock = threading.Lock()
+        if authority is not None:
+            if self.policy.authority is not authority or self.policy.tenant_id != tenant_id:
+                raise ValueError("gateway policy must share authenticated tenant authority")
+            if any(component is not None and component.store is not self.identities.store
+                   for component in (self.budgets, self.approvals, self.audit)):
+                raise ValueError("all tenant governance components must share the same bound store")
+
+    def _shared_sql_store(self, ledger):
+        store = self.identities.store
+        participants = (self.budgets, self.approvals, self.audit, ledger)
+        if isinstance(store, (SqliteStore, PostgresStore)) and all(
+            component is None or component.store is store for component in participants
+        ):
+            return store
+        if self.authority is not None:
+            raise ValueError("tenant governance requires one shared durable SQL store")
+        return None
+
+    @contextmanager
+    def _atomic_state(self, admission):
+        store = self._shared_sql_store(admission.ledger)
+        if store is not None:
+            with sql_atomic(store):
+                if admission.ledger is not None:
+                    # Reconciliation locks operation -> budget -> audit. Match
+                    # that order and never overwrite an already settled result.
+                    query = "SELECT state FROM agent_operations WHERE agent_id=? AND operation_id=?"
+                    if isinstance(store, PostgresStore):
+                        query = query.replace("?", "%s") + " FOR UPDATE"
+                    row = store._db.execute(query, (admission.agent_id, admission.operation_id)).fetchone()
+                    if not row or row["state"] != "unknown":
+                        raise OperationConflict("operation missing or already settled; inspect its durable outcome")
+                yield
+            return
+        # Caller-owned legacy embeddings with separate/in-memory participants
+        # keep their explicitly weaker local-state contract.
+        yield
+
+    def _operation_ledger(self):
+        # The ledger caches no operation/authorization state. Cache only its
+        # schema-bound handle so steady-state requests do not execute DDL twice.
+        with self._operations_init_lock:
+            if self._operations is None:
+                ledger = OperationLedger(self.identities.store)
+                quotas = None
+                if self.authority is not None:
+                    from .admission_quotas import AdmissionQuotas
+                    quotas = AdmissionQuotas(self.identities.store)
+                self._operations, self._quotas = ledger, quotas
+            elif self._operations.store is not self.identities.store:
+                raise ValueError("gateway governance store cannot change after initialization")
+            return self._operations
 
     async def route_call(
         self,
@@ -71,36 +147,211 @@ class GovernanceGateway:
         signature: Optional[bytes] = None,
         signed_body: Optional[bytes] = None,
         signed_nonce: Optional[str] = None,
+        principal=None,
     ) -> Dict[str, Any]:
+        # SQL/JWT/policy work runs off the network event loop. Shield admission
+        # so cancellation cannot lose the reservation token while a SQL worker
+        # is still completing its transaction. No invocation starts on this path.
+        prepare = asyncio.create_task(asyncio.to_thread(
+            self._admit, agent_id=agent_id, src_proto=src_proto, dst_proto=dst_proto,
+            src_wire=src_wire, cost=cost, target_id=target_id, operation_id=operation_id,
+            signed_data=signed_data, signature=signature, signed_body=signed_body,
+            signed_nonce=signed_nonce, principal=principal))
+        try:
+            admission = await asyncio.shield(prepare)
+        except asyncio.CancelledError:
+            try:
+                admission = await self._complete(prepare)
+            except BaseException:
+                # _admit performs its own cleanup before returning an error.
+                pass
+            else:
+                cleanup = asyncio.create_task(asyncio.to_thread(self._abort_admission, admission))
+                try:
+                    await self._complete(cleanup)
+                except BaseException:
+                    logging.getLogger(__name__).exception(
+                        "canceled admission cleanup failed; operation requires reconciliation")
+            raise
+        try:
+            result = await invoke(admission.wire)
+        except BaseException as exc:
+            cleanup = asyncio.create_task(asyncio.to_thread(self._invocation_failed, admission, exc))
+            await self._complete(cleanup)
+            raise
+        settle = asyncio.create_task(asyncio.to_thread(self._settle, admission))
+        try:
+            await asyncio.shield(settle)
+        except asyncio.CancelledError:
+            # A definite successful result must finish settling even when its
+            # HTTP caller disconnects; cancellation never causes an auto replay.
+            try:
+                await self._complete(settle)
+            except BaseException as exc:
+                failure = asyncio.create_task(asyncio.to_thread(self._invocation_failed, admission, exc))
+                await self._complete(failure)
+            raise
+        except BaseException as exc:
+            failure = asyncio.create_task(asyncio.to_thread(self._invocation_failed, admission, exc))
+            await self._complete(failure)
+            raise
+        return result
+
+    @staticmethod
+    async def _complete(task):
+        """Finish a bounded SQL cleanup despite repeated caller cancellation."""
+        while True:
+            try:
+                return await asyncio.shield(task)
+            except asyncio.CancelledError:
+                if task.cancelled():
+                    raise
+
+    def _audit_admission(self, admission, decision, reason, cost=0.0, *, observe=True):
+        self.audit.record(actor=admission.actor, action="route_call",
+                          source_protocol=admission.src, target_protocol=admission.dst,
+                          capability=admission.capability, decision=decision,
+                          reason=reason, cost=cost)
+        if observe:
+            self._observe_admission(admission, decision)
+
+    def _observe_admission(self, admission, decision):
+        try:
+            update_audit_count(self.audit.count())
+            record_call(admission.src, admission.dst, admission.capability,
+                        decision, time.monotonic()-admission.started)
+        except Exception:
+            logging.getLogger(__name__).exception("governance telemetry unavailable after durable audit")
+
+    def _abort_admission(self, admission):
+        with self._atomic_state(admission):
+            self.budgets.release(admission.agent_id, admission.token)
+            if admission.ledger is not None:
+                admission.ledger.finish(admission.agent_id, admission.operation_id, "failed")
+            self._audit_admission(admission, "error", "request canceled before invocation", observe=False)
+        self._observe_admission(admission, "error")
+
+    def _invocation_failed(self, admission, exc):
+        uncertain = admission.ledger is not None
+        if not uncertain:
+            self.budgets.release(admission.agent_id, admission.token)
+        self._audit_admission(admission, "unknown" if uncertain else "error",
+                              str(exc)[:200] or type(exc).__name__)
+
+    def _settle(self, admission):
+        with self._atomic_state(admission):
+            if not self.budgets.commit(admission.agent_id, admission.token):
+                raise RuntimeError("budget reservation missing after invocation; reconcile outcome")
+            if admission.ledger is not None:
+                admission.ledger.finish(admission.agent_id, admission.operation_id, "succeeded")
+            self._audit_admission(admission, "allow", admission.decision.reason, admission.cost, observe=False)
+        self._observe_admission(admission, "allow")
+        try:
+            budget = self.budgets.get(admission.agent_id)
+            update_budget_gauge(admission.agent_id, budget.spent, budget.remaining())
+        except Exception:
+            pass  # telemetry cannot invalidate a committed operation
+
+    def _admit(self, **kwargs):
+        if self.authority is None:
+            return self._admit_guarded(**kwargs)
+        with self.authority.guard(kwargs.get("principal")):
+            return self._admit_guarded(**kwargs)
+
+    def _admit_guarded(
+        self,
+        *,
+        agent_id: str,
+        src_proto: str,
+        dst_proto: str,
+        src_wire: Dict[str, Any],
+        cost: float = 1.0,
+        target_id: Optional[str] = None,
+        operation_id: Optional[str] = None,
+        signed_data: Optional[bytes] = None,
+        signature: Optional[bytes] = None,
+        signed_body: Optional[bytes] = None,
+        signed_nonce: Optional[str] = None,
+        principal=None,
+    ) -> Dict[str, Any]:
+        if self.authority is None:
+            from ..authority_mode import require_legacy_authority
+
+            require_legacy_authority()
+        # Canonicalize the same validated value used by budget arithmetic.
+        # Equivalent integer/float operator costs must share an operation scope.
+        cost = _checked_cost(cost)
+        audit_actor = agent_id
+        if self.authority is not None:
+            from .authority import AuthorityDenied
+
+            if principal is None or principal.tenant_id != self.tenant_id or principal.agent_id != agent_id:
+                raise AuthorityDenied("principal does not own this tenant gateway")
+            self.authority.assert_request(principal, body=signed_body, nonce=signed_nonce)
+            audit_actor = "principal:v1:" + json.dumps(principal.binding(), sort_keys=True, separators=(",", ":"))
+
+        def audit_record(**fields):
+            fields["actor"] = audit_actor
+            return self.audit.record(**fields)
+
         # Library callers receive the same fail-closed protocol admission as HTTP.
         self.registry.get(src_proto)
         self.registry.get(dst_proto)
         t0 = time.monotonic()
-        with span("gateway.route_call", {
-            "agent_id": agent_id, "src": src_proto, "dst": dst_proto, "cost": cost,
-        }):
+        with span(
+            "gateway.admission",
+            {
+                "agent_id": agent_id,
+                "src": src_proto,
+                "dst": dst_proto,
+                "cost": cost,
+            },
+        ):
             canonical = self.registry.get(src_proto).to_canonical_call(src_wire)
             capability = canonical.capability
-            request_material = json.dumps({
-                "agent_id": agent_id, "src": src_proto, "dst": dst_proto,
-                "wire": src_wire, "cost": cost, "target_id": target_id,
+            material = {
+                "agent_id": agent_id,
+                "src": src_proto,
+                "dst": dst_proto,
+                "wire": src_wire,
+                "cost": cost,
+                "target_id": target_id,
                 "operation_id": operation_id,
-            }, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+            }
+            if self.authority is not None:
+                self.authority.authorize(principal, capability, target_id)
+                try:
+                    body = json.loads(signed_body)
+                    if not isinstance(body, dict) or not (
+                        body.get("src") == src_proto
+                        and body.get("dst") == dst_proto
+                        and body.get("wire") == src_wire
+                        and body.get("target_id") == target_id
+                        and body.get("operation_id") == operation_id
+                    ):
+                        raise ValueError("signed operation differs from invocation")
+                except (ValueError, TypeError, UnicodeError) as exc:
+                    raise AuthorityDenied("signed principal proof does not bind this operation") from exc
+                material["authority"] = principal.binding()
+            request_material = json.dumps(material, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
             request_scope = hashlib.sha256(request_material).hexdigest()
 
-            if os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
-                if (not isinstance(operation_id, str) or
-                        not 16 <= len(operation_id) <= 128):
-                    entry = self.audit.record(
-                        actor=agent_id, action="route_call", source_protocol=src_proto,
-                        target_protocol=dst_proto, capability=capability,
-                        decision="deny", reason="durable operation_id required in production",
-                        cost=0.0)
-                    raise GovernanceError(
-                        Decision(False, "durable operation_id required in production"), entry)
+            if self.authority is not None or os.getenv("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+                if not isinstance(operation_id, str) or not 16 <= len(operation_id) <= 128:
+                    entry = audit_record(
+                        actor=agent_id,
+                        action="route_call",
+                        source_protocol=src_proto,
+                        target_protocol=dst_proto,
+                        capability=capability,
+                        decision="deny",
+                        reason="durable operation_id required in production",
+                        cost=0.0,
+                    )
+                    raise GovernanceError(Decision(False, "durable operation_id required in production"), entry)
                 # An identity registered in SQL is not proof that an arbitrary
                 # in-process caller possesses its signing key.
-                proof_ok = False
+                proof_ok = self.authority is not None
                 try:
                     # Proof has to authenticate this operation, not unrelated
                     # caller-selected bytes. Cost is an operator reservation, so
@@ -108,133 +359,222 @@ class GovernanceGateway:
                     body = json.loads(signed_body) if signed_body is not None else None
                     if isinstance(body, dict) and isinstance(signed_nonce, str):
                         matches = (
-                            body.get("src") == src_proto and body.get("dst") == dst_proto
+                            body.get("src") == src_proto
+                            and body.get("dst") == dst_proto
                             and body.get("wire") == src_wire
                             and body.get("target_id") == target_id
                             and body.get("operation_id") == operation_id
                         )
-                        if matches and signed_data == canonical_payload(
-                                agent_id, signed_nonce, signed_body):
-                            proof_ok = (signature is not None and
-                                        self.identities.verify_signature(
-                                            agent_id, signed_data, signature))
+                        if (
+                            self.authority is None
+                            and matches
+                            and signed_data == canonical_payload(agent_id, signed_nonce, signed_body)
+                        ):
+                            proof_ok = signature is not None and self.identities.verify_signature(
+                                agent_id, signed_data, signature
+                            )
                 except (TypeError, ValueError, UnicodeError):
                     proof_ok = False
                 if not proof_ok:
-                    entry = self.audit.record(actor=agent_id, action="route_call",
-                        source_protocol=src_proto, target_protocol=dst_proto,
-                        capability=capability, decision="deny",
-                        reason="request-bound signed agent proof required", cost=0.0)
+                    entry = audit_record(
+                        actor=agent_id,
+                        action="route_call",
+                        source_protocol=src_proto,
+                        target_protocol=dst_proto,
+                        capability=capability,
+                        decision="deny",
+                        reason="request-bound signed agent proof required",
+                        cost=0.0,
+                    )
                     raise GovernanceError(Decision(False, "request-bound signed agent proof required"), entry)
 
             # Detect a known idempotency collision before the budget pre-check.
             # This is a read-only hint, NOT the concurrency lock: atomic
             # ledger.claim below remains the authority for new operations.
             if operation_id is not None:
-                existing = OperationLedger(self.identities.store).get(agent_id, operation_id)
+                existing = self._operation_ledger().get(agent_id, operation_id)
                 if existing is not None:
                     if existing["fingerprint"] != request_scope:
                         raise OperationConflict("idempotency key reused for different request")
-                    raise OperationConflict("existing operation is " + existing["state"] +
-                                            "; no automatic replay")
+                    raise OperationConflict("existing operation is " + existing["state"] + "; no automatic replay")
 
             decision = self.policy.authorize(
-                agent_id=agent_id, capability=capability, cost=cost,
-                signed_data=signed_data, signature=signature,
-                src_protocol=src_proto, dst_protocol=dst_proto,
+                agent_id=agent_id,
+                capability=capability,
+                cost=cost,
+                signed_data=signed_data,
+                signature=signature,
+                src_protocol=src_proto,
+                dst_protocol=dst_proto,
                 request_scope=request_scope,
+                **({"principal": principal, "target_id": target_id} if self.authority is not None else {}),
             )
 
             if not decision.allowed:
                 approval_id = None
                 if decision.needs_approval and self.approvals:
                     approval_id = self.approvals.request(agent_id, capability, cost, request_scope).id
-                entry = self.audit.record(
-                    actor=agent_id, action="route_call",
-                    source_protocol=src_proto, target_protocol=dst_proto,
-                    capability=capability, decision="deny", reason=decision.reason, cost=0.0,
+                entry = audit_record(
+                    actor=agent_id,
+                    action="route_call",
+                    source_protocol=src_proto,
+                    target_protocol=dst_proto,
+                    capability=capability,
+                    decision="deny",
+                    reason=decision.reason,
+                    cost=0.0,
                 )
                 update_audit_count(self.audit.count())
                 record_call(src_proto, dst_proto, capability, "deny", time.monotonic() - t0)
                 raise GovernanceError(decision, entry, approval_id=approval_id)
 
-            # Atomically reserve budget before doing any work. The reservation is recorded in
-            # the durable store inside an atomic section, so concurrent workers can't both pass
-            # the cap (the fix for the multi-worker double-spend).
-            token, why = self.budgets.reserve(agent_id, cost)
-            if token is None:
-                entry = self.audit.record(
-                    actor=agent_id, action="route_call",
-                    source_protocol=src_proto, target_protocol=dst_proto,
-                    capability=capability, decision="deny", reason=why, cost=0.0,
+            # Translation is pure preparation: reject unsupported semantics before
+            # reserving budget, consuming a grant or creating a durable claim.
+            dst_wire = self.registry.translate_call(src_wire, src_proto, dst_proto)
+            try:
+                token, ledger, decision, _ = self._admit_transaction(
+                    agent_id=agent_id, capability=capability, cost=cost, target_id=target_id,
+                    operation_id=operation_id, request_scope=request_scope, principal=principal, decision=decision,
+                )
+            except _AdmissionRejected as exc:
+                entry = audit_record(
+                    actor=agent_id, action="route_call", source_protocol=src_proto,
+                    target_protocol=dst_proto, capability=capability, decision="deny",
+                    reason=exc.decision.reason, cost=0.0,
                 )
                 update_audit_count(self.audit.count())
                 record_call(src_proto, dst_proto, capability, "deny", time.monotonic() - t0)
-                raise GovernanceError(Decision(False, why), entry)
-
-            # Claim a one-shot grant BEFORE the target is invoked. The store operation
-            # is atomic: parallel calls cannot execute on the same approval.
-            if decision.approval_required:
-                if not self.approvals or not self.approvals.consume(agent_id, capability, request_scope):
-                    self.budgets.release(agent_id, token)
-                    entry = self.audit.record(actor=agent_id, action="route_call",
-                        source_protocol=src_proto, target_protocol=dst_proto,
-                        capability=capability, decision="deny", reason="approval grant already consumed", cost=0.0)
-                    raise GovernanceError(Decision(False, "approval grant already consumed"), entry)
-
-            ledger = None
-            if operation_id is not None:
-                # Claim after authorization, budget reservation and approval, but
-                # BEFORE translation or external execution. A failed/unknown
-                # downstream outcome is never automatically replayed.
-                ledger = OperationLedger(self.identities.store)
-                try:
-                    ledger.claim(agent_id, operation_id, request_scope, reservation_token=token)
-                except BaseException:
-                    self.budgets.release(agent_id, token)
-                    raise
-
-            # A remote timeout may occur AFTER the target committed its side effect.
-            # When using durable operation IDs, retain the budget reservation until
-            # an operator reconciles this unknown outcome. Otherwise a timeout could
-            # free capacity for another potentially consequential action.
-            invocation_started = False
-            try:
-                dst_wire = self.registry.translate_call(src_wire, src_proto, dst_proto)
-                invocation_started = True
-                result = await invoke(dst_wire)
-            except BaseException as e:
-                uncertain = invocation_started and ledger is not None
-                if not uncertain:
-                    self.budgets.release(agent_id, token)
-                self.audit.record(
-                    actor=agent_id, action="route_call",
-                    source_protocol=src_proto, target_protocol=dst_proto,
-                    capability=capability,
-                    decision="unknown" if uncertain else "error",
-                    reason=(str(e)[:200] or type(e).__name__), cost=0.0,
-                )
-                update_audit_count(self.audit.count())
-                record_call(src_proto, dst_proto, capability,
-                            "unknown" if uncertain else "error", time.monotonic() - t0)
-                raise
-
-            self.budgets.commit(agent_id, token)
-            if ledger is not None:
-                ledger.finish(agent_id, operation_id, "succeeded")
-            self.audit.record(
-                actor=agent_id, action="route_call",
-                source_protocol=src_proto, target_protocol=dst_proto,
-                capability=capability, decision="allow", reason=decision.reason, cost=cost,
+                raise GovernanceError(exc.decision, entry) from exc
+            return SimpleNamespace(
+                agent_id=agent_id,
+                src=src_proto,
+                dst=dst_proto,
+                capability=capability,
+                cost=cost,
+                token=token,
+                ledger=ledger,
+                operation_id=operation_id,
+                wire=dst_wire,
+                decision=decision,
+                actor=audit_actor,
+                started=t0,
             )
 
-            # Update gauges so Prometheus sees live state.
-            update_audit_count(self.audit.count())
-            try:
-                b = self.budgets.get(agent_id)
-                update_budget_gauge(agent_id, b.spent, b.remaining())
-            except Exception:
-                pass  # budget gauge is best-effort; never break a real call for it
+    def _admit_transaction(self, *, agent_id, capability, cost, target_id, operation_id,
+                           request_scope, principal, decision, queued_preparation=None):
+        """Shared owned claim/quota/reservation/approval boundary, before invocation."""
+        receipt = None
+        ledger = self._operation_ledger() if operation_id is not None else None
+        store = self._shared_sql_store(ledger)
+        token, claimed = None, False
+        binding = {"authority_binding": principal.binding()} if self.authority is not None else {}
+        try:
+            with sql_atomic(store) if store is not None else nullcontext():
+                if store is not None and ledger is not None:
+                    # Lock/claim operation before budget, matching outcome
+                    # settlement and reconciliation. Nothing is visible until
+                    # reservation, approval and its token link commit together.
+                    quota_hook = None
+                    if self._quotas is not None:
+                        def quota_hook():
+                            from .admission_quotas import QuotaDenied
+                            try:
+                                self._quotas.admit(principal, agent_id, operation_id, request_scope, cost)
+                            except QuotaDenied as exc:
+                                raise _AdmissionRejected(str(exc)) from exc
+                    ledger.claim(agent_id, operation_id, request_scope, before_insert=quota_hook, **binding)
+                    claimed = True
+                if queued_preparation is not None:
+                    decision = self._queued_policy(queued_preparation, request_scope)
+                    if not decision.allowed:
+                        raise _AdmissionRejected(decision.reason, decision=decision)
+                token, why = self.budgets.reserve(agent_id, cost)
+                if token is None:
+                    raise _AdmissionRejected(why)
+                if self.authority is not None:
+                    self.authority.authorize(principal, capability, target_id)
+                if ledger is not None and claimed:
+                    ledger.attach_reservation(agent_id, operation_id, token)
+                if decision.approval_required and (
+                    not self.approvals or not self.approvals.consume(agent_id, capability, request_scope)
+                ):
+                    raise _AdmissionRejected("approval grant already consumed")
+                if ledger is not None and not claimed:
+                    # Preserve the explicitly weaker legacy embedding path
+                    # when its participants do not share one SQL connection.
+                    ledger.claim(agent_id, operation_id, request_scope, reservation_token=token, **binding)
+                    claimed = True
+                if self.authority is not None:
+                    self.authority.authorize(principal, capability, target_id)
+                if queued_preparation is not None:
+                    receipt = self._queued_kernel._link_queued_admission(
+                        self, queued_preparation, request_scope, token, decision
+                    )
+        except BaseException:
+            if store is None:
+                if token is not None:
+                    self.budgets.release(agent_id, token)
+                if ledger is not None and claimed:
+                    ledger.finish(agent_id, operation_id, "failed")
+            raise
+        return token, ledger, decision, receipt
 
-            record_call(src_proto, dst_proto, capability, "allow", time.monotonic() - t0)
-            return result
+    def _queued_policy(self, prepared, request_scope):
+        from .authority import AuthorityDenied
+        from .task_admission import _gateway_preparation
+
+        _, runtime = _gateway_preparation(self, prepared)
+        plan, principal = prepared.plan, prepared._authority.principal
+        # The common transaction already owns operation/quota. Take the same
+        # per-agent budget fence as mutate_budget before checking presence:
+        # queued work must not create operator budget policy from defaults.
+        if isinstance(runtime.store, PostgresStore):
+            runtime.store._db.execute("SELECT pg_advisory_xact_lock(hashtext(%s))",
+                                      ("budget:" + principal.agent_id,))
+        budget = runtime.store.get_budget(principal.agent_id)
+        if not isinstance(budget, dict) or not {"spend_limit", "rate_limit", "window_seconds"} <= budget.keys():
+            return Decision(False, "operator budget required for queued admission")
+        decision = self.policy.authorize(
+            agent_id=principal.agent_id, capability=plan["capability"], cost=plan["cost"],
+            src_protocol=plan["src"], dst_protocol=plan["dst"], request_scope=request_scope,
+            principal=principal, target_id=plan["target_id"],
+        )
+        floor = prepared._authority.intent.record["provenance"]["approval_required_at_submission"]
+        if type(floor) is not bool:
+            raise AuthorityDenied("original approval requirement unavailable")
+        if decision.allowed and floor and not decision.approval_required:
+            if not self.approvals or not self.approvals.is_granted(principal.agent_id, plan["capability"], request_scope):
+                return Decision(False, "original queued approval required", needs_approval=True)
+            return Decision(True, decision.reason, approval_required=True)
+        return decision
+
+    def _admit_queued_intent(self, prepared):
+        from .task_admission import _gateway_preparation, _queued_scope
+
+        _, runtime = _gateway_preparation(self, prepared)
+        plan, principal = prepared.plan, prepared._authority.principal
+        request_scope, _ = _queued_scope(prepared)
+        try:
+            _, _, _, receipt = self._admit_transaction(
+                agent_id=principal.agent_id, capability=plan["capability"], cost=plan["cost"],
+                target_id=plan["target_id"], operation_id=plan["operation_id"], request_scope=request_scope,
+                principal=principal, decision=None, queued_preparation=prepared,
+            )
+        except _AdmissionRejected as exc:
+            # The failed admission has rolled back. Pending approval and denial
+            # audit form their own transaction, never a partial operation claim.
+            with sql_atomic(runtime.store):
+                _gateway_preparation(self, prepared)
+                approval_id = None
+                if exc.decision.needs_approval and self.approvals:
+                    approval_id = self.approvals.request(
+                        principal.agent_id, plan["capability"], plan["cost"], request_scope
+                    ).id
+                entry = self.audit.record(
+                    actor="principal:v1:" + json.dumps(principal.binding(), sort_keys=True, separators=(",", ":")),
+                    action="task.admit", source_protocol=plan["src"], target_protocol=plan["dst"],
+                    capability=plan["capability"], decision="deny", cost=0.0,
+                    reason=exc.decision.reason + "; queued action sha256:" + request_scope,
+                )
+            raise GovernanceError(exc.decision, entry, approval_id=approval_id) from exc
+        return receipt

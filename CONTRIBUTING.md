@@ -16,6 +16,8 @@ Python 3.11 or 3.12 is supported for the basic local test workflow.
 ```bash
 git clone https://github.com/shadowhunter-92/agentbridge.git
 cd agentbridge
+# Select and record the exact branch/commit you intend to change.
+git rev-parse HEAD
 python -m venv .venv
 
 # Activate:
@@ -51,7 +53,7 @@ All security-critical behavior must fail closed on invalid identity, unexpected 
 
 ## Engineering workflow
 
-Contribute from your own fork or a narrowly scoped branch. The default `main` branch includes the reviewed engineering alpha from [PR #41](https://github.com/shadowhunter-92/agentbridge/pull/41) and audit fixes. It is not production-approved. Use an exact reviewed commit and the current handoff register. Any license, copyright, security-sensitive protocol, release or GitHub Actions change must receive explicit owner review; the CODEOWNERS file requires a matching enforced branch ruleset to be effective. CI passing is necessary but not equivalent to security certification.
+Contribute from your own fork or a narrowly scoped branch. The default `main` branch includes the reviewed engineering alpha from [PR #41](https://github.com/shadowhunter-92/agentbridge/pull/41) and audit fixes. It is not production-approved. Use an exact reviewed commit and [current alpha status](docs/CURRENT_ALPHA_STATUS.md). Keep cumulative drafts, their individual CI receipts, the main baseline and evaluator artifacts distinct. Preserve dated evidence at its original SHA; mark superseded status and link the current index instead of changing old test results. Any license, copyright, security-sensitive protocol, release or GitHub Actions change must receive explicit owner review; the CODEOWNERS file requires a matching enforced branch ruleset to be effective. CI passing is necessary but not equivalent to security certification.
 
 ## Developer evaluations
 

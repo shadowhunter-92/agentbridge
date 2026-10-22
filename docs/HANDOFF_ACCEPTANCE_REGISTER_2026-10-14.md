@@ -1,5 +1,10 @@
 # AgentBridge handoff acceptance register — October 14, 2026
 
+> **Historical checkpoint.** Baselines, test counts, pending PRs, branch counts
+> and cleanup statements below apply only to the recorded phase. They are not
+> current merge/release approval. See [current alpha status](CURRENT_ALPHA_STATUS.md)
+> and [branch documentation dispositions](BRANCH_DOCUMENTATION_DISPOSITIONS_2026-10-16.md).
+
 Maintained baseline: `b94e2cf7ab8281522af76e3dc6d3d0539392a6cb`.
 PRs #53 and #54 each passed24 checks and merged with explicit owner approval.
 Merged-main CI passed16/16 jobs. All30 phase-checkpoint remote heads are reachable

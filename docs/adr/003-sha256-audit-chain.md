@@ -40,4 +40,5 @@ SQL-store deletion boundary for `prod` and `production`. Development retention
 must respect durable legal holds in the same deletion transaction. Checkpoint
 signature validation authenticates a signer statement; it does not establish
 independent archive custody, legal compliance or trustworthy physical outcomes.
-See `src/governance/external_anchor.py` and the current handoff register.
+See `src/governance/external_anchor.py` and
+[current source and remaining gates](../CURRENT_ALPHA_STATUS.md).

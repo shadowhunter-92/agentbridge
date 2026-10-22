@@ -62,6 +62,7 @@ jobs:
           /tmp/agentbridge-external-evaluator/bin/python -m pip install dist/*.whl
           ( cd /tmp && /tmp/agentbridge-external-evaluator/bin/python -c "from src.governance.trust_sdk import verify_action_evidence; from src.governance.sandbox_readback import SandboxTarget; import src.serve.a2a_status; print('fresh-wheel-sdk-import: pass')" )
           /tmp/agentbridge-external-evaluator/bin/agentbridge --version
+          ( cd /tmp && /tmp/agentbridge-external-evaluator/bin/agentbridge-tenant-migrate --help )
           /tmp/agentbridge-external-evaluator/bin/python -m pip check
 
   postgres-integration:
@@ -93,7 +94,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt "psycopg[binary]"
       - name: Run real PostgreSQL integration and concurrency tests
-        run: python -m pytest tests/test_postgres_store.py tests/test_postgres_reconciliation.py tests/test_pg_worker_kill_recovery.py tests/test_postgres_durable_hold_boundary.py tests/test_pg_connection_loss_fail_closed.py tests/test_pg_backend_termination_boundaries.py tests/test_pg_authoritative_readback_role.py tests/test_pg_fencing.py tests/test_pg_schema_migrations.py tests/test_fenced_postgres_destination.py tests/test_pg_concurrent_schema_bootstrap.py tests/test_pg_production_observer_privileges.py tests/test_signing_trust_journal.py tests/test_durable_task_lifecycle.py tests/test_a2a_status_network.py -q
+        run: python -m pytest tests/test_postgres_store.py tests/test_postgres_reconciliation.py tests/test_pg_worker_kill_recovery.py tests/test_postgres_durable_hold_boundary.py tests/test_pg_connection_loss_fail_closed.py tests/test_pg_backend_termination_boundaries.py tests/test_pg_authoritative_readback_role.py tests/test_pg_fencing.py tests/test_pg_schema_migrations.py tests/test_fenced_postgres_destination.py tests/test_pg_concurrent_schema_bootstrap.py tests/test_pg_production_observer_privileges.py tests/test_signing_trust_journal.py tests/test_tenant_signing_coordination.py tests/test_durable_task_lifecycle.py tests/test_task_history_capacity.py tests/test_task_event_capacity.py tests/test_tenant_task_streams.py tests/test_task_atomic_scope.py tests/test_task_intents.py tests/test_task_intents_http.py tests/test_queued_intent_preparation.py tests/test_task_admission.py tests/test_task_admission_cases.py tests/test_task_admission_transactions.py tests/test_task_admission_waits.py tests/test_task_admission_recovery_boundaries.py tests/test_task_admission_budget_policy.py tests/test_audit_capacity.py tests/test_audit_capacity_governance.py tests/test_tenant_migration_audit_capacity.py tests/test_store_atomic_mutations.py tests/test_a2a_status_network.py tests/test_authority.py tests/test_tenant_migration.py tests/test_tenant_migration_cli.py tests/test_tenant_store.py tests/test_tenant_namespace_aliases.py tests/test_tenant_kernel.py tests/test_tenant_http.py tests/test_tenant_namespace_configuration.py tests/test_tenant_authority_linearization.py tests/test_tenant_policy_publication.py tests/test_delegation_resource_isolation.py tests/test_authority_mode_boundary.py tests/test_gateway_async_admission.py tests/test_atomic_settlement.py tests/test_atomic_admission.py tests/test_admission_quotas.py tests/test_audit_hotpath.py tests/test_mcp_production_execution.py -q
       - name: Disposable PostgreSQL backup, restore and schema rollback drill
         env:
           AGENTBRIDGE_DISPOSABLE_PG_RESTORE_DRILL: "1"
@@ -270,6 +271,7 @@ jobs:
       - name: Compile hash-locked runtime graph for release review
         run: |
           python -m pip install "pip-tools>=7,<8"
+          cp requirements-runtime.lock candidate-runtime.lock
           python -m piptools compile --generate-hashes --allow-unsafe \
             --output-file candidate-runtime.lock pyproject.toml
           diff -u requirements-runtime.lock candidate-runtime.lock
