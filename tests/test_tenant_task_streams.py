@@ -89,19 +89,29 @@ def test_per_tenant_per_owner_scope_and_revocation(tenant_app):
 
 
 def test_expired_or_released_allocation_cannot_resurrect_after_new_admission(tenant_app):
-    service = coordinator(tenant_app, max_streams=1, lease_seconds=.05, max_seconds=.2)
+    service = coordinator(tenant_app, max_streams=1, lease_seconds=5, max_seconds=15)
     principal = signed_session(tenant_app)[0].principal
     old = service.acquire(principal)
-    time.sleep(.08)
+    # Isolate the old allocation's expiry using real database time. Wall-clock
+    # sleeps also risk expiring the new allocation on a loaded test runner.
+    with service._atomic() as cur:
+        now = service._now(cur)
+        service._execute(cur, "UPDATE stream_leases_v1 SET expires=? WHERE identity=?", (now-1, old.identity))
+        assert service._execute(cur, "SELECT expires FROM stream_leases_v1 WHERE identity=?", (old.identity,)).fetchone()["expires"] < now
+    assert service.usage()["active_stream_allocations"] == 0
     current = service.acquire(principal)
+    with service._atomic() as cur:
+        assert service._execute(cur, "SELECT count(*) AS n FROM stream_leases_v1 WHERE identity=?", (old.identity,)).fetchone()["n"] == 0
     with pytest.raises(StreamCapacity, match="expired or released"):
         service.renew(principal, old)
     service.release(old)
+    assert service.usage()["active_stream_allocations"] == 1
     service.renew(principal, current)
     assert service.usage()["active_stream_allocations"] == 1
     service.release(current)
     with pytest.raises(StreamCapacity):
         service.renew(principal, current)
+    assert service.usage()["active_stream_allocations"] == 0
 
 
 def test_renewal_never_extends_absolute_lifetime(tenant_app):
