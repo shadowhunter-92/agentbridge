@@ -68,6 +68,25 @@ before this refusal was added. Direct SQL still requires explicit correct
 namespace selection; no library can make arbitrary old SQL against a TEMP
 table become a durable write.
 
+SQLite TEMP-name checks use SQLite's ASCII case-insensitive identifier identity,
+including uppercase and mixed-case spellings. The managed permanent checkpoint
+tables and owned trigger names must retain their canonical spelling. A variant
+name is refused before bootstrap or snapshot changes anything; `IF NOT EXISTS`
+must not conceal an unqualified existing trigger. No object is renamed or
+repaired automatically. These checks cover trusted embedded SQL connections;
+they do not provide custody against a privileged database owner.
+
+The October 23 catalog review reproduced temporary-only checkpoint/policy
+success and a differently cased pre-installation trigger that allowed two
+rows under a one-row policy. The narrow correction has a separate local run:
+180 passed, 152 expected backend-specific skips, 332 distinct identities across
+checkpoint, audit capacity, tenant isolation and offline migration modules.
+The focused before/after matrix retained 62 failing cases before the fix and
+89 passing cases after it, with 15 expected PostgreSQL skips in each matrix.
+These runs overlap and are not added together. Earlier exact-head CI at
+`d3a6072` is historical evidence for that source; the correction needs its own
+exact-head CI before incorporation.
+
 An already installed checkpoint schema must retain the exact known function
 bodies/attributes and trigger wiring, timing and enabled state. Startup refuses
 modified or partial installations instead of repairing them silently. Complete

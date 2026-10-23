@@ -277,6 +277,51 @@ def test_sqlite_modified_trigger_fails_closed_without_repair(tmp_path):
         store.close()
 
 
+@pytest.mark.parametrize("spelling", [str.upper, str.title], ids=["upper", "mixed"])
+@pytest.mark.parametrize("installed_policy", [False, True])
+def test_sqlite_noncanonical_owned_trigger_refused_without_repair(tmp_path, spelling, installed_policy):
+    from src.governance.checkpoint_capacity import verify_if_installed
+    store = SqliteStore(str(tmp_path / "trigger-case.sqlite"))
+    try:
+        if installed_policy:
+            AuditTrustStore(store)
+            store._db.execute("DROP TRIGGER checkpoint_capacity_insert_v1")
+        else:
+            store._db.execute("CREATE TABLE audit_checkpoints(seq INTEGER PRIMARY KEY,data TEXT NOT NULL)")
+        store._db.execute("CREATE TRIGGER " + spelling("checkpoint_capacity_insert_v1") +
+                          " AFTER INSERT ON audit_checkpoints BEGIN SELECT 1; END")
+        before = [tuple(row) for row in store._db.execute("SELECT name,sql FROM main.sqlite_master ORDER BY name")]
+        with pytest.raises(CheckpointCapacityDenied, match="noncanonical checkpoint capacity trigger name"):
+            AuditTrustStore(store)
+        with pytest.raises(CheckpointCapacityDenied, match="noncanonical checkpoint capacity trigger name"):
+            verify_if_installed(store._db, postgres=False)
+        assert [tuple(row) for row in store._db.execute("SELECT name,sql FROM main.sqlite_master ORDER BY name")] == before
+        assert store._db.execute("SELECT count(*) AS n FROM main.audit_checkpoints").fetchone()["n"] == 0
+        if not installed_policy:
+            assert store._db.execute("SELECT 1 FROM main.sqlite_master WHERE name='checkpoint_capacity_policy_v1'").fetchone() is None
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("table", ["audit_checkpoints", "checkpoint_capacity_policy_v1"])
+@pytest.mark.parametrize("spelling", [str.upper, str.title], ids=["upper", "mixed"])
+def test_sqlite_noncanonical_main_table_refused_without_repair(tmp_path, table, spelling):
+    from src.governance.checkpoint_capacity import DDL, verify_if_installed
+    store = SqliteStore(str(tmp_path / "table-case.sqlite"))
+    try:
+        if table == "audit_checkpoints":
+            store._db.execute("CREATE TABLE " + spelling(table) + "(seq INTEGER PRIMARY KEY,data TEXT NOT NULL)")
+        else:
+            store._db.execute(DDL.replace(table, spelling(table)))
+        before = [tuple(row) for row in store._db.execute("SELECT name,sql FROM main.sqlite_master ORDER BY name")]
+        for call in (lambda: AuditTrustStore(store), lambda: verify_if_installed(store._db, postgres=False)):
+            with pytest.raises(CheckpointCapacityDenied, match="noncanonical checkpoint table name"):
+                call()
+            assert [tuple(row) for row in store._db.execute("SELECT name,sql FROM main.sqlite_master ORDER BY name")] == before
+    finally:
+        store.close()
+
+
 def test_sqlite_generated_columns_and_missing_constraints_are_rejected(tmp_path):
     for kind in ("generated", "constraints"):
         store = SqliteStore(str(tmp_path / (kind + ".sqlite")))
@@ -422,9 +467,10 @@ def test_postgres_unsupported_policy_schema_is_refused(network_sql_stores, shape
     assert store._db.execute("SELECT count(*) AS n FROM checkpoint_capacity_policy_v1").fetchone()["n"] == 0
 
 
-@pytest.mark.parametrize("name", ["audit_checkpoints", "checkpoint_capacity_policy_v1"])
-@pytest.mark.parametrize("surface", ["bootstrap", "save", "inspect", "configure"])
-def test_sqlite_reserved_temp_names_cannot_redirect_durable_work(tmp_path, name, surface):
+@pytest.mark.parametrize("name", ["audit", "audit_holds", "audit_checkpoints", "checkpoint_capacity_policy_v1", "tenant_store_binding"])
+@pytest.mark.parametrize("spelling", [str.lower, str.upper, str.title], ids=["lower", "upper", "mixed"])
+@pytest.mark.parametrize("surface", ["bootstrap", "save", "inspect", "configure", "snapshot"])
+def test_sqlite_reserved_temp_names_cannot_redirect_durable_work(tmp_path, name, spelling, surface):
     store = SqliteStore(str(tmp_path / "shadow.sqlite"))
     try:
         values, signer = checkpoints(store)
@@ -436,7 +482,7 @@ def test_sqlite_reserved_temp_names_cannot_redirect_durable_work(tmp_path, name,
                     result[table] = [tuple(row) for row in store._db.execute("SELECT * FROM main." + table).fetchall()]
             return result
         before = durable()
-        store._db.execute("CREATE TEMP TABLE " + name + "(synthetic TEXT)")
+        store._db.execute("CREATE TEMP TABLE " + spelling(name) + "(synthetic TEXT)")
         with pytest.raises(CheckpointCapacityDenied, match="TEMP"):
             if surface == "bootstrap":
                 AuditTrustStore(store)
@@ -444,25 +490,29 @@ def test_sqlite_reserved_temp_names_cannot_redirect_durable_work(tmp_path, name,
                 trust.save_checkpoint(values[1], signer.public_key_hex)
             elif surface == "inspect":
                 trust.checkpoint_capacity()
-            else:
+            elif surface == "configure":
                 trust.set_checkpoint_capacity(max_records=1, max_bytes=4000, max_entry_bytes=1000)
+            else:
+                from src.governance.checkpoint_capacity import verify_if_installed
+                verify_if_installed(store._db, postgres=False)
         assert durable() == before
-        assert store._db.execute("SELECT count(*) AS n FROM temp." + name).fetchone()["n"] == 0
+        assert store._db.execute("SELECT count(*) AS n FROM temp." + spelling(name)).fetchone()["n"] == 0
     finally:
         store.close()
 
 
-def test_sqlite_temp_audit_or_hold_dependency_is_refused(tmp_path):
+@pytest.mark.parametrize("spelling", [str.lower, str.upper, str.title], ids=["lower", "upper", "mixed"])
+def test_sqlite_temp_audit_or_hold_dependency_is_refused(tmp_path, spelling):
     store = SqliteStore(str(tmp_path / "dependency.sqlite"))
     try:
         trust = AuditTrustStore(store)
         values, signer = checkpoints(store)
-        store._db.execute("CREATE TEMP TABLE audit(entry TEXT)")
+        store._db.execute("CREATE TEMP TABLE " + spelling("audit") + "(entry TEXT)")
         with pytest.raises(CheckpointCapacityDenied, match="TEMP"):
             trust.save_checkpoint(values[1], signer.public_key_hex)
         store._db.execute("DROP TABLE temp.audit")
         trust.set_hold("keep", True)
-        store._db.execute("CREATE TEMP TABLE audit_holds(name TEXT,enabled INTEGER)")
+        store._db.execute("CREATE TEMP TABLE " + spelling("audit_holds") + "(name TEXT,enabled INTEGER)")
         with pytest.raises(CheckpointCapacityDenied, match="TEMP"):
             trust.holds()
         with pytest.raises(CheckpointCapacityDenied, match="TEMP"):
@@ -547,12 +597,13 @@ def test_postgres_reserved_temp_names_fail_before_changes(network_sql_stores, na
     assert durable() == before
 
 
-def test_policy_callback_temp_shadow_aborts_whole_configuration(network_sql_stores):
+@pytest.mark.parametrize("spelling", [str.lower, str.upper, str.title], ids=["lower", "upper", "mixed"])
+def test_policy_callback_temp_shadow_aborts_whole_configuration(network_sql_stores, spelling):
     store = network_sql_stores()
     trust = AuditTrustStore(store)
     before = trust.checkpoint_capacity()
     def callback():
-        store._db.execute("CREATE TEMP TABLE checkpoint_capacity_policy_v1(synthetic TEXT)")
+        store._db.execute("CREATE TEMP TABLE " + spelling("checkpoint_capacity_policy_v1") + "(synthetic TEXT)")
     with pytest.raises(CheckpointCapacityDenied, match="TEMP"):
         trust.set_checkpoint_capacity(max_records=1, max_bytes=4000, max_entry_bytes=1000, audit=callback)
     assert trust.checkpoint_capacity() == before
