@@ -170,6 +170,9 @@ _POSTGRES_FUNCTION_SQL = {
         LANGUAGE plpgsql SET search_path=pg_catalog AS $$
         DECLARE p RECORD; n BIGINT; b BIGINT;
         BEGIN
+          IF current_setting('transaction_isolation') <> 'read committed' THEN
+            RAISE EXCEPTION 'checkpoint capacity growth requires READ COMMITTED';
+          END IF;
           PERFORM pg_advisory_xact_lock(911001);
           EXECUTE format('SELECT * FROM %I.checkpoint_capacity_policy_v1 WHERE singleton=1', TG_TABLE_SCHEMA) INTO p;
           IF p.singleton IS NULL THEN
@@ -386,6 +389,8 @@ def policy(store, *, limits=None, audit=None):
             if postgres:
                 cur.execute("SELECT pg_advisory_xact_lock(%s)", (911001,))
                 assert_postgres_namespace(cur)
+                if cur.execute("SHOW transaction_isolation").fetchone()["transaction_isolation"] != "read committed":
+                    raise CheckpointCapacityDenied("checkpoint capacity policy requires READ COMMITTED")
             else:
                 assert_sqlite_namespace(cur)
             if _read_policy(cur) is None:
