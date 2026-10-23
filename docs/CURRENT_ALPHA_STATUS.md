@@ -1,4 +1,4 @@
-# Current engineering alpha status — October 21, 2026
+# Current engineering alpha status — October 22, 2026
 
 **Overall: PARTIALLY TESTED; unrestricted consequential-action production NO-GO.**
 This is the current documentation entry point for the recorded source snapshot.
@@ -10,7 +10,9 @@ release, deployment or deletion. Apache 2.0 remains in force.
 
 | Item | Exact pin | Meaning |
 | --- | --- | --- |
-| Recorded main | `73aafd60a0eec121a10245a307a4a8ee268f7ed5` | Main baseline, before the tenant draft stack |
+| Recorded main | `b0afb7f1da1634330747389e19c896fd7002bd83` | Approved PR #70 merge; exact main CI 16/16 passed |
+| Reviewed audit/admission source | `7415718eef8b9650875885ab17eb4d15acf3489b` | Merged as the second parent; identical tree; separate source CI 24 jobs / seven workflows |
+| Private dispatch follow-up | Select this follow-up’s exact Git head | Local source-pinned functional qualification; consult that head’s hosted checks independently |
 | Cumulative draft source | `46777f8c953690fca81c6d11e7b70372b8dd5c77` | PR #69 plus dependencies #56–#68; recorded as draft/unmerged |
 | Queued-acceptance follow-up source | `de1194a0b568c820205ac0abaa7f774eb530ae83` | Native queued intent plus documentation integration; seven successful workflows / 24 jobs recorded, queued acceptance only |
 | Private preparation follow-up source | `893fdba4d3d1928bd66491affcb87e01a263b063` | Draft PR #70; seven successful workflows / 24 jobs recorded, preparation without admission or execution |
@@ -29,10 +31,22 @@ Git head and its own CI evidence. Private first-admission/linkage has its own
 audit-capacity follow-up described below is later source and requires its own
 selected-head evidence; it is not covered by the admission head's checks.
 
-## Cumulative draft dependencies and recorded CI
+## Current merge and historical dependency evidence
+
+On October 22, the owner approved marking PR #70 ready and merging its exact
+`7415718` head with a merge commit. Main `b0afb7f` has the same source tree and
+passed all 16 jobs in [CI run 39736688053](https://github.com/shadowhunter-92/agentbridge/actions/runs/39736688053).
+GitHub marked dependency PRs #56–#69 merged. After a separately restored
+20-head backup and fresh SHA/protection/PR/ancestry checks, the approved
+14 redundant refs were deleted atomically; six maintained or active refs remain.
+See [consolidation evidence](BRANCH_CONSOLIDATION_2026-10-22.md).
+
+The dated inventories and source pins below are historical: “draft/unmerged”
+describes their original observation, not the current PR state. Source CI is
+not relabeled as an execution against the merge commit or this later follow-up.
 
 The October 17 read-only inventory records 19 remote heads and 14 open draft,
-unmerged PRs, #56–#69. Main remains at the separate baseline above. Locally
+unmerged PRs, #56–#69. Main was then `73aafd60`. Locally
 retained hosted-check receipts record 24 successful checks at each head below.
 PR #69's exact-head receipt records 7 successful workflows / 24 jobs, including
 [CI](https://github.com/shadowhunter-92/agentbridge/actions/runs/38991859193),
@@ -58,7 +72,7 @@ The October 21 read-only PR refresh still recorded that head, open/draft and
 unmerged. These inventories do not authorize consolidation or qualify later
 changes. Refresh the actual proposed head and current PR state.
 
-| Draft PR | Source head | Bounded unit |
+| Historical PR | Original source head | Bounded unit |
 | --- | --- | --- |
 | #56 | `423a6893e6c77a8212f8a1fe37d5e91c8745db04` | [Enrolled authority](TENANT_AUTHORITY_FOUNDATION_2026-10-14.md) |
 | #57 | `10393374e1cb05778b70eb5ddde65d343ff79a50` | [Tenant runtime and HTTP](TENANT_RUNTIME_2026-10-14.md) |
@@ -95,14 +109,14 @@ operation and audit changes. Separate/in-memory legacy participants retain a
 weaker contract. This local accounting cannot roll back a remote effect;
 UNKNOWN retains exposure and is not automatically replayed or refunded.
 
-| Area | Implemented in the cumulative draft | Still open |
+| Area | Implemented in maintained source / selected follow-up | Still open |
 | --- | --- | --- |
 | Admission | Operator-enabled tenant/human spend, admission-rate and active-operation caps, durable attribution | Frontdoor shedding/rate limits, authentication storage bounds, custom per-user limits and large-history performance |
 | Task history | Namespace-wide retained count, default 10,000; terminal history included | Safe protected cleanup/retention and capacity sizing |
 | Task event bytes | Actual retained UTF-8 snapshot bytes, default 64 MiB; bounded recovery/terminal reservations | Remaining evidence bytes, indexes/WAL/copies and large-history contention |
 | Audit payload capacity | SQL-trigger row/UTF-8 byte/per-entry limits, persisted counters and conservative store-API retention refusal | Remaining evidence journals/checkpoints, reference-indexed retention, mixed-version operation, independent custody and sustained performance |
-| Task lifecycle | Durable owner-scoped status/events; signed queued acceptance; private current-authority preparation and atomic first admission with immutable task/operation/event linkage | Worker invocation, results, settlement, tenant-aware execution recovery and acknowledged destination cancellation |
-| Queued intent capacity | Immutable provenance, default 64 KiB intent / 64 KiB future result allowance / 1,024 retained intents / 128 MiB aggregate, plus existing lifecycle bounds | Result writer, protected retention and sustained resource qualification; reserved result capacity is not a result payload |
+| Task lifecycle | Durable owner-scoped status/events, signed intent and atomic linkage; private one-shot synthetic dispatch, result/settlement and read-only recovery in this follow-up | Public worker and arbitrary network destination; historical-key recovery; authoritative failure/absence proof and acknowledged destination cancellation |
+| Queued intent capacity | Immutable provenance, default 64 KiB intent / 64 KiB result allowance / 1,024 retained intents / 128 MiB aggregate, plus existing lifecycle bounds; private immutable result writer in this follow-up | Public result delivery, protected retention and sustained resource qualification; unused result headroom is not a result payload |
 | Tenant status streams | Signed existing-task/cursor observation; shared authority-database allocation caps, defaults 64 fleet / 16 tenant / 4 stable owner; 5-second lease and 60-second absolute lifetime | Frontdoor physical connection/rate/body limits, contention/resource qualification and coordinated stop/drain/restore; legacy `/a2a` limits remain process-local |
 | Migration | Bounded offline ordinary-table assignment and conservative rollback | Large databases, rolling/live workload migration and active-work rollback |
 | Tenant coverage | Selected enrolled SDK/HTTP operations, namespace checks and operator policies | Complete evidence, reconciliation, background-service and protocol network coverage |
@@ -115,6 +129,35 @@ guards; this is not general rolling-version compatibility. Per-owner active and
 per-task event-count configuration still must match replicas. Event-count and
 state-machine limits remain independent of byte headroom. No capacity feature
 deletes UNKNOWN state, reservations or held evidence to regain room.
+
+## Selected private dispatch follow-up
+
+The [bounded dispatch and recovery unit](QUEUED_DISPATCH_AND_RECOVERY_2026-10-22.md)
+is **PARTIALLY TESTED** locally against frozen runtime/test bytes on the merged
+baseline. One final run recorded 861 distinct cases: 830 passed and 31 expected
+SQLite skips of PostgreSQL-only tests. The seven new modules contain 309 cases
+(288 passed, 21 skipped), including 34 passing real PostgreSQL variants; shared
+regressions contain 552 cases (542 passed, 10 skipped). Overlapping older runs
+are retained separately. These results do not qualify a public service or a
+production transport; selected-head hosted evidence remains separate.
+
+The private worker commits an immutable one-shot attempt before any effect and
+only that live branch may send. A restart, dropped return or existing marker
+permits read-only reconciliation, never automatic resend. Authoritative success
+binds the exact result and original reservation in the same local settlement
+transaction. Missing/mismatched evidence or failed local recording preserves
+UNKNOWN and exposure. The destination is an explicitly nonproduction SQLite
+`write(value)` demonstration, including when tenant accounting uses PostgreSQL.
+Current manual settlement authority is held/rechecked through the actual commit.
+
+Pre-attempt cancellation can close the attempt and refund its exact held token;
+after an attempt it records only a bounded cancellation request. No remote
+cancellation acknowledgment or authoritative absence/refund protocol is claimed.
+Current descriptor/pin rotation can leave old attempts unresolved. A public
+worker/poller, generic network dispatch and production qualification remain open.
+
+The earlier unit descriptions below retain their original boundaries; their
+then-future private dispatch/result work is superseded only by this follow-up.
 
 The stream unit is **VERIFIED IN CI for active authorized allocations only**.
 The [queued-intent follow-up](TENANT_TASK_INTENTS_2026-10-17.md) is
@@ -202,3 +245,5 @@ records the October 17 remote inventory, the older cached comparison and
 historical cleanup separately. Maintained and historical branch heads retain
 their separate dispositions. Later units require exact selected-head checks and
 source-associated receipts; descriptions here do not extend earlier test scope.
+
+Current branch count is six after the approved October22 consolidation. Earlier inventories above and dated branch reports retain their historical counts.

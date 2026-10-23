@@ -15,7 +15,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 
-from ..api.trusted_targets import resolve_target
+from ..api.trusted_targets import resolve_queued_target
 from .authority import AuthorityDenied, Principal
 from .budget import _checked_cost
 from .policy_rules import PolicyContext
@@ -198,8 +198,11 @@ def _plan(kernel, runtime, authority):
         if type(provenance["operator_cost"]) not in (int, float) or \
                 call.capability != provenance["capability"] or cost != _checked_cost(provenance["operator_cost"]):
             raise ValueError("accepted capability or operator cost changed")
-        target = resolve_target(submission["target_id"], submission["dst"], call.capability,
-                                agent_id=intent.agent_id, env=kernel._target_env[runtime.store.tenant_id])
+        target = resolve_queued_target(submission["target_id"], submission["dst"], call.capability,
+                                       tenant_id=runtime.store.tenant_id, wire=submission["wire"],
+                                       agent_id=intent.agent_id, env=kernel._target_env[runtime.store.tenant_id])
+        if target is not None and target.get("kind") == "queued_fenced_sqlite_v2":
+            kernel._queued_adapter(runtime.store.tenant_id, submission["target_id"], target)
         digest = hashlib.sha256(_json(target).encode()).hexdigest()
         if target is None or digest != provenance["target_configuration_sha256"]:
             raise ValueError("accepted target configuration changed")

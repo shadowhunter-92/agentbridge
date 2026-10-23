@@ -11,6 +11,15 @@ import time
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
+from .destination_receipts import verify_queued_destination_receipt
+from .queued_destination_contract import (
+    MAX_READBACK_BYTES,
+    canonical_queued_json,
+    normalize_queued_descriptor,
+    queued_hex,
+    queued_seconds,
+)
+
 
 class UntrustedReadback(ValueError):
     pass
@@ -85,3 +94,70 @@ def verify_readback_attestation(
     except Exception as exc:
         raise UntrustedReadback("readback attestation signature invalid") from exc
     return hashlib.sha256(canonical_readback_payload(proof)).hexdigest()
+
+
+_QUEUED_READBACK_FIELDS = (
+    "domain", "authorization_sha256", "tenant_id", "agent_id", "operation_id", "fingerprint",
+    "target_id", "destination_id", "attempt_id", "fence_epoch", "action_sha256", "outcome",
+    "external_reference", "committed_at", "result_sha256", "destination_receipt_sha256",
+    "observed_at", "source", "source_evidence_sha256", "observer_key_id",
+)
+QUEUED_READBACK_SOURCE = "queued-sqlite:read-only-authoritative-sql-v2"
+
+
+def canonical_queued_readback_payload(proof):
+    return canonical_queued_json({name: proof[name] for name in _QUEUED_READBACK_FIELDS})
+
+
+def queued_source_evidence_sha256(*, authorization, action_bytes, result, destination_receipt):
+    """Digest the exact independently fetched and verified committed values."""
+    return hashlib.sha256(canonical_queued_json({
+        "authorization": authorization, "action_hex": action_bytes.hex(), "result": result,
+        "destination_receipt": destination_receipt,
+    })).hexdigest()
+
+
+def verify_queued_readback_attestation(
+    proof, *, authorization, action_bytes, descriptor, result, destination_receipt,
+    now=None, max_age_seconds=300,
+):
+    """Strict v2 readback over an already committed historical execution."""
+    try:
+        descriptor = normalize_queued_descriptor(descriptor)
+        receipt_digest = verify_queued_destination_receipt(
+            destination_receipt, authorization=authorization, action_bytes=action_bytes,
+            descriptor=descriptor, result=result)
+        if not isinstance(proof, dict) or set(proof) != {*_QUEUED_READBACK_FIELDS, "signature_hex"}:
+            raise UntrustedReadback("unexpected or missing queued readback fields")
+        if len(canonical_queued_json(proof)) > MAX_READBACK_BYTES:
+            raise UntrustedReadback("queued readback exceeds byte limit")
+        expected = {name: destination_receipt[name] for name in (
+            "authorization_sha256", "tenant_id", "agent_id", "operation_id", "fingerprint", "target_id",
+            "destination_id", "attempt_id", "fence_epoch", "action_sha256", "outcome", "external_reference",
+            "committed_at", "result_sha256",
+        )}
+        expected.update({
+            "domain": "agentbridge.queued-readback.v2", "destination_receipt_sha256": receipt_digest,
+            "source": QUEUED_READBACK_SOURCE, "observer_key_id": descriptor["observer_key_id"],
+            "source_evidence_sha256": queued_source_evidence_sha256(
+                authorization=authorization, action_bytes=action_bytes, result=result,
+                destination_receipt=destination_receipt),
+        })
+        if any(proof[name] != value or type(proof[name]) is not type(value) for name, value in expected.items()):
+            raise UntrustedReadback("queued readback disagrees with exact committed evidence")
+        observed = proof["observed_at"]
+        now = int(time.time()) if now is None else now
+        if (type(now) is not int or type(observed) is not int or type(max_age_seconds) is not int
+                or max_age_seconds <= 0 or not queued_seconds(observed)
+                or not now - max_age_seconds <= observed <= now + 30
+                or proof["committed_at"] > observed + 30):
+            raise UntrustedReadback("queued readback is stale or from the future")
+        if not queued_hex(proof["signature_hex"], 128):
+            raise UntrustedReadback("invalid queued readback signature encoding")
+        Ed25519PublicKey.from_public_bytes(bytes.fromhex(descriptor["observer_public_key_hex"])).verify(
+            bytes.fromhex(proof["signature_hex"]), canonical_queued_readback_payload(proof))
+    except Exception as exc:
+        if isinstance(exc, UntrustedReadback):
+            raise
+        raise UntrustedReadback("untrusted queued readback evidence") from exc
+    return hashlib.sha256(canonical_queued_json(proof)).hexdigest()

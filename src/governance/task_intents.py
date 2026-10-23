@@ -275,6 +275,17 @@ class TaskIntentStore:
         This is integrity/ownership validation, never authority to execute. The
         caller must subsequently use the private enrolled-authority guard.
         """
+        intent, initial, current = self._load_immutable(owner_id, task_id, expected_intent_sha256)
+        if current != initial:
+            raise AuthorityDenied("retained queued intent integrity or ownership unavailable")
+        return intent
+
+    def _load_immutable(self, owner_id, task_id, expected_intent_sha256):
+        """Validate immutable acceptance only; current status grants no authority.
+
+        The initial-only preparation loader and the distinct admission-bound
+        dispatcher share these integrity checks, without broadening SUBMITTED.
+        """
         from .queued_intent_preparation import _StoredIntent
         from .tenant_kernel import binding_owner
 
@@ -321,10 +332,10 @@ class TaskIntentStore:
                 raise ValueError("invalid immutable result allowance")
             initial = self.tasks._decode(row["initial_snapshot"])
             current = self.tasks._decode(row["current_snapshot"])
-            if initial != TaskLifecycle(task_id, submission.context_id, "agentbridge") or current != initial:
+            if initial != TaskLifecycle(task_id, submission.context_id, "agentbridge"):
                 raise ValueError("retained intent is not an initial native queued task")
-            return _StoredIntent(owner_id, task_id, row["agent_id"], row["operation_id"],
-                                 expected_intent_sha256, row["record"], row["result_limit_bytes"])
+            return (_StoredIntent(owner_id, task_id, row["agent_id"], row["operation_id"],
+                                  expected_intent_sha256, row["record"], row["result_limit_bytes"]), initial, current)
         except (KeyError, TypeError, ValueError, AttributeError, UnicodeError, RecursionError) as exc:
             raise AuthorityDenied("retained queued intent integrity or ownership unavailable") from exc
 

@@ -7,7 +7,8 @@ evaluation, not an authorized production use.
 ## Current evaluation candidate — October 16, 2026
 
 Use exact candidate `d0881b937d2568e4e01fb02044bf466aea609e9a` from
-PR #63's unmerged stack. Its 24 hosted checks passed in
+PR #63's then-unmerged stack. This is a historical evaluator source pin;
+its 24 hosted checks passed in
 [CI run 38846044004](https://github.com/shadowhunter-92/agentbridge/actions/runs/38846044004).
 This is not the default branch or a published production release. A local wheel
 from this source passed fresh Python 3.11/Linux and 3.12/Windows installations,

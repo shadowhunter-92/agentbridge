@@ -1,7 +1,8 @@
 # Documentation index
 
 Start with [current alpha status and exact source/artifact pins](CURRENT_ALPHA_STATUS.md),
-[branch documentation dispositions](BRANCH_DOCUMENTATION_DISPOSITIONS_2026-10-16.md),
+[approved October22 consolidation](BRANCH_CONSOLIDATION_2026-10-22.md),
+[historical branch documentation dispositions](BRANCH_DOCUMENTATION_DISPOSITIONS_2026-10-16.md),
 [historical 88-row handoff register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md),
 [supported roadmap](ROADMAP.md), [protocol scope](PROTOCOL_COMPATIBILITY_2026.md),
 [deployment](DEPLOYMENT.md), and [four-product gates](FOUR_PRODUCT_EXECUTION_GATES_2026.md).
@@ -10,7 +11,8 @@ For SDK evaluation use [evaluator kit](OSS_EVALUATION_KIT.md),
 [Trust/Evidence qualification](TRUST_EVIDENCE_ACCEPTANCE_2026.md),
 [offline verifier](EXTERNAL_EVIDENCE_VERIFIER_ACCEPTANCE_2026.md), and
 [durable task status](DURABLE_TASK_LIFECYCLE.md) and
-[tenant-native status streaming](tenant-task-streams.md).
+[tenant-native status streaming](tenant-task-streams.md), and
+[private bounded dispatch and recovery](QUEUED_DISPATCH_AND_RECOVERY_2026-10-22.md).
 
 For historical repository evidence use [branch audit](BRANCH_REVIEW_2026-10-13.md),
 [legacy reconciliation](LEGACY_BRANCH_RECONCILIATION_2026.md), and
@@ -108,7 +110,9 @@ not an execution authority.
 | [Tenant-native task streams and shared allocations](tenant-task-streams.md) |
 | [Native queued tenant task acceptance](TENANT_TASK_INTENTS_2026-10-17.md) |
 | [Private queued-intent preparation and first admission](QUEUED_INTENT_PREPARATION_2026-10-18.md) |
-| [Current engineering alpha status — October 21, 2026](CURRENT_ALPHA_STATUS.md) |
+| [Bounded queued dispatch, results and recovery](QUEUED_DISPATCH_AND_RECOVERY_2026-10-22.md) |
+| [Approved October22 branch consolidation](BRANCH_CONSOLIDATION_2026-10-22.md) |
+| [Current engineering alpha status — October 22, 2026](CURRENT_ALPHA_STATUS.md) |
 | [Branch documentation dispositions — October 16, 2026](BRANCH_DOCUMENTATION_DISPOSITIONS_2026-10-16.md) |
 | [Architecture decision records](adr/README.md) |
 | [ADR-001: Canonical Hub-and-Spoke Model for Protocol Translation](adr/001-canonical-hub-and-spoke.md) |

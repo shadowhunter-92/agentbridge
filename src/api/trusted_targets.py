@@ -85,18 +85,7 @@ def _qualified_invocation(invocation: dict[str, Any], env: Mapping[str, str]) ->
     return invocation
 
 
-def resolve_target(target_id: Any, protocol: str, capability: str,
-                   *, env: Mapping[str, str] | None = None,
-                   agent_id: str | None = None) -> dict[str, Any] | None:
-    """Resolve an agent-selected target ID to an administrator-configured route.
-
-    Configure AGENTBRIDGE_TARGETS_JSON with an object keyed by target ID.
-    Never accept an agent-supplied executable, URL, argv or endpoint directly.
-    Missing target_id allows translation-only operation (no execution).
-    """
-    env = os.environ if env is None else env
-    if target_id is None:
-        return None
+def _target_record(target_id, protocol, capability, *, env, agent_id):
     if not isinstance(target_id, str) or not target_id.strip():
         raise SecurityConfigurationError("target_id must be a nonempty string")
     record = _object(env.get("AGENTBRIDGE_TARGETS_JSON"),
@@ -120,6 +109,47 @@ def resolve_target(target_id: Any, protocol: str, capability: str,
             raise SecurityConfigurationError("production target requires allowed_agents")
         if not agent_id or agent_id not in allowed_agents:
             raise SecurityConfigurationError("agent not authorized for target")
+    return record
+
+
+def resolve_queued_target(target_id, protocol, capability, *, tenant_id, wire, env=None, agent_id=None):
+    """Explicit queued-only demo resolution; the synchronous resolver stays closed."""
+    env = os.environ if env is None else env
+    if target_id is None:
+        return None
+    record = _target_record(target_id, protocol, capability, env=env, agent_id=agent_id)
+    if record.get("kind") != "queued_fenced_sqlite_v2":
+        return resolve_target(target_id, protocol, capability, env=env, agent_id=agent_id)
+    if env.get("AGENTBRIDGE_ENV", "").lower() in ("prod", "production"):
+        raise SecurityConfigurationError("queued demonstration destination is nonproduction only")
+    if capability != "write" or not isinstance(record.get("allowed_agents"), list) or agent_id not in record["allowed_agents"]:
+        raise SecurityConfigurationError("queued demonstration requires the exact allowed agent and write capability")
+    from ..governance.queued_destination_contract import canonical_demo_action, normalize_queued_descriptor
+
+    try:
+        descriptor = normalize_queued_descriptor({key: value for key, value in record.items()
+                                                  if key not in ("capabilities", "allowed_agents")})
+        canonical_demo_action(wire)
+        if descriptor["tenant_id"] != tenant_id or descriptor["target_id"] != target_id:
+            raise ValueError("queued descriptor tenant or target mismatch")
+        return descriptor
+    except (TypeError, ValueError) as exc:
+        raise SecurityConfigurationError("invalid bounded queued demonstration target or action") from exc
+
+
+def resolve_target(target_id: Any, protocol: str, capability: str,
+                   *, env: Mapping[str, str] | None = None,
+                   agent_id: str | None = None) -> dict[str, Any] | None:
+    """Resolve an agent-selected target ID to an administrator-configured route.
+
+    Configure AGENTBRIDGE_TARGETS_JSON with an object keyed by target ID.
+    Never accept an agent-supplied executable, URL, argv or endpoint directly.
+    Missing target_id allows translation-only operation (no execution).
+    """
+    env = os.environ if env is None else env
+    if target_id is None:
+        return None
+    record = _target_record(target_id, protocol, capability, env=env, agent_id=agent_id)
     kind = record.get("kind")
     if (protocol, kind) not in {
             ("mcp", "mcp_stdio"), ("a2a", "a2a_http"), ("acp", "acp_http")}:
