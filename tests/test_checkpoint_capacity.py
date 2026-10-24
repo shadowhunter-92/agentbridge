@@ -659,3 +659,62 @@ def test_postgres_checkpoint_tables_require_ordinary_permanent_relations(network
     assert trust.holds() == ["preserve-durability"]
     assert operations.get("durability-agent", "durability-operation")["state"] == "unknown"
     assert store.get_budget("durability-agent") == {"spent": 0, "reserved": {"held-durability": 2}}
+
+
+@pytest.mark.parametrize("isolation", ["READ COMMITTED", "REPEATABLE READ", "SERIALIZABLE"])
+def test_postgres_growth_refuses_stale_transaction_snapshot(network_sql_stores, isolation):
+    store = network_sql_stores()
+    if not isinstance(store, PostgresStore):
+        pytest.skip("PostgreSQL transaction snapshot contract")
+    import psycopg
+    other = network_sql_stores()
+    trust = AuditTrustStore(store)
+    trust.set_checkpoint_capacity(max_records=1, max_bytes=1000, max_entry_bytes=1000)
+    with store._db.transaction():
+        store._db.execute("SET TRANSACTION ISOLATION LEVEL " + isolation)
+        assert store._db.execute("SELECT count(*) AS n FROM audit_checkpoints").fetchone()["n"] == 0
+        other._db.execute("INSERT INTO audit_checkpoints VALUES(1,'committed first')")
+        expected = "checkpoint capacity reached" if isolation == "READ COMMITTED" else "requires READ COMMITTED"
+        with pytest.raises(psycopg.Error, match=expected):
+            with store._db.transaction():
+                store._db.execute("INSERT INTO audit_checkpoints VALUES(2,'must not overrun')")
+    assert rows(store) == [{"seq": 1, "data": "committed first"}]
+    assert trust.checkpoint_capacity()["used_records"] == 1
+    assert trust.checkpoint_capacity()["max_records"] == 1
+
+
+@pytest.mark.parametrize("isolation", ["REPEATABLE READ", "SERIALIZABLE"])
+@pytest.mark.parametrize("operation", ["inspect", "configure"])
+def test_postgres_capacity_api_refuses_unsupported_snapshot_without_changes(network_sql_stores, isolation, operation):
+    store = network_sql_stores()
+    if not isinstance(store, PostgresStore):
+        pytest.skip("PostgreSQL transaction snapshot contract")
+    trust = AuditTrustStore(store)
+    assert [dict(row) for row in store._db.execute("SELECT * FROM checkpoint_capacity_policy_v1")] == []
+    before = store.load_audit()
+    with store._db.transaction():
+        store._db.execute("SET TRANSACTION ISOLATION LEVEL " + isolation)
+        with pytest.raises(CheckpointCapacityDenied, match="requires READ COMMITTED"):
+            if operation == "inspect":
+                trust.checkpoint_capacity()
+            else:
+                trust.set_checkpoint_capacity(max_records=1, max_bytes=1000, max_entry_bytes=1000)
+    assert [dict(row) for row in store._db.execute("SELECT * FROM checkpoint_capacity_policy_v1")] == []
+    assert rows(store) == []
+    assert store.load_audit() == before
+
+
+def test_postgres_read_only_snapshot_verification_permits_repeatable_read(network_sql_stores):
+    store = network_sql_stores()
+    if not isinstance(store, PostgresStore):
+        pytest.skip("PostgreSQL read-only migration snapshot contract")
+    from src.governance.checkpoint_capacity import verify_snapshot
+    trust = AuditTrustStore(store)
+    trust.set_checkpoint_capacity(max_records=2, max_bytes=1000, max_entry_bytes=1000)
+    store._db.execute("INSERT INTO audit_checkpoints VALUES(1,'retained')")
+    before = rows(store)
+    with store._db.transaction():
+        store._db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        with store._db.cursor() as cur:
+            assert verify_snapshot(cur, postgres=True) == {"records": 1, "bytes": len("retained")}
+    assert rows(store) == before

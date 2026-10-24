@@ -87,6 +87,26 @@ These runs overlap and are not added together. Earlier exact-head CI at
 `d3a6072` is historical evidence for that source; the correction needs its own
 exact-head CI before incorporation.
 
+PostgreSQL growth and the managed checkpoint-capacity policy API require
+`READ COMMITTED`. A retained two-connection reproduction under `REPEATABLE READ`
+held an old empty snapshot, allowed another connection to commit one row, then
+committed a second row under a one-row policy. Advisory serialization alone
+does not refresh that transaction snapshot. The follow-up refuses unsupported
+growth and policy access explicitly; it adds no automatic transaction retries.
+Read-only offline snapshot qualification remains allowed under its existing
+freeze/lock contract. Eight new actual PostgreSQL cases passed, including
+unsupported-isolation refusals and read-only snapshot verification. One final
+source-stable SQLite/PostgreSQL run across seven related modules recorded
+348 distinct cases: 292 passed, 56 expected backend-specific skips, zero
+failures/errors. It includes actual migration/restore, tenant and audit-capacity
+regressions. The focused run overlaps this total and is not added to it.
+This local follow-up still requires its own exact-head hosted CI; earlier
+catalog-fix CI does not qualify it.
+Earlier draft PostgreSQL routine definitions differ from this contract and are
+refused at startup rather than silently replaced. Existing draft installations
+need a separately reviewed stopped/drained upgrade; this is not rolling-version
+or live-migration qualification.
+
 An already installed checkpoint schema must retain the exact known function
 bodies/attributes and trigger wiring, timing and enabled state. Startup refuses
 modified or partial installations instead of repairing them silently. Complete
