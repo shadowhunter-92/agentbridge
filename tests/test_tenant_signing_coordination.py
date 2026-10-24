@@ -141,3 +141,34 @@ def test_signing_policy_rejects_another_connection_cursor(authority, namespaces)
                 trust.settlement_keys(cur, destination_key_id="old", observer_key_id="old")
         finally:
             cur.close()
+
+
+@pytest.mark.parametrize("isolation", ["READ COMMITTED", "REPEATABLE READ", "SERIALIZABLE"])
+def test_current_keys_do_not_accept_revoked_key_from_old_snapshot(network_sql_stores, isolation):
+    store = network_sql_stores()
+    if not isinstance(store, PostgresStore):
+        pytest.skip("PostgreSQL current signing policy snapshot contract")
+    trust, controllers, pinned, envelopes = journal(store)
+    other = network_sql_stores()
+    publisher = SigningTrustJournal(other, controller_keys=pinned)
+    replacement = dict(key_id="replacement", public_key_hex=public(Ed25519PrivateKey.generate()), state="staged")
+    staged = signed_registry(controllers["readback"], "readback", 2, envelopes["readback"],
+                             envelopes["readback"]["keys"] + [replacement])
+    revoked = signed_registry(controllers["readback"], "readback", 3, staged,
+                              [{**staged["keys"][0], "state": "revoked"}, {**replacement, "state": "active"}])
+    before_audit = store.load_audit()
+    with store._db.transaction():
+        store._db.execute("SET TRANSACTION ISOLATION LEVEL " + isolation)
+        assert store._db.execute("SELECT max(revision) AS n FROM signing_trust_revisions WHERE domain='readback'").fetchone()["n"] == 1
+        publisher.publish(staged)
+        publisher.publish(revoked)
+        expected = "staged, revoked or unknown" if isolation == "READ COMMITTED" else "requires READ COMMITTED"
+        with store._db.cursor() as cur:
+            with pytest.raises(TrustJournalDenied, match=expected):
+                trust.settlement_keys(cur, destination_key_id="old", observer_key_id="old")
+    with trust._transaction(write=False) as cur:
+        current = trust.settlement_keys(cur, destination_key_id="old", observer_key_id="replacement")
+    assert current["readback_revision"] == 3
+    assert current["readback_key_hex"] == replacement["public_key_hex"]
+    assert store.load_audit() == before_audit
+    assert store._db.execute("SELECT count(*) AS n FROM signing_trust_revisions WHERE domain='readback'").fetchone()["n"] == 3

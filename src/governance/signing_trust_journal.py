@@ -253,6 +253,8 @@ class SigningTrustJournal:
         if not active:
             raise TrustJournalDenied("signing policy requires an active transaction")
         if isinstance(self.store, PostgresStore):
+            if cur.execute("SHOW transaction_isolation").fetchone()["transaction_isolation"] != "read committed":
+                raise TrustJournalDenied("current signing policy requires READ COMMITTED")
             cur.execute("SELECT pg_advisory_xact_lock_shared(%s)", (self._LOCK,))
             self._policy_lock(cur, write=False)
         result = {}

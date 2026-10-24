@@ -108,6 +108,7 @@ not an execution authority.
 | [Configured PostgreSQL namespace checks](TENANT_POSTGRES_NAMESPACE_CHECKS_2026-10-16.md) |
 | [Enrolled tenant runtime and HTTP boundary](TENANT_RUNTIME_2026-10-14.md) |
 | [Signing-policy coordination with tenant authority](TENANT_SIGNING_COORDINATION_2026-10-16.md) |
+| [Current signing policy and PostgreSQL snapshots](SIGNING_POLICY_SNAPSHOTS_2026-10-23.md) |
 | [Tenant-native task streams and shared allocations](tenant-task-streams.md) |
 | [Native queued tenant task acceptance](TENANT_TASK_INTENTS_2026-10-17.md) |
 | [Private queued-intent preparation and first admission](QUEUED_INTENT_PREPARATION_2026-10-18.md) |
