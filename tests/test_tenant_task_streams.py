@@ -203,8 +203,20 @@ async def test_actual_network_stream_replay_cross_tenant_and_disconnect_cleanup(
 @pytest.mark.asyncio
 async def test_two_http_apps_share_cap_and_revocation_closes_current_stream(tenant_app, monkeypatch, loopback_server):
     seed_task(tenant_app)
-    first = application(tenant_app, monkeypatch, max_streams=1)
-    second = application(tenant_app, monkeypatch, max_streams=1)
+    # Keep the cap observation away from the separately tested hard expiry.
+    # Client event delivery/signing may be delayed on a loaded runner.
+    local = StreamLimits(poll_seconds=.01, heartbeat_seconds=.02, max_seconds=15)
+    first = application(tenant_app, monkeypatch, local_limits=local, max_streams=1, lease_seconds=1, max_seconds=15)
+    second = application(tenant_app, monkeypatch, local_limits=local, max_streams=1, lease_seconds=1, max_seconds=15)
+    service = first.state.stream_leases
+    released = threading.Event()
+    release = service.release
+
+    def observe_release(lease):
+        release(lease)
+        released.set()
+
+    monkeypatch.setattr(service, "release", observe_release)
     with loopback_server(lambda _: first) as (url_a, _), loopback_server(lambda _: second) as (url_b, _):
         async with httpx.AsyncClient(trust_env=False, timeout=3) as client:
             raw, headers = signed(tenant_app, data={"request_scope":"task.stream","task_id":"task"})
@@ -212,12 +224,18 @@ async def test_two_http_apps_share_cap_and_revocation_closes_current_stream(tena
                 assert response.status_code == 200
                 lines = response.aiter_lines()
                 assert (await first_event(lines))["state"] == "submitted"
+                assert not released.is_set()
+                assert service.usage()["active_stream_allocations"] == first.state.status_streams.total == 1
                 raw2, headers2 = signed(tenant_app, data={"request_scope":"task.stream","task_id":"task"})
                 assert (await client.post(url_b+"/v2/tasks/stream", content=raw2, headers=headers2)).status_code == 429
+                assert not released.is_set()
                 tenant_app[4].revoke_agent(tenant_app[5], "alpha", "worker")
-                # The response terminates without publishing later task state.
-                remaining = [line async for line in lines]
+                # Revocation must close well before the independent lifetime,
+                # without publishing any later task state.
+                async with asyncio.timeout(3):
+                    remaining = [line async for line in lines]
                 assert not any(line.startswith("data: ") for line in remaining)
+            assert await asyncio.to_thread(released.wait, 2)
             deadline = time.monotonic()+2
             while first.state.stream_leases.usage()["active_stream_allocations"]:
                 assert time.monotonic() < deadline
