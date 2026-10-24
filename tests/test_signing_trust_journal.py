@@ -161,6 +161,14 @@ def test_restore_below_external_revision_pin_is_denied(configured):
 
 def test_corrupt_history_is_reverified(configured):
     store, trust, _, _, envelopes, _ = configured
+    if isinstance(store, SqliteStore):
+        # Deliberate privileged fault injection: supported SQL writers can no
+        # longer corrupt append-only history in place. Keep verification tested
+        # after removing precisely the UPDATE guard in this disposable database.
+        store._db.execute("DROP TRIGGER signing_immutable_history_update_v1")
+    else:
+        # Same explicit owner-level fault setup for the PG append-only guard.
+        store._db.execute("DROP TRIGGER signing_immutable_v1 ON signing_trust_revisions")
     corrupted = copy.deepcopy(envelopes["readback"])
     corrupted["keys"][0]["state"] = "revoked"
     p = "?" if isinstance(store, SqliteStore) else "%s"
