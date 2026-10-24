@@ -5,6 +5,7 @@ import os
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -206,7 +207,9 @@ def test_postgres_old_snapshot_writes_fail_closed(pg_journal, isolation, writer)
             store._db.execute("SET TRANSACTION ISOLATION LEVEL " + isolation)
             assert store._db.execute("SELECT count(*) AS n FROM signing_trust_revisions").fetchone()["n"] == 0
             other._db.execute("INSERT INTO signing_trust_revisions VALUES(%s,%s,%s)", ("readback", 1, encoded(proposal())))
-            with pytest.raises((TrustJournalDenied, SigningJournalCapacityDenied, psycopg.errors.RaiseException), match="READ COMMITTED"):
+            error = TrustJournalDenied if writer == "managed" else (SigningJournalCapacityDenied, psycopg.errors.RaiseException)
+            message = "publication requires its own transaction" if writer == "managed" else "READ COMMITTED"
+            with pytest.raises(error, match=message):
                 # The savepoint lets the outer read-only snapshot roll back
                 # normally after a direct trigger exception.
                 with store._db.transaction():
@@ -327,7 +330,7 @@ def test_postgres_history_and_policy_cannot_be_erased(pg_journal, command):
     assert rows(store) == before and trust.capacity() == capacity
 
 
-def test_postgres_policy_audit_outer_rollback_and_existing_floor_limitation(pg_journal):
+def test_postgres_policy_audit_outer_rollback_preserves_publication_floor(pg_journal):
     store, trust, proposal, _, _ = pg_journal
     store._db.execute("CREATE TABLE policy_test_audit(message TEXT NOT NULL)")
     with pytest.raises(RuntimeError, match="outer abort"):
@@ -339,17 +342,64 @@ def test_postgres_policy_audit_outer_rollback_and_existing_floor_limitation(pg_j
     assert store._db.execute("SELECT count(*) AS n FROM policy_test_audit").fetchone()["n"] == 0
     first = proposal()
     trust.publish(first)
-    with pytest.raises(RuntimeError, match="outer publish abort"):
-        with sql_atomic(store):
+    with sql_atomic(store):
+        with pytest.raises(TrustJournalDenied, match="publication requires its own transaction"):
             trust.publish(proposal(previous=first))
-            assert trust._floors["readback"] == 2
-            raise RuntimeError("outer publish abort")
+        assert trust._floors["readback"] == 1
     assert [row["revision"] for row in rows(store)] == [1]
-    # This is the preserved existing composition limitation, not new safety:
-    # the journal instance refuses the older persisted head after outer abort.
-    with pytest.raises(TrustJournalDenied, match="minimum revision"):
-        with trust._transaction(write=False) as cur:
-            trust._load(cur, "readback")
+    with trust._transaction(write=False) as cur:
+        assert trust._load(cur, "readback")[0]["revision"] == 1
+
+
+@pytest.mark.parametrize("boundary", ["sql_atomic", "connection"])
+@pytest.mark.parametrize("abort", [False, True])
+def test_postgres_publication_owns_commit_before_floor_advance(pg_journal, boundary, abort):
+    store, trust, proposal, pinned, _ = pg_journal
+    first = proposal()
+    trust.publish(first)
+    second = proposal(previous=first)
+    before, floors = rows(store), dict(trust._floors)
+    outer = sql_atomic(store) if boundary == "sql_atomic" else store._db.transaction()
+    expected = pytest.raises(RuntimeError, match="outer abort") if abort else nullcontext()
+    with expected:
+        with outer:
+            store._db.execute("SELECT 1")
+            with pytest.raises(TrustJournalDenied, match="publication requires its own transaction"):
+                trust.publish(second)
+            assert rows(store) == before and trust._floors == floors
+            # The denial must leave the caller's transaction usable.
+            assert store._db.execute("SELECT 7 AS n").fetchone()["n"] == 7
+            if abort:
+                raise RuntimeError("outer abort")
+    assert rows(store) == before and trust._floors == floors
+    with trust._transaction(write=False) as cur:
+        assert trust._load(cur, "readback")[0]["revision"] == 1
+    # The identical proposal can be explicitly published after the caller ends
+    # its transaction; no restart or reduction of the pinned floor is needed.
+    trust.publish(second)
+    assert [row["revision"] for row in rows(store)] == [1, 2]
+    assert trust._floors["readback"] == 2
+    reloaded = SigningTrustJournal(store, controller_keys=pinned, minimum_revisions=trust._floors)
+    with reloaded._transaction(write=False) as cur:
+        assert reloaded._load(cur, "readback")[0]["revision"] == 2
+
+
+@pytest.mark.parametrize("isolation", ["REPEATABLE READ", "SERIALIZABLE"])
+def test_postgres_owned_publication_still_requires_read_committed(pg_journal, isolation):
+    store, trust, proposal, _, _ = pg_journal
+    first = proposal()
+    trust.publish(first)
+    second = proposal(previous=first)
+    before, floors = rows(store), dict(trust._floors)
+    store._db.execute("SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL " + isolation)
+    try:
+        with pytest.raises(TrustJournalDenied, match="READ COMMITTED"):
+            trust.publish(second)
+        assert rows(store) == before and trust._floors == floors
+    finally:
+        store._db.execute("SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED")
+    trust.publish(second)
+    assert [row["revision"] for row in rows(store)] == [1, 2]
 
 
 def test_postgres_saturation_preserves_unknown_budget_hold_and_audit(pg_journal):

@@ -120,10 +120,15 @@ journal is refused when its external floor is newer than the stored head.
 The existing SQLite `publish` method owns `BEGIN`/`COMMIT`; publication inside
 an already-open outer SQLite transaction remains unsupported and is tested as
 such. The new policy setter's savepoint composition must not be read as an
-extension of publication semantics. PostgreSQL publication can currently
-advance its in-memory floor after a nested savepoint but before an enclosing
-transaction commits; that existing composition limitation is registered for
-separate qualification, and is not fixed or claimed safe here.
+extension of publication semantics. The original capacity unit retained a
+PostgreSQL limitation: publication could advance its in-memory floor after a
+nested savepoint but before an enclosing transaction committed. A subsequent
+[publication ownership extension](SIGNING_PUBLICATION_BOUNDARY_2026-10-24.md)
+refuses an existing PostgreSQL transaction before publication can change history
+or a floor. It holds the store lock through its own commit and floor advance.
+Capacity-policy/audit savepoint composition remains supported. This is a bounded
+library-publication contract; it does not promise arbitrary transaction
+composition, safety against a privileged raw-SQL owner, or independent custody.
 
 Logical envelope bytes do not include indexes, pages, WAL, backups, authority
 rows, separate destination/witness journals or every tenant payload. General

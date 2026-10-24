@@ -98,6 +98,7 @@ not an execution authority.
 | [Audit payload capacity and conservative retention](AUDIT_CAPACITY_AND_RETENTION_2026.md) |
 | [Checkpoint registry capacity and retained-history limits](CHECKPOINT_CAPACITY_2026.md) |
 | [Retained signing-revision capacity and failure limits](SIGNING_JOURNAL_CAPACITY_2026.md) |
+| [Signing publication transaction ownership](SIGNING_PUBLICATION_BOUNDARY_2026-10-24.md) |
 | [Durable aggregate admission quotas](DURABLE_ADMISSION_QUOTAS_2026-10-15.md) |
 | [Legacy SQLite mutation boundaries — October 16, 2026](SQLITE_ATOMIC_MUTATIONS_2026-10-16.md) |
 | [Task status transaction composition and tenant guards — October 16, 2026](TASK_ATOMIC_SCOPE_2026-10-16.md) |

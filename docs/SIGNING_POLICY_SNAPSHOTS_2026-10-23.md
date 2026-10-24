@@ -23,6 +23,10 @@ limit. It does not qualify arbitrary transaction composition, historical-key
 recovery, independent custody or production execution. The existing in-memory
 revision-floor/outer-rollback limitation is not repaired by this check.
 
+A later [publication ownership extension](SIGNING_PUBLICATION_BOUNDARY_2026-10-24.md)
+addresses the supported library publication path separately. The source and
+results below remain those of the original current-key snapshot correction.
+
 The focused run passed three actual PostgreSQL cases (READ COMMITTED,
 REPEATABLE READ and SERIALIZABLE), with three expected SQLite skips. Each case
 uses valid signed staged replacement/revocation and then confirms the current
