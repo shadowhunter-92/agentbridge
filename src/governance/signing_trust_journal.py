@@ -72,6 +72,10 @@ class SigningTrustJournal:
         self._floors = dict(floors)
         if isinstance(store, PostgresStore):
             with store._lock, store._db.transaction(), store._db.cursor() as cur:
+                from .signing_journal_capacity import assert_postgres_write_context, install_postgres, prepare_postgres
+
+                prepare_postgres(cur)
+                assert_postgres_write_context(cur)
                 # Old journal workers hold this key exclusively. A shared
                 # compatibility barrier retains their exclusion while composing
                 # with an authority read guard on a separate SQL connection.
@@ -87,10 +91,15 @@ class SigningTrustJournal:
                     cur.execute("INSERT INTO signing_trust_lock_v1 VALUES(1,1)")
                 self._policy_lock(cur, write=True)
                 self._create_history(cur)
+                install_postgres(cur)
                 self._install_tenant_guards(cur)
         else:
             with self._transaction() as cur:
+                from .signing_journal_capacity import install_sqlite, prepare_sqlite
+
+                prepare_sqlite(cur)
                 self._create_history(cur)
+                install_sqlite(cur)
                 self._install_tenant_guards(cur)
 
     @staticmethod
@@ -107,9 +116,9 @@ class SigningTrustJournal:
         from .tenant_store import _install_postgres_guards, _install_sqlite_guards
 
         if isinstance(self.store, PostgresStore):
-            _install_postgres_guards(cur, self.store.schema, ("signing_trust_revisions", "signing_trust_lock_v1"))
+            _install_postgres_guards(cur, self.store.schema, ("signing_trust_revisions", "signing_trust_lock_v1", "signing_journal_capacity_policy_v1"))
         else:
-            _install_sqlite_guards(cur, ("signing_trust_revisions",))
+            _install_sqlite_guards(cur, ("signing_trust_revisions", "signing_journal_capacity_policy_v1"))
 
     @staticmethod
     def _policy_lock(cur, *, write):
@@ -124,6 +133,9 @@ class SigningTrustJournal:
         store = self.store
         with store._lock:
             if isinstance(store, SqliteStore):
+                from .signing_journal_capacity import assert_sqlite_namespace
+
+                assert_sqlite_namespace(store._db)
                 store._db.execute("BEGIN IMMEDIATE")
                 try:
                     cur = store._db.cursor()
@@ -137,6 +149,9 @@ class SigningTrustJournal:
                     raise
             else:
                 with store._db.transaction(), store._db.cursor() as cur:
+                    from .signing_journal_capacity import assert_postgres_namespace
+
+                    assert_postgres_namespace(cur)
                     cur.execute("SELECT pg_advisory_xact_lock_shared(%s)", (self._LOCK,))
                     self._policy_lock(cur, write=write)
                     yield cur
@@ -175,6 +190,12 @@ class SigningTrustJournal:
         return registry
 
     def _load(self, cur, domain, *, enforce_floor=True):
+        from .signing_journal_capacity import assert_postgres_namespace, assert_sqlite_namespace
+
+        if isinstance(self.store, PostgresStore):
+            assert_postgres_namespace(cur)
+        else:
+            assert_sqlite_namespace(cur)
         placeholder = "?" if isinstance(self.store, SqliteStore) else "%s"
         cur.execute(
             f"SELECT revision,envelope FROM signing_trust_revisions WHERE domain={placeholder} ORDER BY revision",
@@ -233,12 +254,31 @@ class SigningTrustJournal:
                 except ValueError as exc:
                     raise TrustJournalDenied("invalid signed key transition") from exc
             p = "?" if isinstance(self.store, SqliteStore) else "%s"
+            encoded = json.dumps(envelope, sort_keys=True)
+            from .signing_journal_capacity import SigningJournalCapacityDenied, admit
+
+            try:
+                admit(cur, encoded, postgres=isinstance(self.store, PostgresStore))
+            except SigningJournalCapacityDenied as exc:
+                raise TrustJournalDenied(str(exc)) from exc
             cur.execute(
                 f"INSERT INTO signing_trust_revisions VALUES({p},{p},{p})",
-                (domain, expected, json.dumps(envelope, sort_keys=True)),
+                (domain, expected, encoded),
             )
         self._floors[domain] = max(self._floors.get(domain, 1), expected)
         return registry_digest(envelope)
+
+    def capacity(self):
+        """Trusted library inspection; no public configuration endpoint."""
+        from .signing_journal_capacity import policy
+
+        return policy(self.store)
+
+    def set_capacity(self, *, max_records, max_bytes, max_entry_bytes, audit=None):
+        """Set bounded limits without deleting history or revoking keys."""
+        from .signing_journal_capacity import SigningJournalLimits, policy
+
+        return policy(self.store, limits=SigningJournalLimits(max_records, max_bytes, max_entry_bytes), audit=audit)
 
     def settlement_keys(self, cur, *, destination_key_id, observer_key_id):
         """Called inside this store's transaction; serializes against rotation."""
@@ -253,6 +293,8 @@ class SigningTrustJournal:
         if not active:
             raise TrustJournalDenied("signing policy requires an active transaction")
         if isinstance(self.store, PostgresStore):
+            if cur.execute("SHOW transaction_isolation").fetchone()["transaction_isolation"] != "read committed":
+                raise TrustJournalDenied("current signing policy requires READ COMMITTED")
             cur.execute("SELECT pg_advisory_xact_lock_shared(%s)", (self._LOCK,))
             self._policy_lock(cur, write=False)
         result = {}
