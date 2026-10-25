@@ -4,7 +4,7 @@
 
 Current phase2 is PARTIALLY TESTED for read-only audit and bounded local HTTPS readback coverage. The later test/document unit has58 distinct local passes:52 owned+6 direct regressions, zero skips/failures/errors. Its100 runtime Python files and static HTML remain unchanged, with108 saved pre/post pins. This does not qualify durable-ledger UNKNOWN/settlement, provider execution, atomic fencing, real TLS/DNS/egress, independent custody or production. Exact later-source hostedCI must be recorded separately.
 
-Strict native Stripe/Salesforce and two-real-destination acceptance remain BLOCKED. Dedicated environments remain unavailable and causes unresolved; no financial-account activation or identity/key submission is implied. PR73 stays a separate unmerged draft. Earlier branch/readback observations retain their stated date/source.
+Strict native Stripe/Salesforce and two-real-destination acceptance remain BLOCKED. The dedicated AgentBridge Stripe Sandbox/test UI is now available; scoped API credentials, provider execution/readback and atomic fencing remain unqualified. Salesforce provisioning remains unresolved. No assistant financial activation, identity/key submission or API traffic is claimed. PR73 stays a separate unmerged draft. Earlier source observations retain their stated date.
 
 | ID | Requirement | Status |
 | --- | --- | --- |
@@ -92,8 +92,10 @@ Strict native Stripe/Salesforce and two-real-destination acceptance remain BLOCK
 
 The JSON records evidence, owners, reasons and next actions for all81 requests. Task labels are 7 BLOCKED, 59 NOT STARTED, 4 PARTIALLY TESTED, 11 VERIFIED IN CI; these are not completion percentages. NOT STARTED means phase-specific qualification has not begun, not that existing code is absent. Historical7a23/24 failure and all earlier source pins remain preserved.
 
-Local58 receipt SHA256 `f68b5ad9db37d86e9b48d44df819ed0b74b51600daa8be678619f1d0d0f69f6a`; source manifest `cbc1b149c6a736c268afdb817d84d5eda4fc6eddc0cde19b7c2b95a489dd6fd1`; owned test `f26f6ceae7b5adb800f7ae06f44aef33aebb2d657d1bef5a29c70a74dcd41cee`; independent saved-evidence QA `4eda32341be9bec4397ca51948758c6dd0ce0e12745ce0a5306174a4e3ef9f0a`. Local artifact hashes identify separate evidence and are not hostedCI or institutional attestation.
+Local58 receipt SHA256 `f68b5ad9db37d86e9b48d44df819ed0b74b51600daa8be678619f1d0d0f69f6a`; source manifest `cbc1b149c6a736c268afdb817d84d5eda4fc6eddc0cde19b7c2b95a489dd6fd1`; raw Windows owned test `f26f6ceae7b5adb800f7ae06f44aef33aebb2d657d1bef5a29c70a74dcd41cee`; independent saved-evidence QA `4eda32341be9bec4397ca51948758c6dd0ce0e12745ce0a5306174a4e3ef9f0a`. Local artifact hashes identify separate evidence and are not hostedCI or institutional attestation.
 
 [Machine-readable progress](ENGINEERING_PHASE_PROGRESS_2026-10-24.json) · [Checkpoint registry](CHECKPOINT_REGISTRY_2026.md) · [External destination contract and omissions](EXTERNAL_DESTINATION_FENCING_2026.md) · [Blockers](BLOCKERS.md)
 
 All later protected-main merges, releases, deployments, access grants and outside correspondence retain applicable owner gates. Independent legal/security/developer/buyer/operator/pilot acceptance stays external. The recorded USD100 AWS maximum is separate from those milestones; private account observations do not belong in these source files.
+
+The tested raw Windows file normalizes only CRLF to LF as Git test SHA256 `b2bf23947d6815bb7891494404c0f355073d8192d3ac5e2939fe6fce342e83af`; the AST is unchanged. This association is separate from a test rerun or hosted-CI result. The new UI observation does not advance native service, fence, custody or production acceptance.

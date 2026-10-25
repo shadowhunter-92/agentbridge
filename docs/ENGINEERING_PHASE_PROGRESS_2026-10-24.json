@@ -286,8 +286,8 @@
         "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md",
         "Read-only audit reports; no new test or provider-effect acceptance"
       ],
-      "reason": "A separate AgentBridge Stripe sandbox has not been created; observed Create/Manage controls were disabled, with cause unknown. Actual service-native atomic monotonic fencing and operator-owned effect/readback guarantees remain unestablished; idempotency is not accepted as a substitute.",
-      "next_action": "Resolve approved sandbox access and verify a real target contract. Internal read-only mapping and negative-contract preparation may continue without claiming live adapter acceptance.",
+      "reason": "A dedicated AgentBridge Stripe sandbox dashboard is now available in Sandbox/test mode following owner-provisioned setup. This resolves the earlier UI-availability observation only. No assistant financial activation, secret-key retrieval/copy, API credential provisioning, provider API traffic, authoritative readback or native atomic monotonic-fence qualification is established.",
+      "next_action": "Record the dedicated UI as available, then obtain only the applicable approved scoped API/readback access and a concrete target-side contract before testing synthetic provider operations. Keep strict native-fence and custody acceptance BLOCKED; dashboard availability does not qualify consequential execution.",
       "owner": "Internal engineering"
     },
     {
@@ -417,9 +417,10 @@
         "Read-only audit reports; no new test or provider-effect acceptance",
         "docs/EXTERNAL_DESTINATION_FENCING_2026.md",
         "External destination document SHA256 64e4702d2e5e122017b12914ad10f3dbfb72f4c40f3d3495b624d058d2580239",
-        "Four-document source review SHA256 a8adb1dbd6226c6ee89c43ba5cdc9afb6af09994dbb5f9628d88a81af527f898"
+        "Four-document source review SHA256 a8adb1dbd6226c6ee89c43ba5cdc9afb6af09994dbb5f9628d88a81af527f898",
+        "Current external destination document SHA256 af8baac756b6cfc5eb281cdf83dbd88d2775e12b7ed45e259a47464e45b72947"
       ],
-      "reason": "The requested EXTERNAL_DESTINATION_FENCING_2026 document is implemented and source-reviewed, with exact local58-case references and explicit supported/unsupported boundaries. Document SHA25664e4702d2e5e122017b12914ad10f3dbfb72f4c40f3d3495b624d058d2580239 and four-document review SHA256a8adb1dbd6226c6ee89c43ba5cdc9afb6af09994dbb5f9628d88a81af527f898 are pinned. Later-unit hostedCI, native SaaS/fencing support, real environments and independent custody remain unqualified.",
+      "reason": "The external-destination document remains implemented and source-reviewed with local58 references. Its current environment-only revision is SHA256 af8baac756b6cfc5eb281cdf83dbd88d2775e12b7ed45e259a47464e45b72947. The initial document/review hashes remain in retained evidence as historical records. Later-unit hosted CI, native SaaS/fencing support and independent custody remain unqualified.",
       "next_action": "Qualify the exact later test/document unit in hostedCI after source review/publication; keep provider capability, environment and custody blockers distinct, preserving unsupported strict execution refusal and production NO-GO.",
       "owner": "Internal engineering"
     },
@@ -1029,9 +1030,9 @@
         "AgentBridge-phase2-destination-interface-audit-2026-10-25.md",
         "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md"
       ],
-      "reason": "Approved setup attempts have not established usable Stripe/Salesforce environments. Stripe sandbox creation controls were disabled; the single Salesforce signup ended in a vendor trial-oops error after manual CAPTCHA, with no confirmation and unknown cause. Actual destination-atomic guarantees, operator-owned endpoints, read credentials and separate custody remain unestablished.",
+      "reason": "The owner-provisioned Stripe dedicated test sandbox UI is available; no assistant financial activation, secret-key access, scoped provider credential setup or API trial is claimed. The earlier disabled-control observation is historical to the prior context. Salesforce provisioning remains unresolved with unknown cause. Destination-atomic guarantees, authoritative endpoints and separately administered custody remain unqualified.",
       "owner": "Maintainer and consenting destination operator",
-      "next_action": "Resolve approved environment access and service-specific guarantees. Continue internally controllable audits/contracts/tests without promoting mocks, signup attempts or cloud resources to real destination acceptance."
+      "next_action": "Resolve remaining approved scoped API/readback and Salesforce environment prerequisites through normal vendor/operator controls. Establish the actual atomic target contract and independent custody evidence before external acceptance; continue bounded internal work meanwhile."
     },
     {
       "id": "B03",
@@ -1071,7 +1072,7 @@
     "phase": 2,
     "scope": "Native SaaS strict-fence and real external-destination acceptance",
     "owner": "Maintainer and consenting destination/observer operator",
-    "reason": "Read-only compatibility audits are available, but actual destination-atomic monotonic fencing guarantees, operator-owned effect/readback endpoints, credentials and usable sandbox environments are not established. Account signup or a mock does not establish those guarantees.",
+    "reason": "Stripe dedicated sandbox UI is now available, but actual destination-atomic monotonic fencing guarantees, approved scoped API/readback credentials and operator-owned effect/readback endpoints remain unqualified. Salesforce provisioning remains unresolved. UI access, signup or a mock does not establish the required external contract.",
     "next_action": "Continue internal contract/documentation and test-only preparation. Obtain a real qualified target contract and approved operator environment before consequential execution or external acceptance; preserve UNKNOWN and production refusal for unsupported contracts.",
     "PR74_owner_gate_closed_by_explicit_approval_and_merge": true
   },
@@ -1144,7 +1145,8 @@
     "authored_baseline_and_baseline_ci_retained_as_historical": true,
     "main_evidence_as_of": "Saved provider observations around 11:21 UTC, independently checked at 16:22 UTC; no new provider readback by this preparation.",
     "local_branch_and_vendor_ui_facts": "Latest root-provided observations; not independently repeated by this overlay.",
-    "dated_review_only_no_later_source_CI_inferred": true
+    "dated_review_only_no_later_source_CI_inferred": true,
+    "latest_environment_observation": "Dedicated Stripe Sandbox/test UI availability is root-provided and public-safe. No private screenshot, account/contact identifier or sensitive signup artifact was accessed by this preparation."
   },
   "phase1_maintained_acceptance": {
     "status": "VERIFIED IN CI",
@@ -1244,17 +1246,42 @@
         "actual TLS/DNS/egress",
         "provider or independent custody acceptance",
         "production"
-      ]
+      ],
+      "owned_test_hash_scope": "Existing owned_test_sha256 identifies the tested raw Windows working-file bytes.",
+      "canonical_LF_test_sha256": "b2bf23947d6815bb7891494404c0f355073d8192d3ac5e2939fe6fce342e83af",
+      "CRLF_to_LF_only_AST_preserved": true
     },
-    "local_only_as_reported_scope": "Historical preparation observation before this source review; later publication needs its own source/CI record."
+    "local_only_as_reported_scope": "Historical preparation observation before this source review; later publication needs its own source/CI record.",
+    "local_commit_observation": {
+      "commit": "bf6f3fb0c1bbb4fc5c281648f55d845d4b88d044",
+      "base": "c154b28c34cfeab927753e51b93595cc1b485810",
+      "tree": "ad963a97f8c05c102cbf102ac865f6634553cc0c",
+      "integration_receipt_sha256": "90ea9214ae0c6d71606b20cf6c7bc9a6b41ab323fd92af76666bd6a9a7f66a71",
+      "scope": "Historical local seven-file commit before the later two-document environment observation update; not a hosted-CI or main-merge result."
+    }
   },
   "sandbox_environment_observations": {
     "scope": "Public-safe root-provided setup observations only; no private contact, account, organization or personal identifiers.",
     "stripe": {
       "status": "BLOCKED",
-      "separate_AgentBridge_sandbox_created": false,
-      "observation": "Create/Manage controls were disabled in the observed UI; the cause is not established.",
-      "next_action": "Resolve approved sandbox-creation access or obtain an operator-provisioned environment; verify the actual effect-boundary contract separately."
+      "separate_AgentBridge_sandbox_created": true,
+      "observation": "The owner-provisioned dedicated AgentBridge Stripe sandbox UI is available. Only optional nonbinding dashboard preferences and entry to the sandbox were completed by the assistant. No assistant live financial activation, key reveal/copy, provider API traffic or credential-scope expansion occurred.",
+      "next_action": "Resolve scoped approved API/readback prerequisites and the actual enforceable target contract; do not infer those from dashboard access.",
+      "scope": "API/effect and native-fence qualification remains BLOCKED; dedicated UI availability is separately observed.",
+      "dashboard_UI_available": true,
+      "observed_mode": "Sandbox/test",
+      "API_credentials_and_provider_effect_readback_qualified": false,
+      "native_atomic_fence_or_custody_accepted": false,
+      "prior_UI_observation": {
+        "scope": "Historical previous-context observation; not the new sandbox state.",
+        "source_v3_progress_sha256": "997f88200a8a36734ca322be0cd6af96f123f3302bc6e53ffa0945ea9ebec0b6",
+        "observation": {
+          "status": "BLOCKED",
+          "separate_AgentBridge_sandbox_created": false,
+          "observation": "Create/Manage controls were disabled in the observed UI; the cause is not established.",
+          "next_action": "Resolve approved sandbox-creation access or obtain an operator-provisioned environment; verify the actual effect-boundary contract separately."
+        }
+      }
     },
     "salesforce": {
       "status": "BLOCKED",
