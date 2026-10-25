@@ -98,6 +98,7 @@ not an execution authority.
 | [Audit payload capacity and conservative retention](AUDIT_CAPACITY_AND_RETENTION_2026.md) |
 | [Checkpoint registry capacity and retained-history limits](CHECKPOINT_CAPACITY_2026.md) |
 | [Current bounded checkpoint registry and verified source](CHECKPOINT_REGISTRY_2026.md) |
+| [External destination capability, fencing limits and acceptance](EXTERNAL_DESTINATION_FENCING_2026.md) |
 | [Nine-phase engineering checklist and progress](ENGINEERING_PHASE_PROGRESS_2026-10-24.md) |
 | [Engineering blockers and external acceptance](BLOCKERS.md) |
 | [Durable aggregate admission quotas](DURABLE_ADMISSION_QUOTAS_2026-10-15.md) |

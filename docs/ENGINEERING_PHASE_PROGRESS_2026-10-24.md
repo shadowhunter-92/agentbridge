@@ -1,26 +1,12 @@
-# Nine-phase engineering checklist and progress - October 24, 2026
+# Nine-phase engineering progress - current review October25,2026
 
-Last reviewed October 25, 2026. **PARTIALLY TESTED; production NO-GO.** Baseline main `635288a76750bcd01d9fc9268dd9fe29897b269a` has its own 16/16 hosted success. This supplemental checklist accounts for the new handoff; it preserves older requirements and their source-specific evidence.
+**PARTIALLY TESTED overall; production NO-GO.** Maintained main `c154b28c34cfeab927753e51b93595cc1b485810` is VERIFIED IN CI in its own [16-job push run](https://github.com/shadowhunter-92/agentbridge/actions/runs/40187737269). Explicitly owner-approved PR74 is merged normally; reviewed source9aaf separately passed24 jobs across7 workflows. These sources/results remain separate.
 
-Every new phase branch starts from recorded main. Every protected-main merge needs explicit approval. Work proceeds sequentially; a recorded blocker may permit an independent preparation task. NOT STARTED means no new phase acceptance audit yet, not that code is missing.
+Current phase2 is PARTIALLY TESTED for read-only audit and bounded local HTTPS readback coverage. The later test/document unit has58 distinct local passes:52 owned+6 direct regressions, zero skips/failures/errors. Its100 runtime Python files and static HTML remain unchanged, with108 saved pre/post pins. This does not qualify durable-ledger UNKNOWN/settlement, provider execution, atomic fencing, real TLS/DNS/egress, independent custody or production. Exact later-source hostedCI must be recorded separately.
 
-AWS use was authorized October 25 within USD 100 total. The connector verified active free-plan credits before use; no paid resources have been created for this phase. A cloud trial needs a priced scope and bounded teardown. AWS trials do not establish independent external acceptance.
+Strict native Stripe/Salesforce and two-real-destination acceptance remain BLOCKED. Dedicated environments remain unavailable and causes unresolved; no financial-account activation or identity/key submission is implied. PR73 stays a separate unmerged draft. Earlier branch/readback observations retain their stated date/source.
 
-| Phase | Scope | Status |
-| --- | --- | --- |
-| 1 | Checkpoint registry | PARTIALLY TESTED |
-| 2 | External destination fencing | NOT STARTED |
-| 3 | Network and workload identity | NOT STARTED |
-| 4 | HA and recovery | NOT STARTED |
-| 5 | Supply chain and release provenance | NOT STARTED |
-| 6 | Protocol conformance | NOT STARTED |
-| 7 | Performance and operations | NOT STARTED |
-| 8 | External validation preparation | NOT STARTED |
-| 9 | Documentation and final status | NOT STARTED |
-
-The 81 tasks account for verified existing work and remaining requested items. Evidence, reason, owner and next action are in the [machine-readable progress list](ENGINEERING_PHASE_PROGRESS_2026-10-24.json). Update both from a source-bound review; a file or mock test alone is not acceptance.
-
-| ID | Task | Status |
+| ID | Requirement | Status |
 | --- | --- | --- |
 | P1-01a | Verify historical checkpoint source ccdd1a5 | VERIFIED IN CI |
 | P1-01b | Verify historical checkpoint source d3a6072 | VERIFIED IN CI |
@@ -30,22 +16,22 @@ The 81 tasks account for verified existing work and remaining requested items. E
 | P1-02b | Refuse PostgreSQL TEMP and UNLOGGED checkpoint relations | VERIFIED IN CI |
 | P1-02c | Real offline restore retains exact checkpoint bytes/policy/holds | VERIFIED IN CI |
 | P1-02d | Independent concurrent checkpoint writers cannot exceed capacity | VERIFIED IN CI |
-| P1-02e | Reject restored checkpoint raw-text drift even when parsed JSON remains equivalent | PARTIALLY TESTED |
-| P1-03 | Document registry limits, no eviction/refund/replay and remaining storage/retention gaps | IMPLEMENTED / UNTESTED |
+| P1-02e | Reject restored checkpoint raw-text drift even when parsed JSON remains equivalent | VERIFIED IN CI |
+| P1-03 | Document registry limits, no eviction/refund/replay and remaining storage/retention gaps | VERIFIED IN CI |
 | P1-04 | Require 24 exact-head hosted jobs and owner approval before checkpoint merge | VERIFIED IN CI |
-| P1-05 | Publish source-bound checklist/progress/blockers without production claims | IMPLEMENTED / UNTESTED |
-| P2-01a | Audit/reuse existing destination contract before defining ExternalDestinationFence | NOT STARTED |
-| P2-01b | Stripe sandbox adapter: verify actual atomic epoch capability before implementation | NOT STARTED |
-| P2-01c | Salesforce sandbox adapter: verify actual atomic epoch capability before implementation | NOT STARTED |
-| P2-01d | Generic HTTP adapter with fixed operator allowlist and qualified target contract | NOT STARTED |
-| P2-02a | Per-service destination-atomic monotonic fencing and allowed effects | NOT STARTED |
-| P2-02b | Destination-authored receipt with explicit signer/custody boundary | NOT STARTED |
-| P2-02c | Authoritative independent readback of actual destination state | NOT STARTED |
+| P1-05 | Publish source-bound checklist/progress/blockers without production claims | VERIFIED IN CI |
+| P2-01a | Audit/reuse existing destination contract before defining ExternalDestinationFence | PARTIALLY TESTED |
+| P2-01b | Stripe sandbox adapter: verify actual atomic epoch capability before implementation | BLOCKED |
+| P2-01c | Salesforce sandbox adapter: verify actual atomic epoch capability before implementation | BLOCKED |
+| P2-01d | Generic HTTP adapter with fixed operator allowlist and qualified target contract | BLOCKED |
+| P2-02a | Per-service destination-atomic monotonic fencing and allowed effects | BLOCKED |
+| P2-02b | Destination-authored receipt with explicit signer/custody boundary | BLOCKED |
+| P2-02c | Authoritative independent readback of actual destination state | BLOCKED |
 | P2-02d | Idempotency and timeout/lost-ACK handling preserving UNKNOWN without replay | NOT STARTED |
-| P2-03a | Mocked API negative tests, split brain and stale leader | NOT STARTED |
+| P2-03a | Mocked API negative tests, split brain and stale leader | PARTIALLY TESTED |
 | P2-03b | Lost ACK after commit, concurrent resource operations and unauthorized destinations | NOT STARTED |
-| P2-04 | EXTERNAL_DESTINATION_FENCING_2026: sandbox support, exact guarantees, config and omissions | NOT STARTED |
-| P2-AC | Qualify two actual destination-enforced adapters; mocked API success alone is insufficient | NOT STARTED |
+| P2-04 | EXTERNAL_DESTINATION_FENCING_2026: sandbox support, exact guarantees, config and omissions | PARTIALLY TESTED |
+| P2-AC | Qualify two actual destination-enforced adapters; mocked API success alone is insufficient | BLOCKED |
 | P3-01 | Audit existing CNI/relay assets; prepare production-candidate NetworkPolicy/mTLS/CNI manifests | NOT STARTED |
 | P3-02a | Extend existing workload_identity.py with verified SPIFFE/SPIRE and mTLS contract | NOT STARTED |
 | P3-02b | Certificate rotation/drain and per-request revocation checks on every enabled path | NOT STARTED |
@@ -104,4 +90,10 @@ The 81 tasks account for verified existing work and remaining requested items. E
 | P9-04 | COMPLETION_REPORT_2026 with source-bound coverage, gaps and external next steps | NOT STARTED |
 | P9-AC | Cross-document consistency with every unmet requirement owned; no production/commercial/certification overclaims | NOT STARTED |
 
-The historical 7a10a5f failure is preserved. Corrected 143c93d success, actual main 635288a success and the new two-case local restore negative are separate evidence. See [checkpoint registry evidence](CHECKPOINT_REGISTRY_2026.md) and [blockers](BLOCKERS.md). PR #73 remains draft-only. General retention, physical disk quotas, independent reviews, legal acceptance, developer/buyer evidence and pilot consent remain open.
+The JSON records evidence, owners, reasons and next actions for all81 requests. Task labels are 7 BLOCKED, 59 NOT STARTED, 4 PARTIALLY TESTED, 11 VERIFIED IN CI; these are not completion percentages. NOT STARTED means phase-specific qualification has not begun, not that existing code is absent. Historical7a23/24 failure and all earlier source pins remain preserved.
+
+Local58 receipt SHA256 `f68b5ad9db37d86e9b48d44df819ed0b74b51600daa8be678619f1d0d0f69f6a`; source manifest `cbc1b149c6a736c268afdb817d84d5eda4fc6eddc0cde19b7c2b95a489dd6fd1`; owned test `f26f6ceae7b5adb800f7ae06f44aef33aebb2d657d1bef5a29c70a74dcd41cee`; independent saved-evidence QA `4eda32341be9bec4397ca51948758c6dd0ce0e12745ce0a5306174a4e3ef9f0a`. Local artifact hashes identify separate evidence and are not hostedCI or institutional attestation.
+
+[Machine-readable progress](ENGINEERING_PHASE_PROGRESS_2026-10-24.json) · [Checkpoint registry](CHECKPOINT_REGISTRY_2026.md) · [External destination contract and omissions](EXTERNAL_DESTINATION_FENCING_2026.md) · [Blockers](BLOCKERS.md)
+
+All later protected-main merges, releases, deployments, access grants and outside correspondence retain applicable owner gates. Independent legal/security/developer/buyer/operator/pilot acceptance stays external. The recorded USD100 AWS maximum is separate from those milestones; private account observations do not belong in these source files.
