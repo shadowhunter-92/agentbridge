@@ -1,5 +1,11 @@
 # Checkpoint registry capacity
 
+> Current source status, October 24, 2026: corrected source143c93d passed24/24
+> hosted jobs and was owner-merged as main635288a, whose own CI passed16/16.
+> See [the current checkpoint registry index](CHECKPOINT_REGISTRY_2026.md).
+> Pending-CI statements and local counts below retain their original source
+> scope; they are historical observations, not the current merge state.
+
 This unit extends `AuditTrustStore` and its existing `audit_checkpoints`
 table. It preserves the checkpoint signature format, pinned signer,
 complete genesis-chain verification, exact sequence/head binding and
