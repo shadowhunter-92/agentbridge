@@ -1,4 +1,5 @@
 """Preserve checkpoint bytes, policy and holds through real offline migration."""
+import json
 from contextlib import closing
 
 import pytest
@@ -7,8 +8,8 @@ from src.governance.audit import AuditLog
 from src.governance.audit_trust import AuditTrustStore
 from src.governance.checkpoint_capacity import TABLE, qualified_postgres_routines, verify_snapshot
 from src.governance.operation_ledger import OperationLedger
-from src.governance.store import PostgresStore
-from src.governance.tenant_migration import TenantMigration, TenantMigrationDenied
+from src.governance.store import PostgresStore, sql_atomic
+from src.governance.tenant_migration import TenantMigration, TenantMigrationDenied, _snapshot
 from tests.test_authority import authority as authority
 from tests.test_tenant_migration import backup_restore as backup_restore
 from tests.test_tenant_migration import historical as historical
@@ -73,6 +74,102 @@ def test_real_checkpoint_restore_assignment_and_rollback(authority, namespaces, 
         with pytest.raises(Exception, match="checkpoint capacity"):
             trust.save_checkpoint(candidate, identity.public_key_hex)
         assert state(source) == expected
+
+
+def test_real_restore_rejects_checkpoint_json_text_drift(authority, historical, backup_restore):
+    source, identity, _, _ = historical
+    AuditTrustStore(source).set_checkpoint_capacity(max_records=7, max_bytes=8000, max_entry_bytes=1000)
+    expected, expected_usage = state(source), actual(source)
+    original = expected[0][0]["data"]
+    altered = original + " "
+    assert json.loads(altered) == json.loads(original)
+    assert altered.encode("utf-8") != original.encode("utf-8")
+    assert len(altered.encode("utf-8")) <= expected[1][0]["max_entry_bytes"]
+    assert expected_usage["bytes"] + 1 <= expected[1][0]["max_bytes"]
+    migration = TenantMigration(authority[0], source)
+    frozen = migration.freeze(authority[1], "alpha")
+
+    def protected(store):
+        return {
+            "budget": store.get_budget(identity.agent_id),
+            "unknown": [dict(row) for row in store._db.execute(
+                "SELECT * FROM agent_operations ORDER BY agent_id,operation_id").fetchall()],
+            "reservations": [dict(row) for row in store._db.execute(
+                "SELECT * FROM operation_reservations ORDER BY agent_id,operation_id").fetchall()],
+            "holds": [dict(row) for row in store._db.execute("SELECT * FROM audit_holds ORDER BY name").fetchall()],
+            "audit": store.load_audit(),
+            "marker": store._db.execute(
+                "SELECT record FROM agentbridge_tenant_migration WHERE singleton=1").fetchone()["record"],
+        }
+
+    def checkpoint_triggers(store):
+        if isinstance(store, PostgresStore):
+            rows = store._db.execute(
+                "SELECT tgname AS name,pg_get_triggerdef(oid) AS definition,tgenabled AS enabled "
+                "FROM pg_trigger WHERE tgrelid='audit_checkpoints'::regclass AND NOT tgisinternal ORDER BY tgname"
+            ).fetchall()
+        else:
+            rows = store._db.execute(
+                "SELECT name,sql AS definition FROM sqlite_master "
+                "WHERE type='trigger' AND tbl_name='audit_checkpoints' ORDER BY name"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    expected_protected = protected(source)
+    assert len(expected_protected["unknown"]) == len(expected_protected["reservations"]) == 1
+    assert expected_protected["unknown"][0]["state"] == "unknown"
+    token = expected_protected["reservations"][0]["token"]
+    assert expected_protected["budget"]["reserved"][token] == 3
+    assert json.loads(expected_protected["marker"]) == frozen
+    source_triggers = checkpoint_triggers(source)
+    restored, archive = backup_restore()
+    assert state(restored) == expected and actual(restored) == expected_usage
+    assert protected(restored) == expected_protected
+    triggers = checkpoint_triggers(restored)
+    with closing(restored._db.cursor()) as cur:
+        before_manifest = _snapshot(restored, cur)
+    assert before_manifest == frozen["manifest"]
+
+    if isinstance(restored, PostgresStore):
+        guards = [row for row in triggers if row["name"] in ("checkpoint_immutable_v1", "ab_migration_freeze")]
+    else:
+        guards = [row for row in triggers if row["name"] == "checkpoint_immutable_history_update_v1" or (
+            row["name"].startswith("ab_migration_freeze_") and " BEFORE UPDATE " in row["definition"].upper())]
+    assert len(guards) == 2
+    # Trusted fault injection into this disposable real restore only. Reinstall
+    # both saved UPDATE guards before verification, so refusal tests text binding
+    # rather than missing triggers. The frozen source and every other guard stay intact.
+    postgres = isinstance(restored, PostgresStore)
+    placeholder = "%s" if postgres else "?"
+    with sql_atomic(restored):
+        for guard in guards:
+            quoted = '"' + guard["name"].replace('"', '""') + '"'
+            restored._db.execute("DROP TRIGGER " + quoted + (" ON audit_checkpoints" if postgres else ""))
+        restored._db.execute(
+            "UPDATE audit_checkpoints SET data=" + placeholder + " WHERE seq=" + placeholder,
+            (altered, expected[0][0]["seq"]),
+        )
+        for guard in guards:
+            restored._db.execute(guard["definition"])
+    assert checkpoint_triggers(restored) == triggers
+    assert state(restored) == ([{**expected[0][0], "data": altered}], expected[1])
+    assert actual(restored) == {"records": expected_usage["records"], "bytes": expected_usage["bytes"] + 1}
+    with closing(restored._db.cursor()) as cur:
+        after_manifest = _snapshot(restored, cur)
+    assert after_manifest["sequences"] == before_manifest["sequences"]
+    assert after_manifest["tables"].keys() == before_manifest["tables"].keys()
+    for table, previous in before_manifest["tables"].items():
+        current = after_manifest["tables"][table]
+        assert current["columns"] == previous["columns"] and current["objects"] == previous["objects"]
+        assert current["rows"] == previous["rows"]
+        assert (current["sha256"] != previous["sha256"]) == (table == "audit_checkpoints")
+    with pytest.raises(TenantMigrationDenied, match="^restored backup does not preserve all historical rows$"):
+        migration.verify_backup(authority[1], restored, archive)
+    assert state(restored) == ([{**expected[0][0], "data": altered}], expected[1])
+    assert state(source) == expected and actual(source) == expected_usage
+    assert protected(source) == protected(restored) == expected_protected
+    assert checkpoint_triggers(source) == source_triggers
+    assert checkpoint_triggers(restored) == triggers
 
 
 def test_sqlite_missing_capacity_trigger_refuses_freeze_without_repair(authority, historical):

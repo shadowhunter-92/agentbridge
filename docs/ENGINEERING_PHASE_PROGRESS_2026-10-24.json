@@ -1,0 +1,976 @@
+{
+  "date": "2026-10-24",
+  "status": "PARTIALLY TESTED",
+  "source_baseline": "635288a76750bcd01d9fc9268dd9fe29897b269a",
+  "baseline_ci": "https://github.com/shadowhunter-92/agentbridge/actions/runs/40070457044",
+  "scope": "Supplemental nine-phase user handoff checklist; not a replacement for legacy acceptance registers or an assertion that unaudited code is absent.",
+  "current_phase": 1,
+  "production": "NO-GO",
+  "merge_policy": "Every main merge needs explicit maintainer authorization; each new phase branch starts from recorded main.",
+  "publication_policy": "The user requested a branch and reviewed PR per phase. October 25 authorization permits needed AWS work within USD 100 total; root verified credits before use. Releases, protected-main merges, access grants and correspondence keep separate applicable gates.",
+  "status_definitions": "NOT STARTED means the new phase-specific audit/qualification has not begun; it does not mean existing code is absent. VERIFIED IN CI applies only to cited source/jobs. Local tests and externally accepted evidence stay distinct.",
+  "prior_work": "PR #72 merged; PR #73 remains a separate draft. Local publication-boundary and offline-upgrade work is preserved, not silently included in a new phase or discarded.",
+  "phases": [
+    {
+      "id": 1,
+      "title": "Checkpoint registry",
+      "status": "PARTIALLY TESTED",
+      "next_action": "Finish source/documentation acceptance and record owner decision."
+    },
+    {
+      "id": 2,
+      "title": "External destination fencing",
+      "status": "NOT STARTED",
+      "next_action": "Wait for the preceding phase, or document a blocker and take an independent preparation task."
+    },
+    {
+      "id": 3,
+      "title": "Network and workload identity",
+      "status": "NOT STARTED",
+      "next_action": "Wait for the preceding phase, or document a blocker and take an independent preparation task."
+    },
+    {
+      "id": 4,
+      "title": "HA and recovery",
+      "status": "NOT STARTED",
+      "next_action": "Wait for the preceding phase, or document a blocker and take an independent preparation task."
+    },
+    {
+      "id": 5,
+      "title": "Supply chain and release provenance",
+      "status": "NOT STARTED",
+      "next_action": "Wait for the preceding phase, or document a blocker and take an independent preparation task."
+    },
+    {
+      "id": 6,
+      "title": "Protocol conformance",
+      "status": "NOT STARTED",
+      "next_action": "Wait for the preceding phase, or document a blocker and take an independent preparation task."
+    },
+    {
+      "id": 7,
+      "title": "Performance and operations",
+      "status": "NOT STARTED",
+      "next_action": "Wait for the preceding phase, or document a blocker and take an independent preparation task."
+    },
+    {
+      "id": 8,
+      "title": "External validation preparation",
+      "status": "NOT STARTED",
+      "next_action": "Wait for the preceding phase, or document a blocker and take an independent preparation task."
+    },
+    {
+      "id": 9,
+      "title": "Documentation and final status",
+      "status": "NOT STARTED",
+      "next_action": "Wait for the preceding phase, or document a blocker and take an independent preparation task."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "P1-01a",
+      "phase": 1,
+      "requirement": "Verify historical checkpoint source ccdd1a5",
+      "status": "VERIFIED IN CI",
+      "evidence": [
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/39884970368"
+      ],
+      "reason": "Its own seven workflows/24 jobs passed; not relabeled as current main.",
+      "next_action": "Retain immutable source-specific evidence.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P1-01b",
+      "phase": 1,
+      "requirement": "Verify historical checkpoint source d3a6072",
+      "status": "VERIFIED IN CI",
+      "evidence": [
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/39928339316"
+      ],
+      "reason": "Its own seven workflows/24 jobs passed; not relabeled as current main.",
+      "next_action": "Retain immutable source-specific evidence.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P1-01c",
+      "phase": 1,
+      "requirement": "Verify historical checkpoint source 5b6981e",
+      "status": "VERIFIED IN CI",
+      "evidence": [
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/39968001623"
+      ],
+      "reason": "Its own seven workflows/24 jobs passed; not relabeled as current main.",
+      "next_action": "Retain immutable source-specific evidence.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P1-01d",
+      "phase": 1,
+      "requirement": "Verify historical 7a10a5f without erasing its failed result",
+      "status": "PARTIALLY TESTED",
+      "evidence": [
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40046824359",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40068956312"
+      ],
+      "reason": "7a had 23/24 success; the stream observation test failed. Corrected 143c93d passed 24/24. The literal assertion that all four historical heads were green is false.",
+      "next_action": "Use the corrected verified head; retain the failure and source-bound correction. See B01.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P1-02a",
+      "phase": 1,
+      "requirement": "Saturation preserves legal holds and UNKNOWN reservations",
+      "status": "VERIFIED IN CI",
+      "evidence": [
+        "tests/test_checkpoint_capacity.py::test_saturation_preserves_unknown_reservation_hold_and_audit",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40068956312",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40070457044"
+      ],
+      "reason": "Existing SQLite/PostgreSQL negative coverage is included in exact source 143c93d and actual main 635288a CI; no duplicate implementation/test is needed.",
+      "next_action": "Preserve these negatives and verify any subsequent runtime change against them.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P1-02b",
+      "phase": 1,
+      "requirement": "Refuse PostgreSQL TEMP and UNLOGGED checkpoint relations",
+      "status": "VERIFIED IN CI",
+      "evidence": [
+        "tests/test_checkpoint_capacity.py::test_postgres_checkpoint_tables_require_ordinary_permanent_relations",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40068956312",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40070457044"
+      ],
+      "reason": "Existing PostgreSQL TEMP and UNLOGGED refusal cases are included in exact source 143c93d and actual main 635288a CI. SQLite has separate TEMP/case coverage; UNLOGGED refusal is a catalog check, not crash-loss qualification.",
+      "next_action": "Preserve these negatives and verify any subsequent runtime change against them.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P1-02c",
+      "phase": 1,
+      "requirement": "Real offline restore retains exact checkpoint bytes/policy/holds",
+      "status": "VERIFIED IN CI",
+      "evidence": [
+        "tests/test_tenant_migration_checkpoint_capacity.py::test_real_checkpoint_restore_assignment_and_rollback",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40068956312",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40070457044"
+      ],
+      "reason": "Existing positive real SQLite backup and PostgreSQL dump/restore cases preserve exact checkpoint JSON, policy, holds and UNKNOWN reservations in source 143c93d and main 635288a CI. The newly added raw-text corruption negative has separate local evidence under P1-02e and has not run in those historical CI jobs.",
+      "next_action": "Preserve exact restore positives; qualify new corruption negatives separately.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P1-02d",
+      "phase": 1,
+      "requirement": "Independent concurrent checkpoint writers cannot exceed capacity",
+      "status": "VERIFIED IN CI",
+      "evidence": [
+        "tests/test_checkpoint_capacity.py::test_concurrent_independent_workers_cannot_overrun",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40068956312",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40070457044"
+      ],
+      "reason": "Existing SQLite/PostgreSQL negative coverage is included in exact source 143c93d and actual main 635288a CI; no duplicate implementation/test is needed.",
+      "next_action": "Preserve these negatives and verify any subsequent runtime change against them.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P1-02e",
+      "phase": 1,
+      "requirement": "Reject restored checkpoint raw-text drift even when parsed JSON remains equivalent",
+      "status": "PARTIALLY TESTED",
+      "evidence": [
+        "tests/test_tenant_migration_checkpoint_capacity.py::test_real_restore_rejects_checkpoint_json_text_drift",
+        "docs/CHECKPOINT_REGISTRY_2026.md",
+        "Local focused receipt SHA256 f4e47e45a467a12c11a90cfd7e71196f9ae1f5dcea84296ff07e48df5c4f7dc9",
+        "Local source manifest SHA256 f003ea26fe9cb8c1dc055f41eda9a9787cd10ded0115a07cbc2be847faa1b9a5"
+      ],
+      "reason": "New negative passed exactly two focused cases, SQLite and PostgreSQL, with no skips or failures; all 100 runtime files were unchanged. Its own hosted CI is pending.",
+      "next_action": "Review the focused evidence and publish the narrow Phase 1 PR for its own exact-head CI; require explicit owner approval before merge.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P1-03",
+      "phase": 1,
+      "requirement": "Document registry limits, no eviction/refund/replay and remaining storage/retention gaps",
+      "status": "IMPLEMENTED / UNTESTED",
+      "evidence": [
+        "docs/CHECKPOINT_REGISTRY_2026.md",
+        "docs/CHECKPOINT_CAPACITY_2026.md"
+      ],
+      "reason": "Requested bounded registry index and historical-status clarification are prepared on a new branch from main 635288a.",
+      "next_action": "Check links/source constants; open the phase documentation PR and record its own CI.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P1-04",
+      "phase": 1,
+      "requirement": "Require 24 exact-head hosted jobs and owner approval before checkpoint merge",
+      "status": "VERIFIED IN CI",
+      "evidence": [
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40068956312",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40070457044",
+        "https://github.com/shadowhunter-92/agentbridge/pull/72"
+      ],
+      "reason": "Owner approved normal PR #72 merge of 143c93d; actual main 635288a has its own 16/16 success.",
+      "next_action": "Do not infer approval for PR #73 or later phase merges.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P1-05",
+      "phase": 1,
+      "requirement": "Publish source-bound checklist/progress/blockers without production claims",
+      "status": "IMPLEMENTED / UNTESTED",
+      "evidence": [
+        "docs/ENGINEERING_PHASE_PROGRESS_2026-10-24.json",
+        "docs/ENGINEERING_PHASE_PROGRESS_2026-10-24.md",
+        "docs/BLOCKERS.md"
+      ],
+      "reason": "Supplemental nine-phase register; original acceptance records remain separate.",
+      "next_action": "Validate all task IDs/statuses/links, preserve old records and obtain phase PR CI.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P2-01a",
+      "phase": 2,
+      "requirement": "Audit/reuse existing destination contract before defining ExternalDestinationFence",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P2-01b",
+      "phase": 2,
+      "requirement": "Stripe sandbox adapter: verify actual atomic epoch capability before implementation",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P2-01c",
+      "phase": 2,
+      "requirement": "Salesforce sandbox adapter: verify actual atomic epoch capability before implementation",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P2-01d",
+      "phase": 2,
+      "requirement": "Generic HTTP adapter with fixed operator allowlist and qualified target contract",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P2-02a",
+      "phase": 2,
+      "requirement": "Per-service destination-atomic monotonic fencing and allowed effects",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P2-02b",
+      "phase": 2,
+      "requirement": "Destination-authored receipt with explicit signer/custody boundary",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P2-02c",
+      "phase": 2,
+      "requirement": "Authoritative independent readback of actual destination state",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P2-02d",
+      "phase": 2,
+      "requirement": "Idempotency and timeout/lost-ACK handling preserving UNKNOWN without replay",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P2-03a",
+      "phase": 2,
+      "requirement": "Mocked API negative tests, split brain and stale leader",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P2-03b",
+      "phase": 2,
+      "requirement": "Lost ACK after commit, concurrent resource operations and unauthorized destinations",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P2-04",
+      "phase": 2,
+      "requirement": "EXTERNAL_DESTINATION_FENCING_2026: sandbox support, exact guarantees, config and omissions",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P2-AC",
+      "phase": 2,
+      "requirement": "Qualify two actual destination-enforced adapters; mocked API success alone is insufficient",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P3-01",
+      "phase": 3,
+      "requirement": "Audit existing CNI/relay assets; prepare production-candidate NetworkPolicy/mTLS/CNI manifests",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P3-02a",
+      "phase": 3,
+      "requirement": "Extend existing workload_identity.py with verified SPIFFE/SPIRE and mTLS contract",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P3-02b",
+      "phase": 3,
+      "requirement": "Certificate rotation/drain and per-request revocation checks on every enabled path",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P3-03a",
+      "phase": 3,
+      "requirement": "Actual DNS rebinding/private resolution and IPv4-mapped IPv6 refusal",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P3-03b",
+      "phase": 3,
+      "requirement": "Metadata endpoints and redirect-chain destination enforcement",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P3-03c",
+      "phase": 3,
+      "requirement": "CONNECT framing/smuggling and TLS certificate/SNI negative tests",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P3-04",
+      "phase": 3,
+      "requirement": "NETWORK_ISOLATION_PRODUCTION_2026: exact supported deployments/results/gaps; reference relays sandbox-only",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P3-AC",
+      "phase": 3,
+      "requirement": "Operated kind/Calico traffic with identity and fail-closed adversarial evidence; no YAML-only acceptance",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P4-01a",
+      "phase": 4,
+      "requirement": "Audit existing fences/recovery before leader-election implementation",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P4-01b",
+      "phase": 4,
+      "requirement": "Concurrent election, bounded lease/default 30 s, transfer and destination epoch enforcement",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P4-02a",
+      "phase": 4,
+      "requirement": "Actual WAL archive/PITR and checksum plus restored-query verification",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P4-02b",
+      "phase": 4,
+      "requirement": "Active-work migration and safe rollback preserving newer data; no automatic data-loss restore",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P4-02c",
+      "phase": 4,
+      "requirement": "Split-brain detection and dual-writer prevention at the effect boundary",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P4-03",
+      "phase": 4,
+      "requirement": "ha_drill partition/leader-kill/schema-migration/backup-restore with measured RPO/RTO JSON",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P4-04",
+      "phase": 4,
+      "requirement": "Negative concurrent startup/partition/in-flight restore/migration failure tests",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P4-05",
+      "phase": 4,
+      "requirement": "HA_RECOVERY_AUTOMATION_2026 with methodology/runbooks and bounded manual promotion limitation",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P4-AC",
+      "phase": 4,
+      "requirement": "Repeatable old-leader fencing within declared TTL and measured loss/duplicates/UNKNOWN; no invented no-loss proof",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P5-01",
+      "phase": 5,
+      "requirement": "Audit/reuse existing release verification, signing, SBOM and provenance assets",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P5-02a",
+      "phase": 5,
+      "requirement": "Reproducible hash locks for all runtime/build/optional transitive dependencies and supported platforms",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P5-02b",
+      "phase": 5,
+      "requirement": "Wheel/container CycloneDX SBOM with actual dependency validation",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P5-02c",
+      "phase": 5,
+      "requirement": "Trusted cosign identity/key rotation/revocation distinct from ephemeral CI identity",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P5-02d",
+      "phase": 5,
+      "requirement": "Reviewed gated PyPI/GHCR publication/attestation; no release is authorized by preparing a workflow",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P5-02e",
+      "phase": 5,
+      "requirement": "Assess SLSA build-platform requirements; generated JSON alone cannot establish Level 3",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P5-03",
+      "phase": 5,
+      "requirement": "Published-artifact verification: signatures, SBOM, provenance and manifest hashes",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P5-04",
+      "phase": 5,
+      "requirement": "RELEASE_PROVENANCE_2026: actual trust roots and current ephemeral CI-only limits",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P5-AC",
+      "phase": 5,
+      "requirement": "Negative artifact/dependency/provenance tampering and key rotation compatibility tests",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P6-01a",
+      "phase": 6,
+      "requirement": "Pinned A2A 0.3 lifecycle submit/status/stream/cancel/complete",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P6-01b",
+      "phase": 6,
+      "requirement": "Verify actual A2A 1.x specification and migration features before claiming support",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P6-01c",
+      "phase": 6,
+      "requirement": "Pin actual MCP protocol revisions separately from SDK 1.x/2.x; stdio/Streamable HTTP/SSE",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P6-01d",
+      "phase": 6,
+      "requirement": "Official OpenAI parallel-tool and Gemini structured function-call behavior",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P6-02a",
+      "phase": 6,
+      "requirement": "Discovery, negotiation, request/result/error and malformed/version mismatch negatives",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P6-02b",
+      "phase": 6,
+      "requirement": "Stream/reconnect/resume, task identity, cancellation/timeout and notification semantics",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P6-02c",
+      "phase": 6,
+      "requirement": "Authentication/OAuth positive and negative flows",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P6-03",
+      "phase": 6,
+      "requirement": "PROTOCOL_CONFORMANCE_MATRIX_2026: pinned SDK/spec/transport matrix and explicit unsupported semantics",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P6-AC",
+      "phase": 6,
+      "requirement": "Official SDK/reference interoperability for each claimed combination; no blanket full-support claim",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P7-01a",
+      "phase": 7,
+      "requirement": "Audit existing load/profile tools before translation/admission/settlement/stream workload runner",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P7-01b",
+      "phase": 7,
+      "requirement": "Concurrency 1/8/32/128/512 with bounded 5/15/60 min supported runs",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P7-01c",
+      "phase": 7,
+      "requirement": "p50/p95/p99, throughput, timeouts/errors, RSS/CPU plus queue/retry/DB contention metrics",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P7-02a",
+      "phase": 7,
+      "requirement": "Admission/backpressure with tenant fairness and explicit 429 shedding",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P7-02b",
+      "phase": 7,
+      "requirement": "Queue monitoring/thresholds and negative saturation/resource-ceiling tests",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P7-03",
+      "phase": 7,
+      "requirement": "PERFORMANCE_SLO_2026: exact hardware/workload/results; local measurements are not production SLOs",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P7-AC",
+      "phase": 7,
+      "requirement": "At least 15 min of measured full-route traffic with defined degradation criteria and no hidden loss/replay",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P8-01",
+      "phase": 8,
+      "requirement": "Reuse existing evaluator/security/interview material; assemble evaluation package layout",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P8-02a",
+      "phase": 8,
+      "requirement": "Pinned Docker synthetic lost-ACK evaluator setup and clean-install timing",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P8-02b",
+      "phase": 8,
+      "requirement": "Evidence-based Kong/Portkey/LangSmith comparison and specific technical feedback form",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P8-03a",
+      "phase": 8,
+      "requirement": "20-minute buyer script: actual pain/cost/budget/incumbent/permissions/timeline",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P8-03b",
+      "phase": 8,
+      "requirement": "Plain-language consent/privacy draft with qualified legal review; do not certify GDPR/CCPA compliance internally",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P8-03c",
+      "phase": 8,
+      "requirement": "Follow-up template and response register honoring consent/no-repeat promises",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P8-04a",
+      "phase": 8,
+      "requirement": "Existing threat-model/entry-point inventory and STRIDE review-scope reconciliation",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P8-04b",
+      "phase": 8,
+      "requirement": "Disclosure and acknowledgment/permission templates without disclosing blocked findings",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P8-05",
+      "phase": 8,
+      "requirement": "Read current issues #36/#44/#33, prepare source-bound acceptance links and reviewed tracking updates",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P8-AC",
+      "phase": 8,
+      "requirement": "Independently timed <10 min setup, qualified legal acceptance and independently reviewed entry-point scope",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P9-01",
+      "phase": 9,
+      "requirement": "CURRENT_ALPHA_STATUS exact phase SHAs/tests/CI and bounded qualified/open/NO-GO table",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P9-02",
+      "phase": 9,
+      "requirement": "ROADMAP verified phase dates/dependencies and evidence-based estimates with assumptions",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P9-03",
+      "phase": 9,
+      "requirement": "README evaluator quickstart/architecture/current limitations reconciled with actual source",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P9-04",
+      "phase": 9,
+      "requirement": "COMPLETION_REPORT_2026 with source-bound coverage, gaps and external next steps",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    },
+    {
+      "id": "P9-AC",
+      "phase": 9,
+      "requirement": "Cross-document consistency with every unmet requirement owned; no production/commercial/certification overclaims",
+      "status": "NOT STARTED",
+      "evidence": [],
+      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
+      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "owner": "Internal engineering"
+    }
+  ],
+  "blockers": [
+    {
+      "id": "B01",
+      "status": "BLOCKED",
+      "scope": "Literal all-four-historical-heads-green statement",
+      "evidence": [
+        "P1-01d",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40068956312"
+      ],
+      "reason": "Historical 7a10a5f CI failed and cannot honestly be rewritten as success. Corrected 143c93d passed 24/24 and was owner-merged; main 635288a passed16/16.",
+      "owner": "Maintainer / engineering",
+      "next_action": "Record acceptance against corrected current source while preserving the original failed run; do not rerun to erase it."
+    },
+    {
+      "id": "B02",
+      "status": "BLOCKED",
+      "scope": "Live third-party sandbox/custody qualification",
+      "evidence": [],
+      "reason": "This phase has no provided Stripe/Salesforce sandbox authorization or separately administered destination/readback operator. Mocks cannot establish live destination fencing.",
+      "owner": "Maintainer and consenting destination operator",
+      "next_action": "First verify official service guarantees. Prepare bounded sandbox prerequisites; obtain applicable access/resource approval before any live trial."
+    },
+    {
+      "id": "B03",
+      "status": "BLOCKED",
+      "scope": "Independent legal/security/buyer/developer/pilot acceptance",
+      "evidence": [],
+      "reason": "Engineering cannot self-issue legal compliance, independent review, returned evaluations, buyer demand or written pilot acceptance.",
+      "owner": "Qualified external reviewers and consenting evaluators",
+      "next_action": "Prepare internally reviewable material; keep actual outreach/access/spending within existing authorization and record returned evidence separately."
+    },
+    {
+      "id": "B04",
+      "status": "NOT STARTED",
+      "scope": "Protocol labels and SLSA trust requirements",
+      "evidence": [],
+      "reason": "MCP SDK major versions are not assumed to be wire-protocol revisions; a generated provenance statement is not assumed to confer SLSA Level 3.",
+      "owner": "Internal engineering",
+      "next_action": "Verify official version/platform requirements before implementation or support claims."
+    }
+  ],
+  "external_acceptance_advanced": false,
+  "release_or_deployment_authorized": false,
+  "last_reviewed": "2026-10-25",
+  "aws_authorization": {
+    "date": "2026-10-25",
+    "maximum_authorized_usd": 100,
+    "observed_remaining_credits_usd": "139.97",
+    "account_plan": "ACTIVE FREE",
+    "observed_expiration_utc": "2027-04-13T08:21:25.208000+00:00",
+    "paid_resources_created_this_phase": false,
+    "next_action": "Price and bound a needed controlled-staging trial before provisioning; preserve teardown and cost evidence.",
+    "external_acceptance": false
+  }
+}
