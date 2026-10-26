@@ -102,6 +102,7 @@ not an execution authority.
 | [Nine-phase engineering checklist and progress](ENGINEERING_PHASE_PROGRESS_2026-10-24.md) |
 | [Engineering blockers and external acceptance](BLOCKERS.md) |
 | [Retained signing-revision capacity and failure limits](SIGNING_JOURNAL_CAPACITY_2026.md) |
+| [Signing publication transaction ownership](SIGNING_PUBLICATION_BOUNDARY_2026-10-24.md) |
 | [Durable aggregate admission quotas](DURABLE_ADMISSION_QUOTAS_2026-10-15.md) |
 | [Legacy SQLite mutation boundaries — October 16, 2026](SQLITE_ATOMIC_MUTATIONS_2026-10-16.md) |
 | [Task status transaction composition and tenant guards — October 16, 2026](TASK_ATOMIC_SCOPE_2026-10-16.md) |

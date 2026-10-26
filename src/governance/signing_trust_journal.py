@@ -236,36 +236,44 @@ class SigningTrustJournal:
             raise TrustJournalDenied("invalid registry envelope") from exc
         candidate = self._verify(envelope)
         domain = envelope["domain"]
-        with self._transaction() as cur:
-            previous, registry = self._load(cur, domain, enforce_floor=False)
-            if previous and previous["revision"] < self._floors.get(domain, 1):
-                raise TrustJournalDenied("cannot append to rolled-back registry")
-            if previous and envelope == previous:
-                return registry_digest(previous)
-            expected = 1 if previous is None else previous["revision"] + 1
-            predecessor = "0" * 64 if previous is None else registry_digest(previous)
-            if envelope["revision"] != expected or envelope["previous_sha256"] != predecessor:
-                raise TrustJournalDenied("stale or conflicting registry publication")
-            if envelope["revision"] < self._floors.get(domain, 1):
-                raise TrustJournalDenied("registry publication behind pinned minimum")
-            if registry is not None:
-                try:
-                    validate_rotation(registry, candidate)
-                except ValueError as exc:
-                    raise TrustJournalDenied("invalid signed key transition") from exc
-            p = "?" if isinstance(self.store, SqliteStore) else "%s"
-            encoded = json.dumps(envelope, sort_keys=True)
-            from .signing_journal_capacity import SigningJournalCapacityDenied, admit
+        # Publication must commit before advancing this instance's rollback pin.
+        # Keep the same-store lock through that final in-memory update as well.
+        with self.store._lock:
+            if isinstance(self.store, PostgresStore):
+                from psycopg.pq import TransactionStatus
 
-            try:
-                admit(cur, encoded, postgres=isinstance(self.store, PostgresStore))
-            except SigningJournalCapacityDenied as exc:
-                raise TrustJournalDenied(str(exc)) from exc
-            cur.execute(
-                f"INSERT INTO signing_trust_revisions VALUES({p},{p},{p})",
-                (domain, expected, encoded),
-            )
-        self._floors[domain] = max(self._floors.get(domain, 1), expected)
+                if self.store._db.info.transaction_status != TransactionStatus.IDLE:
+                    raise TrustJournalDenied("publication requires its own transaction")
+            with self._transaction() as cur:
+                previous, registry = self._load(cur, domain, enforce_floor=False)
+                if previous and previous["revision"] < self._floors.get(domain, 1):
+                    raise TrustJournalDenied("cannot append to rolled-back registry")
+                if previous and envelope == previous:
+                    return registry_digest(previous)
+                expected = 1 if previous is None else previous["revision"] + 1
+                predecessor = "0" * 64 if previous is None else registry_digest(previous)
+                if envelope["revision"] != expected or envelope["previous_sha256"] != predecessor:
+                    raise TrustJournalDenied("stale or conflicting registry publication")
+                if envelope["revision"] < self._floors.get(domain, 1):
+                    raise TrustJournalDenied("registry publication behind pinned minimum")
+                if registry is not None:
+                    try:
+                        validate_rotation(registry, candidate)
+                    except ValueError as exc:
+                        raise TrustJournalDenied("invalid signed key transition") from exc
+                p = "?" if isinstance(self.store, SqliteStore) else "%s"
+                encoded = json.dumps(envelope, sort_keys=True)
+                from .signing_journal_capacity import SigningJournalCapacityDenied, admit
+
+                try:
+                    admit(cur, encoded, postgres=isinstance(self.store, PostgresStore))
+                except SigningJournalCapacityDenied as exc:
+                    raise TrustJournalDenied(str(exc)) from exc
+                cur.execute(
+                    f"INSERT INTO signing_trust_revisions VALUES({p},{p},{p})",
+                    (domain, expected, encoded),
+                )
+            self._floors[domain] = max(self._floors.get(domain, 1), expected)
         return registry_digest(envelope)
 
     def capacity(self):
