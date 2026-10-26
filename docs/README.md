@@ -101,6 +101,7 @@ not an execution authority.
 | [External destination capability, fencing limits and acceptance](EXTERNAL_DESTINATION_FENCING_2026.md) |
 | [Nine-phase engineering checklist and progress](ENGINEERING_PHASE_PROGRESS_2026-10-24.md) |
 | [Engineering blockers and external acceptance](BLOCKERS.md) |
+| [Retained signing-revision capacity and failure limits](SIGNING_JOURNAL_CAPACITY_2026.md) |
 | [Durable aggregate admission quotas](DURABLE_ADMISSION_QUOTAS_2026-10-15.md) |
 | [Legacy SQLite mutation boundaries — October 16, 2026](SQLITE_ATOMIC_MUTATIONS_2026-10-16.md) |
 | [Task status transaction composition and tenant guards — October 16, 2026](TASK_ATOMIC_SCOPE_2026-10-16.md) |
@@ -112,6 +113,7 @@ not an execution authority.
 | [Configured PostgreSQL namespace checks](TENANT_POSTGRES_NAMESPACE_CHECKS_2026-10-16.md) |
 | [Enrolled tenant runtime and HTTP boundary](TENANT_RUNTIME_2026-10-14.md) |
 | [Signing-policy coordination with tenant authority](TENANT_SIGNING_COORDINATION_2026-10-16.md) |
+| [Current signing policy and PostgreSQL snapshots](SIGNING_POLICY_SNAPSHOTS_2026-10-23.md) |
 | [Tenant-native task streams and shared allocations](tenant-task-streams.md) |
 | [Native queued tenant task acceptance](TENANT_TASK_INTENTS_2026-10-17.md) |
 | [Private queued-intent preparation and first admission](QUEUED_INTENT_PREPARATION_2026-10-18.md) |
