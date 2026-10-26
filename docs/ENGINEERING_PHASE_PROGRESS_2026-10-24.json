@@ -1,27 +1,27 @@
 {
-  "date": "2026-10-24",
+  "date": "2026-10-25",
   "status": "PARTIALLY TESTED",
   "source_baseline": "635288a76750bcd01d9fc9268dd9fe29897b269a",
   "baseline_ci": "https://github.com/shadowhunter-92/agentbridge/actions/runs/40070457044",
   "scope": "Supplemental nine-phase user handoff checklist; not a replacement for legacy acceptance registers or an assertion that unaudited code is absent.",
-  "current_phase": 1,
+  "current_phase": 2,
   "production": "NO-GO",
   "merge_policy": "Every main merge needs explicit maintainer authorization; each new phase branch starts from recorded main.",
   "publication_policy": "The user requested a branch and reviewed PR per phase. October 25 authorization permits needed AWS work within USD 100 total; root verified credits before use. Releases, protected-main merges, access grants and correspondence keep separate applicable gates.",
   "status_definitions": "NOT STARTED means the new phase-specific audit/qualification has not begun; it does not mean existing code is absent. VERIFIED IN CI applies only to cited source/jobs. Local tests and externally accepted evidence stay distinct.",
-  "prior_work": "PR #72 merged; PR #73 remains a separate draft. Local publication-boundary and offline-upgrade work is preserved, not silently included in a new phase or discarded.",
+  "prior_work": "PR72 and explicitly approved PR74 are merged. PR73 remains a separate unmerged draft at e5c074a. Preserved local signing-publication and offline-upgrade work is not silently included in main or discarded.",
   "phases": [
     {
       "id": 1,
       "title": "Checkpoint registry",
-      "status": "PARTIALLY TESTED",
-      "next_action": "Finish source/documentation acceptance and record owner decision."
+      "status": "VERIFIED IN CI",
+      "next_action": "Retain exact source9aaf24/24 and owner-merged mainc15416/16 evidence. Historical7a failure remains under P1-01d/B01; no blanket all-historical-heads-green acceptance is asserted."
     },
     {
       "id": 2,
       "title": "External destination fencing",
-      "status": "NOT STARTED",
-      "next_action": "Wait for the preceding phase, or document a blocker and take an independent preparation task."
+      "status": "PARTIALLY TESTED",
+      "next_action": "Retain the two read-only audits and local58-case HTTPS subset. Strict native-fence/real destination acceptance remains BLOCKED; qualify later-unit source/CI and remaining effect-boundary tests separately."
     },
     {
       "id": 3,
@@ -176,28 +176,46 @@
       "id": "P1-02e",
       "phase": 1,
       "requirement": "Reject restored checkpoint raw-text drift even when parsed JSON remains equivalent",
-      "status": "PARTIALLY TESTED",
+      "status": "VERIFIED IN CI",
       "evidence": [
         "tests/test_tenant_migration_checkpoint_capacity.py::test_real_restore_rejects_checkpoint_json_text_drift",
         "docs/CHECKPOINT_REGISTRY_2026.md",
         "Local focused receipt SHA256 f4e47e45a467a12c11a90cfd7e71196f9ae1f5dcea84296ff07e48df5c4f7dc9",
-        "Local source manifest SHA256 f003ea26fe9cb8c1dc055f41eda9a9787cd10ded0115a07cbc2be847faa1b9a5"
+        "Local source manifest SHA256 f003ea26fe9cb8c1dc055f41eda9a9787cd10ded0115a07cbc2be847faa1b9a5",
+        "https://github.com/shadowhunter-92/agentbridge/pull/74",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40161311373",
+        "CI receipt SHA256 28805f5d99d8ed944c5a3a8a84f2da4d770f28eb63b58ef5bc67815a4bca0395",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40187737269",
+        "AgentBridge-actual-mainc154-hosted-checks-2026-10-25.json",
+        "Actual-main CI receipt SHA256 6019145869655015e5d899736f6b9cce6645e240d7128541f2435ef15ce5afbd",
+        "AgentBridge-PR74-explicit-owner-approval-2026-10-25.json",
+        "Explicit PR74 owner approval SHA256 7d9803efaa39a0890ff8856179f0fbdfd60352c89331a05ffa46db502e958dad",
+        "AgentBridge-actual-mainc154-independent-QA-2026-10-25.md"
       ],
-      "reason": "New negative passed exactly two focused cases, SQLite and PostgreSQL, with no skips or failures; all 100 runtime files were unchanged. Its own hosted CI is pending.",
-      "next_action": "Review the focused evidence and publish the narrow Phase 1 PR for its own exact-head CI; require explicit owner approval before merge.",
+      "reason": "The negative has two separate local passes, SQLite and PostgreSQL, with no skips/failures and unchanged100 runtime files. Exact source9aaf passed24/24 hosted jobs across7 workflows, then explicit owner approval permitted normal PR74 merge to c154. Actual mainc154 independently passed16/16 push jobs. These results and sources are not summed or substituted.",
+      "next_action": "Preserve the qualified negative and source-specific evidence; requalify subsequent changes without weakening guard or protected-state assertions.",
       "owner": "Internal engineering"
     },
     {
       "id": "P1-03",
       "phase": 1,
       "requirement": "Document registry limits, no eviction/refund/replay and remaining storage/retention gaps",
-      "status": "IMPLEMENTED / UNTESTED",
+      "status": "VERIFIED IN CI",
       "evidence": [
         "docs/CHECKPOINT_REGISTRY_2026.md",
-        "docs/CHECKPOINT_CAPACITY_2026.md"
+        "docs/CHECKPOINT_CAPACITY_2026.md",
+        "https://github.com/shadowhunter-92/agentbridge/pull/74",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40161311373",
+        "CI receipt SHA256 28805f5d99d8ed944c5a3a8a84f2da4d770f28eb63b58ef5bc67815a4bca0395",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40187737269",
+        "AgentBridge-actual-mainc154-hosted-checks-2026-10-25.json",
+        "Actual-main CI receipt SHA256 6019145869655015e5d899736f6b9cce6645e240d7128541f2435ef15ce5afbd",
+        "AgentBridge-PR74-explicit-owner-approval-2026-10-25.json",
+        "Explicit PR74 owner approval SHA256 7d9803efaa39a0890ff8856179f0fbdfd60352c89331a05ffa46db502e958dad",
+        "AgentBridge-actual-mainc154-independent-QA-2026-10-25.md"
       ],
-      "reason": "Requested bounded registry index and historical-status clarification are prepared on a new branch from main 635288a.",
-      "next_action": "Check links/source constants; open the phase documentation PR and record its own CI.",
+      "reason": "The bounded registry/limitations documentation was reviewed at source9aaf, passed its24/24 hosted jobs and was explicitly owner-merged as mainc154, whose own pushCI passed16/16. Earlier baseline635 and historical failed-source records remain separate.",
+      "next_action": "Keep the registry index and current claims aligned with actual maintained source, retaining bounded storage/retention limitations.",
       "owner": "Internal engineering"
     },
     {
@@ -208,94 +226,138 @@
       "evidence": [
         "https://github.com/shadowhunter-92/agentbridge/actions/runs/40068956312",
         "https://github.com/shadowhunter-92/agentbridge/actions/runs/40070457044",
-        "https://github.com/shadowhunter-92/agentbridge/pull/72"
+        "https://github.com/shadowhunter-92/agentbridge/pull/72",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40161311373",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40187737269",
+        "AgentBridge-actual-mainc154-hosted-checks-2026-10-25.json",
+        "Actual-main CI receipt SHA256 6019145869655015e5d899736f6b9cce6645e240d7128541f2435ef15ce5afbd",
+        "AgentBridge-PR74-explicit-owner-approval-2026-10-25.json",
+        "Explicit PR74 owner approval SHA256 7d9803efaa39a0890ff8856179f0fbdfd60352c89331a05ffa46db502e958dad",
+        "AgentBridge-actual-mainc154-independent-QA-2026-10-25.md"
       ],
-      "reason": "Owner approved normal PR #72 merge of 143c93d; actual main 635288a has its own 16/16 success.",
-      "next_action": "Do not infer approval for PR #73 or later phase merges.",
+      "reason": "Earlier PR72 source143 was owner-merged and actual main635 passed16/16. Later exact PR74 source9aaf passed24/24; explicit owner approval permitted its normal merge to c154, and actual mainc154 passed its own16/16 push jobs. No PR73 or later merge approval is inferred.",
+      "next_action": "Preserve both source/actual-main associations and require separate explicit approval for every later protected-main merge.",
       "owner": "Internal engineering"
     },
     {
       "id": "P1-05",
       "phase": 1,
       "requirement": "Publish source-bound checklist/progress/blockers without production claims",
-      "status": "IMPLEMENTED / UNTESTED",
+      "status": "VERIFIED IN CI",
       "evidence": [
         "docs/ENGINEERING_PHASE_PROGRESS_2026-10-24.json",
         "docs/ENGINEERING_PHASE_PROGRESS_2026-10-24.md",
-        "docs/BLOCKERS.md"
+        "docs/BLOCKERS.md",
+        "https://github.com/shadowhunter-92/agentbridge/pull/74",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40161311373",
+        "CI receipt SHA256 28805f5d99d8ed944c5a3a8a84f2da4d770f28eb63b58ef5bc67815a4bca0395",
+        "https://github.com/shadowhunter-92/agentbridge/actions/runs/40187737269",
+        "AgentBridge-actual-mainc154-hosted-checks-2026-10-25.json",
+        "Actual-main CI receipt SHA256 6019145869655015e5d899736f6b9cce6645e240d7128541f2435ef15ce5afbd",
+        "AgentBridge-PR74-explicit-owner-approval-2026-10-25.json",
+        "Explicit PR74 owner approval SHA256 7d9803efaa39a0890ff8856179f0fbdfd60352c89331a05ffa46db502e958dad",
+        "AgentBridge-actual-mainc154-independent-QA-2026-10-25.md"
       ],
-      "reason": "Supplemental nine-phase register; original acceptance records remain separate.",
-      "next_action": "Validate all task IDs/statuses/links, preserve old records and obtain phase PR CI.",
+      "reason": "The source-bound81-task checklist/progress/blockers was published in source9aaf, verified24/24 and explicitly owner-merged to mainc154 with its separate16/16 pushCI. This successor observation preserves the committed checklist, requirements and historical evidence; external and production gates do not advance.",
+      "next_action": "Maintain evidence-based successor snapshots; keep authored historical records and unaccepted requirements explicit.",
       "owner": "Internal engineering"
     },
     {
       "id": "P2-01a",
       "phase": 2,
       "requirement": "Audit/reuse existing destination contract before defining ExternalDestinationFence",
-      "status": "NOT STARTED",
-      "evidence": [],
-      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
-      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "status": "PARTIALLY TESTED",
+      "evidence": [
+        "AgentBridge-phase2-destination-interface-audit-2026-10-25.md",
+        "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md",
+        "Read-only audit reports; no new test or provider-effect acceptance"
+      ],
+      "reason": "Two read-only source/test-contract audits map existing receipts, readback, tenant/delegation/admission, one-attempt dispatch and settlement restrictions. They pin baseline635/source9aaf with unchanged runtime, associated to identical-tree mainc154. They ran no tests or provider traffic and did not qualify a new adapter.",
+      "next_action": "Implement only the smallest bounded missing contract/test unit identified by the audits; preserve existing authorization, accounting, exact queued-demo restrictions and production refusal.",
       "owner": "Internal engineering"
     },
     {
       "id": "P2-01b",
       "phase": 2,
       "requirement": "Stripe sandbox adapter: verify actual atomic epoch capability before implementation",
-      "status": "NOT STARTED",
-      "evidence": [],
-      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
-      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "status": "BLOCKED",
+      "evidence": [
+        "AgentBridge-phase2-destination-interface-audit-2026-10-25.md",
+        "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md",
+        "Read-only audit reports; no new test or provider-effect acceptance"
+      ],
+      "reason": "A dedicated AgentBridge Stripe sandbox dashboard is now available in Sandbox/test mode following owner-provisioned setup. This resolves the earlier UI-availability observation only. No assistant financial activation, secret-key retrieval/copy, API credential provisioning, provider API traffic, authoritative readback or native atomic monotonic-fence qualification is established.",
+      "next_action": "Record the dedicated UI as available, then obtain only the applicable approved scoped API/readback access and a concrete target-side contract before testing synthetic provider operations. Keep strict native-fence and custody acceptance BLOCKED; dashboard availability does not qualify consequential execution.",
       "owner": "Internal engineering"
     },
     {
       "id": "P2-01c",
       "phase": 2,
       "requirement": "Salesforce sandbox adapter: verify actual atomic epoch capability before implementation",
-      "status": "NOT STARTED",
-      "evidence": [],
-      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
-      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "status": "BLOCKED",
+      "evidence": [
+        "AgentBridge-phase2-destination-interface-audit-2026-10-25.md",
+        "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md",
+        "Read-only audit reports; no new test or provider-effect acceptance"
+      ],
+      "reason": "Salesforce signup was submitted once after explicit terms approval and manual user CAPTCHA completion. The vendor returned a trial-oops error and no confirmation was observed; cause unknown. No usable sandbox, credentials or native atomic-fence guarantee is established.",
+      "next_action": "Resolve vendor registration or obtain an approved operator-provisioned sandbox, then verify actual target guarantees before adapter qualification.",
       "owner": "Internal engineering"
     },
     {
       "id": "P2-01d",
       "phase": 2,
       "requirement": "Generic HTTP adapter with fixed operator allowlist and qualified target contract",
-      "status": "NOT STARTED",
-      "evidence": [],
-      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
-      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "status": "BLOCKED",
+      "evidence": [
+        "AgentBridge-phase2-destination-interface-audit-2026-10-25.md",
+        "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md",
+        "Read-only audit reports; no new test or provider-effect acceptance"
+      ],
+      "reason": "Existing fixed-origin readback and reference SQL contracts were mapped, but no operator-owned HTTP effect/readback endpoint with a qualified destination-atomic contract is provided. Static mapping is not an executable qualified adapter.",
+      "next_action": "Continue internal fixed-endpoint contract and negative-test design; obtain a real operator-owned effect/readback contract before execution acceptance.",
       "owner": "Internal engineering"
     },
     {
       "id": "P2-02a",
       "phase": 2,
       "requirement": "Per-service destination-atomic monotonic fencing and allowed effects",
-      "status": "NOT STARTED",
-      "evidence": [],
-      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
-      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "status": "BLOCKED",
+      "evidence": [
+        "AgentBridge-phase2-destination-interface-audit-2026-10-25.md",
+        "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md",
+        "Read-only audit reports; no new test or provider-effect acceptance"
+      ],
+      "reason": "No actual Stripe/Salesforce/generic-HTTP destination has established an atomic monotonic-epoch check with the consequential effect. A local lock plus remote HTTP, provider idempotency or mock cannot establish that guarantee.",
+      "next_action": "Verify the specific service effect boundary or choose a consenting operator-controlled destination which can enforce the exact contract atomically; retain strict-mode refusal meanwhile.",
       "owner": "Internal engineering"
     },
     {
       "id": "P2-02b",
       "phase": 2,
       "requirement": "Destination-authored receipt with explicit signer/custody boundary",
-      "status": "NOT STARTED",
-      "evidence": [],
-      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
-      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "status": "BLOCKED",
+      "evidence": [
+        "AgentBridge-phase2-destination-interface-audit-2026-10-25.md",
+        "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md",
+        "Read-only audit reports; no new test or provider-effect acceptance"
+      ],
+      "reason": "Receipt verifier reuse was audited, but an actual destination signer and separately understood custody/trust boundary are not established. AgentBridge must not claim that a gateway-authored receipt was signed by the SaaS provider.",
+      "next_action": "Specify the honest signer contract and operator enrollment/custody prerequisites before accepting live destination evidence.",
       "owner": "Internal engineering"
     },
     {
       "id": "P2-02c",
       "phase": 2,
       "requirement": "Authoritative independent readback of actual destination state",
-      "status": "NOT STARTED",
-      "evidence": [],
-      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
-      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "status": "BLOCKED",
+      "evidence": [
+        "AgentBridge-phase2-destination-interface-audit-2026-10-25.md",
+        "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md",
+        "Read-only audit reports; no new test or provider-effect acceptance"
+      ],
+      "reason": "Readback code paths were audited, but an actual authoritative endpoint with independently provisioned read credentials and separately administered operator acceptance is unavailable. Distinct keys or local self-operation are not independent custody.",
+      "next_action": "Obtain approved operator-owned authoritative readback and separate credentials, retaining UNKNOWN for missing, ambiguous or mismatched observations.",
       "owner": "Internal engineering"
     },
     {
@@ -303,19 +365,31 @@
       "phase": 2,
       "requirement": "Idempotency and timeout/lost-ACK handling preserving UNKNOWN without replay",
       "status": "NOT STARTED",
-      "evidence": [],
-      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
-      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "evidence": [
+        "AgentBridge-phase2-destination-interface-audit-2026-10-25.md",
+        "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md",
+        "Read-only audit reports; no new test or provider-effect acceptance"
+      ],
+      "reason": "Existing local one-attempt/UNKNOWN/readback recovery was mapped by read-only audits. A new external execution contract and its HTTP lost-acknowledgment qualification have not been implemented or accepted in this snapshot.",
+      "next_action": "Design the bounded external failure semantics and negative tests without automatic resend/refund; require authoritative observation to resolve uncertainty.",
       "owner": "Internal engineering"
     },
     {
       "id": "P2-03a",
       "phase": 2,
       "requirement": "Mocked API negative tests, split brain and stale leader",
-      "status": "NOT STARTED",
-      "evidence": [],
-      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
-      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "status": "PARTIALLY TESTED",
+      "evidence": [
+        "AgentBridge-phase2-destination-interface-audit-2026-10-25.md",
+        "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md",
+        "Read-only audit reports; no new test or provider-effect acceptance",
+        "tests/test_https_readback_adapter.py",
+        "Local HTTPS test receipt SHA256 f68b5ad9db37d86e9b48d44df819ed0b74b51600daa8be678619f1d0d0f69f6a",
+        "Owned test SHA256 f26f6ceae7b5adb800f7ae06f44aef33aebb2d657d1bef5a29c70a74dcd41cee",
+        "Independent saved-evidence QA SHA256 4eda32341be9bec4397ca51948758c6dd0ce0e12745ce0a5306174a4e3ef9f0a"
+      ],
+      "reason": "A test-only HTTPS readback subset passed58 distinct local cases:52 owned and6 direct regressions, with0 skips/failures/errors and all108 source/test/config/static-HTML pins stable. Real urllib processing uses synthetic wire I/O. This does not qualify split-brain/stale leaders, durable UNKNOWN/settlement, native providers, real TLS/egress or two external fenced adapters. Later-unit hostedCI is not inferred from earlier main/PR74 results.",
+      "next_action": "Record exact later-source hostedCI after source review, then separately implement/qualify the remaining external-adapter split-brain/stale-leader scenarios against a real supported destination contract.",
       "owner": "Internal engineering"
     },
     {
@@ -323,29 +397,45 @@
       "phase": 2,
       "requirement": "Lost ACK after commit, concurrent resource operations and unauthorized destinations",
       "status": "NOT STARTED",
-      "evidence": [],
-      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
-      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "evidence": [
+        "AgentBridge-phase2-destination-interface-audit-2026-10-25.md",
+        "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md",
+        "Read-only audit reports; no new test or provider-effect acceptance"
+      ],
+      "reason": "The local58-case unit qualifies synthetic HTTPS readback handler/refusal/signature semantics only. It does not exercise lostACK after an external effect, concurrent external resources, queued-ledger UNKNOWN/settlement or unauthorized mutating destinations. Those requested scenarios retain no new accepted execution result.",
+      "next_action": "Design and qualify the exact external effect/identity/UNKNOWN recovery scenarios against a real supported contract; do not relabel readback-only tests as durable execution evidence.",
       "owner": "Internal engineering"
     },
     {
       "id": "P2-04",
       "phase": 2,
       "requirement": "EXTERNAL_DESTINATION_FENCING_2026: sandbox support, exact guarantees, config and omissions",
-      "status": "NOT STARTED",
-      "evidence": [],
-      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
-      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "status": "PARTIALLY TESTED",
+      "evidence": [
+        "AgentBridge-phase2-destination-interface-audit-2026-10-25.md",
+        "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md",
+        "Read-only audit reports; no new test or provider-effect acceptance",
+        "docs/EXTERNAL_DESTINATION_FENCING_2026.md",
+        "External destination document SHA256 64e4702d2e5e122017b12914ad10f3dbfb72f4c40f3d3495b624d058d2580239",
+        "Four-document source review SHA256 a8adb1dbd6226c6ee89c43ba5cdc9afb6af09994dbb5f9628d88a81af527f898",
+        "Current external destination document SHA256 af8baac756b6cfc5eb281cdf83dbd88d2775e12b7ed45e259a47464e45b72947"
+      ],
+      "reason": "The external-destination document remains implemented and source-reviewed with local58 references. Its current environment-only revision is SHA256 af8baac756b6cfc5eb281cdf83dbd88d2775e12b7ed45e259a47464e45b72947. The initial document/review hashes remain in retained evidence as historical records. Later-unit hosted CI, native SaaS/fencing support and independent custody remain unqualified.",
+      "next_action": "Qualify the exact later test/document unit in hostedCI after source review/publication; keep provider capability, environment and custody blockers distinct, preserving unsupported strict execution refusal and production NO-GO.",
       "owner": "Internal engineering"
     },
     {
       "id": "P2-AC",
       "phase": 2,
       "requirement": "Qualify two actual destination-enforced adapters; mocked API success alone is insufficient",
-      "status": "NOT STARTED",
-      "evidence": [],
-      "reason": "Existing implementation has not yet received the new phase-specific acceptance audit.",
-      "next_action": "Inventory existing code/tests before implementing the smallest missing behavior.",
+      "status": "BLOCKED",
+      "evidence": [
+        "AgentBridge-phase2-destination-interface-audit-2026-10-25.md",
+        "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md",
+        "Read-only audit reports; no new test or provider-effect acceptance"
+      ],
+      "reason": "Two actual destination-enforced adapters are not qualified. Actual atomic target guarantees, usable approved environments, effect/readback endpoints and separately administered acceptance remain missing. Mocked or test-only HTTPS success would not meet this acceptance criterion.",
+      "next_action": "Qualify each real target contract and operated effect/readback path separately after applicable access/approval; keep production NO-GO and unsupported strict execution refused.",
       "owner": "Internal engineering"
     },
     {
@@ -936,10 +1026,13 @@
       "id": "B02",
       "status": "BLOCKED",
       "scope": "Live third-party sandbox/custody qualification",
-      "evidence": [],
-      "reason": "This phase has no provided Stripe/Salesforce sandbox authorization or separately administered destination/readback operator. Mocks cannot establish live destination fencing.",
+      "evidence": [
+        "AgentBridge-phase2-destination-interface-audit-2026-10-25.md",
+        "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md"
+      ],
+      "reason": "The owner-provisioned Stripe dedicated test sandbox UI is available; no assistant financial activation, secret-key access, scoped provider credential setup or API trial is claimed. The earlier disabled-control observation is historical to the prior context. Salesforce provisioning remains unresolved with unknown cause. Destination-atomic guarantees, authoritative endpoints and separately administered custody remain unqualified.",
       "owner": "Maintainer and consenting destination operator",
-      "next_action": "First verify official service guarantees. Prepare bounded sandbox prerequisites; obtain applicable access/resource approval before any live trial."
+      "next_action": "Resolve remaining approved scoped API/readback and Salesforce environment prerequisites through normal vendor/operator controls. Establish the actual atomic target contract and independent custody evidence before external acceptance; continue bounded internal work meanwhile."
     },
     {
       "id": "B03",
@@ -966,11 +1059,268 @@
   "aws_authorization": {
     "date": "2026-10-25",
     "maximum_authorized_usd": 100,
-    "observed_remaining_credits_usd": "139.97",
-    "account_plan": "ACTIVE FREE",
-    "observed_expiration_utc": "2027-04-13T08:21:25.208000+00:00",
     "paid_resources_created_this_phase": false,
     "next_action": "Price and bound a needed controlled-staging trial before provisioning; preserve teardown and cost evidence.",
-    "external_acceptance": false
-  }
+    "external_acceptance": false,
+    "public_scope": "Authorized USD100 maximum is retained. Private account balance, plan and expiry observations are omitted from this candidate; the original local snapshot remains untouched."
+  },
+  "observed_date": "2026-10-25",
+  "current_source": "c154b28c34cfeab927753e51b93595cc1b485810",
+  "maintained_main": "c154b28c34cfeab927753e51b93595cc1b485810",
+  "current_phase_gate": {
+    "status": "BLOCKED",
+    "phase": 2,
+    "scope": "Native SaaS strict-fence and real external-destination acceptance",
+    "owner": "Maintainer and consenting destination/observer operator",
+    "reason": "Stripe dedicated sandbox UI is now available, but actual destination-atomic monotonic fencing guarantees, approved scoped API/readback credentials and operator-owned effect/readback endpoints remain unqualified. Salesforce provisioning remains unresolved. UI access, signup or a mock does not establish the required external contract.",
+    "next_action": "Continue internal contract/documentation and test-only preparation. Obtain a real qualified target contract and approved operator environment before consequential execution or external acceptance; preserve UNKNOWN and production refusal for unsupported contracts.",
+    "PR74_owner_gate_closed_by_explicit_approval_and_merge": true
+  },
+  "observed_changes": [
+    {
+      "id": "P1-02e",
+      "previous_status": "PARTIALLY TESTED",
+      "current_status": "VERIFIED IN CI",
+      "scope": "Exact PR74 source only"
+    },
+    {
+      "id": "P1-03",
+      "previous_status": "IMPLEMENTED / UNTESTED",
+      "current_status": "VERIFIED IN CI",
+      "scope": "Exact PR74 source only"
+    },
+    {
+      "id": "P1-05",
+      "previous_status": "IMPLEMENTED / UNTESTED",
+      "current_status": "VERIFIED IN CI",
+      "scope": "Exact PR74 source only"
+    }
+  ],
+  "retained_source_checklist_sha256": "f31d7746fcf0fdad8fa1c296f6723b1cc977cbf78ee46524df8041785f43fe7b",
+  "progress_scope": "Current October25 source review of the81-task checklist. Historical baseline635, source9aaf, failed7a and actualmainc154 records remain source-bound. The later HTTPS test/document unit has separate local evidence; its exact-source hostedCI and external acceptance are not inferred.",
+  "local_legacy_work": {
+    "offline_checkpoint_upgrade": {
+      "status": "PARTIALLY TESTED",
+      "source_manifest_sha256": "bd2778e1b3c6721269f4eb467184dd7703d6128dba2310a4d74ad01ea2fd80b6",
+      "focused": {
+        "distinct": 123,
+        "passed": 64,
+        "expected_skips": 59
+      },
+      "helper_regression": {
+        "distinct": 292,
+        "passed": 251,
+        "expected_skips": 41
+      },
+      "published": false,
+      "not_claimed": "Hosted CI, automatic HA, rolling migration, external custody or production acceptance"
+    },
+    "signing_transaction_boundary": {
+      "status": "PARTIALLY TESTED",
+      "local_commit": "b626a6b12daa04146227b9c97f336958fdbe3e9a",
+      "published": false
+    },
+    "current_signing_capacity_draft": {
+      "status": "VERIFIED IN CI",
+      "head": "e5c074acd548e746d9bdd282b78033fa58bbd3ee",
+      "pr": 73,
+      "merged": false
+    }
+  },
+  "independent_preparation": {
+    "destination_capability_preflight": "AgentBridge-destination-capability-preflight-2026-10-25.md",
+    "new_destination_adapter_qualified": false,
+    "aws_candidate_plan": "AgentBridge-AWS-bounded-staging-plan-v2-2026-10-25.json",
+    "cloud_resources_created": false,
+    "read_only_runtime_audits": [
+      "AgentBridge-phase2-destination-interface-audit-2026-10-25.md",
+      "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md"
+    ]
+  },
+  "current_observation_origin": {
+    "status": "PARTIALLY TESTED",
+    "date": "2026-10-25",
+    "prior_progress_file": "AgentBridge-nine-phase-progress-current-2026-10-25.json",
+    "prior_progress_sha256": "8186189fc644f98459085ed2a6506e90a88dc860a07266d4be4f9e5ce46eb07c",
+    "authored_baseline_and_baseline_ci_retained_as_historical": true,
+    "main_evidence_as_of": "Saved provider observations around 11:21 UTC, independently checked at 16:22 UTC; no new provider readback by this preparation.",
+    "local_branch_and_vendor_ui_facts": "Latest root-provided observations; not independently repeated by this overlay.",
+    "dated_review_only_no_later_source_CI_inferred": true,
+    "latest_environment_observation": "Dedicated Stripe Sandbox/test UI availability is root-provided and public-safe. No private screenshot, account/contact identifier or sensitive signup artifact was accessed by this preparation."
+  },
+  "phase1_maintained_acceptance": {
+    "status": "VERIFIED IN CI",
+    "reviewed_PR74_source": {
+      "head": "9aaf6a1a0a460d3824ad2966a57f8c5f575bdfae",
+      "successful_jobs": 24,
+      "workflows": 7,
+      "receipt": "AgentBridge-phase1-PR74-head9aaf-hosted-checks-2026-10-25.json",
+      "receipt_sha256": "28805f5d99d8ed944c5a3a8a84f2da4d770f28eb63b58ef5bc67815a4bca0395"
+    },
+    "merged_main": {
+      "head": "c154b28c34cfeab927753e51b93595cc1b485810",
+      "parents": [
+        "635288a76750bcd01d9fc9268dd9fe29897b269a",
+        "9aaf6a1a0a460d3824ad2966a57f8c5f575bdfae"
+      ],
+      "tree": "66a11304141ab17265d6a667803c37994e2300c7",
+      "source_tree_identical": true,
+      "event": "push",
+      "attempt": 1,
+      "successful_jobs": 16,
+      "workflows": 1,
+      "run_id": 40187737269,
+      "url": "https://github.com/shadowhunter-92/agentbridge/actions/runs/40187737269",
+      "receipt": "AgentBridge-actual-mainc154-hosted-checks-2026-10-25.json",
+      "receipt_sha256": "6019145869655015e5d899736f6b9cce6645e240d7128541f2435ef15ce5afbd"
+    },
+    "explicit_PR74_owner_approval": {
+      "record": "AgentBridge-PR74-explicit-owner-approval-2026-10-25.json",
+      "sha256": "7d9803efaa39a0890ff8856179f0fbdfd60352c89331a05ffa46db502e958dad",
+      "consumed_by_normal_merge": true
+    },
+    "independent_saved_data_QA": {
+      "record": "AgentBridge-actual-mainc154-independent-QA-2026-10-25.md",
+      "sha256": "6f4d803a59fdeee2767ff434d2a34fb6f6b56a779748de8951546d4850e0d4af"
+    },
+    "historical_7a_failure_not_rewritten": true,
+    "no_PR73_or_later_merge_authority_inferred": true
+  },
+  "historical_phase_gate_observations": [
+    {
+      "scope": "Pre-merge gate from untouched prior progress snapshot; historical only.",
+      "snapshot_sha256": "8186189fc644f98459085ed2a6506e90a88dc860a07266d4be4f9e5ce46eb07c",
+      "gate": {
+        "status": "BLOCKED",
+        "owner": "Maintainer",
+        "reason": "User requires explicit approval for protected-main merges. PR74 is verified but remains draft/unmerged; no approval for its merge or PR73 is inferred.",
+        "next_action": "Review exact PR74 merge proposal and supply the owner decision.",
+        "proposal": "AgentBridge-PR74-merge-review-proposal-2026-10-25.md"
+      }
+    }
+  ],
+  "phase2_local_preparation": {
+    "status": "PARTIALLY TESTED",
+    "branch": "feat/phase2-external-destination-contracts-2026-10-25",
+    "base": "c154b28c34cfeab927753e51b93595cc1b485810",
+    "local_only_as_reported": true,
+    "new_remote_branch_claimed": false,
+    "branch_association_from_root": true,
+    "Git_access_by_this_overlay": false,
+    "read_only_audits": [
+      {
+        "report": "AgentBridge-phase2-destination-interface-audit-2026-10-25.md",
+        "sha256": "2170c80bae139d47060df31de6bb4d1134636eec1407db12a384444dca9f5c27",
+        "status": "PARTIALLY TESTED",
+        "new_tests_or_live_provider_effects": false
+      },
+      {
+        "report": "AgentBridge-phase2-ingress-dispatch-compatibility-2026-10-25.md",
+        "sha256": "60b47ba6d5a3845dc785e3928039570c5ffb7148e9a711443c6d61f1e2299e69",
+        "status": "PARTIALLY TESTED",
+        "new_tests_or_live_provider_effects": false
+      }
+    ],
+    "audit_source_context": "Audits pin historical635/source9aaf. Actual mainc154 has the identical reviewed whole tree; this is a source association, not a rerun of those audits or tests.",
+    "HTTPS_negative_test_unit": {
+      "status": "PARTIALLY TESTED",
+      "base": "c154b28c34cfeab927753e51b93595cc1b485810",
+      "owned_test_file": "tests/test_https_readback_adapter.py",
+      "owned_test_sha256": "f26f6ceae7b5adb800f7ae06f44aef33aebb2d657d1bef5a29c70a74dcd41cee",
+      "source_manifest_sha256": "cbc1b149c6a736c268afdb817d84d5eda4fc6eddc0cde19b7c2b95a489dd6fd1",
+      "receipt_sha256": "f68b5ad9db37d86e9b48d44df819ed0b74b51600daa8be678619f1d0d0f69f6a",
+      "independent_QA_sha256": "4eda32341be9bec4397ca51948758c6dd0ce0e12745ce0a5306174a4e3ef9f0a",
+      "distinct_local_cases": 58,
+      "owned_cases": 52,
+      "direct_regression_cases": 6,
+      "skips": 0,
+      "failures": 0,
+      "errors": 0,
+      "runtime_Python_and_static_HTML_unchanged": true,
+      "actual_saved_pre_post_pin_count": 108,
+      "exact_later_unit_hosted_CI_acceptance_not_inferred": true,
+      "not_qualified": [
+        "durable UNKNOWN ledger/settlement/recovery",
+        "native SaaS execution",
+        "atomic fencing",
+        "actual TLS/DNS/egress",
+        "provider or independent custody acceptance",
+        "production"
+      ],
+      "owned_test_hash_scope": "Existing owned_test_sha256 identifies the tested raw Windows working-file bytes.",
+      "canonical_LF_test_sha256": "b2bf23947d6815bb7891494404c0f355073d8192d3ac5e2939fe6fce342e83af",
+      "CRLF_to_LF_only_AST_preserved": true
+    },
+    "local_only_as_reported_scope": "Historical preparation observation before this source review; later publication needs its own source/CI record.",
+    "local_commit_observation": {
+      "commit": "bf6f3fb0c1bbb4fc5c281648f55d845d4b88d044",
+      "base": "c154b28c34cfeab927753e51b93595cc1b485810",
+      "tree": "ad963a97f8c05c102cbf102ac865f6634553cc0c",
+      "integration_receipt_sha256": "90ea9214ae0c6d71606b20cf6c7bc9a6b41ab323fd92af76666bd6a9a7f66a71",
+      "scope": "Historical local seven-file commit before the later two-document environment observation update; not a hosted-CI or main-merge result."
+    }
+  },
+  "sandbox_environment_observations": {
+    "scope": "Public-safe root-provided setup observations only; no private contact, account, organization or personal identifiers.",
+    "stripe": {
+      "status": "BLOCKED",
+      "separate_AgentBridge_sandbox_created": true,
+      "observation": "The owner-provisioned dedicated AgentBridge Stripe sandbox UI is available. Only optional nonbinding dashboard preferences and entry to the sandbox were completed by the assistant. No assistant live financial activation, key reveal/copy, provider API traffic or credential-scope expansion occurred.",
+      "next_action": "Resolve scoped approved API/readback prerequisites and the actual enforceable target contract; do not infer those from dashboard access.",
+      "scope": "API/effect and native-fence qualification remains BLOCKED; dedicated UI availability is separately observed.",
+      "dashboard_UI_available": true,
+      "observed_mode": "Sandbox/test",
+      "API_credentials_and_provider_effect_readback_qualified": false,
+      "native_atomic_fence_or_custody_accepted": false,
+      "prior_UI_observation": {
+        "scope": "Historical previous-context observation; not the new sandbox state.",
+        "source_v3_progress_sha256": "997f88200a8a36734ca322be0cd6af96f123f3302bc6e53ffa0945ea9ebec0b6",
+        "observation": {
+          "status": "BLOCKED",
+          "separate_AgentBridge_sandbox_created": false,
+          "observation": "Create/Manage controls were disabled in the observed UI; the cause is not established.",
+          "next_action": "Resolve approved sandbox-creation access or obtain an operator-provisioned environment; verify the actual effect-boundary contract separately."
+        }
+      }
+    },
+    "salesforce": {
+      "status": "BLOCKED",
+      "signup_submitted_once": true,
+      "explicit_terms_approval_before_submission": true,
+      "CAPTCHA_completed_manually_by_user": true,
+      "observation": "The vendor returned a trial-oops error after the single submission; no confirmation message was observed. The cause is unknown.",
+      "usable_environment_or_credentials_established": false,
+      "next_action": "Resolve vendor registration or use an approved operator-provisioned sandbox. Do not treat the submission or CAPTCHA completion as accepted signup or destination qualification."
+    },
+    "no_strict_native_fence_or_independent_custody_acceptance": true
+  },
+  "repository_observation": {
+    "maintained_main": "c154b28c34cfeab927753e51b93595cc1b485810",
+    "PR74": {
+      "head": "9aaf6a1a0a460d3824ad2966a57f8c5f575bdfae",
+      "merged": true,
+      "merge_commit": "c154b28c34cfeab927753e51b93595cc1b485810",
+      "explicit_owner_approval": true
+    },
+    "PR73": {
+      "head": "e5c074acd548e746d9bdd282b78033fa58bbd3ee",
+      "merged": false,
+      "draft": true
+    },
+    "remote_refs": 7,
+    "all_prior_non_main_heads_and_protection_flags_preserved": true,
+    "source": "AgentBridge-actual-mainc154-hosted-checks-2026-10-25.json",
+    "source_sha256": "6019145869655015e5d899736f6b9cce6645e240d7128541f2435ef15ce5afbd",
+    "no_new_merge_delete_release_deployment_or_correspondence_authority": true
+  },
+  "observed_changes_scope": "The prior three source9aaf task status transitions are retained verbatim as historical observations. This successor records its own paths and transitions separately in its proposal receipt.",
+  "current_task_label_counts": {
+    "VERIFIED IN CI": 11,
+    "PARTIALLY TESTED": 4,
+    "BLOCKED": 7,
+    "NOT STARTED": 59
+  },
+  "current_task_label_count_scope": "Labels of81 requests, not a completion percentage or claim that NOT STARTED means code is absent.",
+  "historical_authored_date": "2026-10-24",
+  "source_review_path": "docs/ENGINEERING_PHASE_PROGRESS_2026-10-24.json"
 }

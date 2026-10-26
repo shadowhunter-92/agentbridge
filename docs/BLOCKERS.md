@@ -10,9 +10,9 @@ Responsible: Maintainer / engineering. Next action: Record acceptance against co
 
 ## B02 - Live third-party sandbox/custody qualification
 
-Status: **BLOCKED**. This phase has no provided Stripe/Salesforce sandbox authorization or separately administered destination/readback operator. Mocks cannot establish live destination fencing.
+Status: **BLOCKED**. Free environment setup was authorized. The owner subsequently created a separate AgentBridge Stripe account; guided setup opened its dedicated test sandbox dashboard. No live activation, secret-key access, API credential provisioning or provider API trial was performed by the assistant. The earlier disabled controls belonged to an unrelated account. Salesforce still returned a generic provisioning error after its verification challenge; no specific rejection cause is established. Native service idempotency is not proof of atomic monotonic fencing, and a separately administered destination/readback operator remains unavailable. Mocks or a usable sandbox dashboard cannot establish live destination fencing.
 
-Responsible: Maintainer and consenting destination operator. Next action: First verify official service guarantees. Prepare bounded sandbox prerequisites; obtain applicable access/resource approval before any live trial.
+Responsible: Maintainer, internal engineering and a consenting destination operator. Next action: Resolve environment provisioning through normal vendor controls; the owner must complete any financial-account activation/identity submission. Establish an actual atomic target-side contract before implementing or qualifying consequential native service execution. Preserve the current production refusal and UNKNOWN/no-resend semantics. See [the capability and acceptance matrix](EXTERNAL_DESTINATION_FENCING_2026.md). Access expansion, live trials and independent custody retain their applicable authorization gates.
 
 ## B03 - Independent legal/security/buyer/developer/pilot acceptance
 

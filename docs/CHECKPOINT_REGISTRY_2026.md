@@ -4,7 +4,12 @@
 This is the requested current index to the existing
 [checkpoint capacity implementation and historical evidence](CHECKPOINT_CAPACITY_2026.md).
 It adds no second registry or authorization/evidence implementation. This
-documentation follow-up needs its own reviewed PR and exact-head CI.
+documentation follow-up was reviewed and owner-merged in PR #74. Reviewed
+source `9aaf6a1a0a460d3824ad2966a57f8c5f575bdfae` passed
+[24 jobs across seven workflows](https://github.com/shadowhunter-92/agentbridge/actions/runs/40161311373).
+Actual main `c154b28c34cfeab927753e51b93595cc1b485810` separately passed
+[16 push-CI jobs](https://github.com/shadowhunter-92/agentbridge/actions/runs/40187737269).
+These source-specific results do not qualify later changes or external destinations.
 
 PR #72 merged corrected source `143c93d9d4230c3604c976563a6d1b228c0dae30`
 into actual main `635288a76750bcd01d9fc9268dd9fe29897b269a` with explicit
@@ -50,8 +55,10 @@ A disposable real restore receives one valid-JSON whitespace change; both saved
 UPDATE guards are restored before verification. Verification refuses the exact
 historical-content mismatch and preserves altered target bytes, source bytes,
 policy, markers, holds, UNKNOWN reservations, budget and audit. All 100 runtime
-files are unchanged. Status for this new negative is **PARTIALLY TESTED** until
-its own reviewed-head CI; it was absent from the historical baseline CI.
+Python runtime files are unchanged. Status for this negative is **VERIFIED IN CI**
+at reviewed source `9aaf6a1` and actual main `c154b28` in the runs above; it was
+absent from the older `143c93d` and `635288a` CI executions. The local two-case
+result and the later hosted results remain separate evidence.
 
 Historical ccdd1a5, d3a6072 and 5b6981e each passed their own 24 jobs.
 Historical `7a10a5f` passed 23/24: a stream-cap observation test failed.
