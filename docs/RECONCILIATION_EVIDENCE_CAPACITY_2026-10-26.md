@@ -2,12 +2,13 @@
 
 Implementation baseline (historical): main
 `609df6d66446ee9cf8b1acceb3d8f0461dab6e22`.
-Local qualification recorded October 26 and reviewed October 27, 2026:
+Local qualification recorded October 26 and 27, 2026:
 **PARTIALLY TESTED**. This unit adds bounds to the existing
 `reconciliation_evidence` table; it does not create another evidence format
 or authorization stack. The qualification record below binds local working
-bytes and test invocations; it does not claim current-main integration or
-hosted CI. Production remains **NO-GO**. No external-service fencing or
+bytes and test invocations. The October 27 composition includes maintained
+main locally; it does not claim protected-main publication or hosted CI for
+this unit. Production remains **NO-GO**. No external-service fencing or
 independent custody acceptance follows from these storage controls.
 
 ## Existing behavior and reproduced gap
@@ -156,3 +157,48 @@ the actual reviewed candidate commit and selected jobs separately. No tests
 were rerun for this documentation-only status update. Local tests cannot
 supply independent destination custody, production retention acceptance,
 legal compliance or external outcome truth.
+
+## October 27 local composition and joint-history qualification
+
+The unit was preserved as local commit
+`2d0465fd244eb5c0238e35d8b2d0d3cf4eaa5c6b`, then normally merged with
+maintained main `e0521ad67d7f05e4bec55685cdbb91c96fd158f0` into local
+`2b7c675d8f2c254ab0d52b6b1bcb7a0cf3900ab7`. The additive resolution
+retains both signing and evidence migration qualification and CI module
+selections. No protected-main merge is implied by this local composition.
+
+Six additional SQLite/PostgreSQL cases exercise nonempty signing and
+evidence histories together: actual separate backup/restore, verification,
+activation and rollback; and refusal of a missing trigger in either journal
+without repairing or changing the other. The tests preserve exact bundle
+text, distinct policies, UNKNOWN operations, reservation identity, budget,
+audit, holds and checkpoints. The initial static draft used the wrong
+signing usage key; that fixture error was corrected before execution.
+
+One fresh 21-module invocation on Python 3.12.10 and local PostgreSQL 16.13
+collected 758 distinct cases: **661 passed, 97 skipped, zero failures or
+errors**. All six new cases passed. All 458 frozen source files remained
+unchanged. The 97 skips are backend-specific exclusions: 92 SQLite cases
+requiring PostgreSQL behavior and five PostgreSQL cases requiring SQLite
+behavior. They are not passes for the excluded backend. Two unknown
+pytest-timeout configuration warnings remain recorded; the runner separately
+enforced a 900-second outer process limit. Elapsed wrapper time was 569.734
+seconds. Independent saved-result review recalculated 44 checks, including
+all XML rows, skip reasons and artifact/source/grant associations.
+
+Exact working-source evidence, before this documentation-only addition:
+
+- Frozen manifest:
+  `e06a5a6bbd524fdf35a2d3ca79d0ebeec225dc0e31af9ce9cb6d71ce2c2f8205`.
+- Joint test raw SHA-256:
+  `40c10a2b63d3f4c47e2045450a979f3172eb550691999364b509e223bbfa21e1`.
+- Actual result receipt:
+  `5cd7ffe0dfedc0422efc4f6960524a9e939ae090a23fdfd6da7840e35f420377`.
+- Independent result review:
+  `f5d933c166ea51d17d46a51f24e81141f0ba7ed71bb656232d11b4b4f90e954b`.
+
+This is local working-source qualification, **PARTIALLY TESTED**; hosted CI
+for the evidence-capacity unit is **NOT STARTED**. Historical failed and
+corrective invocations above remain separate. No network enforcement,
+automatic HA, active-operation migration, production SLO, external custody
+or native SaaS destination fencing acceptance follows from these results.

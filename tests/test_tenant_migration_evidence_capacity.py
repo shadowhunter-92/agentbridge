@@ -6,6 +6,12 @@ import pytest
 from src.governance.evidence_journal_capacity import TABLE, verify_snapshot
 from src.governance.operation_ledger import OperationLedger
 from src.governance.reconciliation import Reconciliation
+from src.governance.signing_journal_capacity import (
+    TABLE as SIGNING_TABLE,
+    SigningJournalLimits,
+    policy as signing_policy,
+    verify_if_installed as verify_signing_capacity,
+)
 from src.governance.store import PostgresStore, sql_atomic
 from src.governance.tenant_migration import TenantMigration, TenantMigrationDenied
 from tests.test_authority import authority as authority
@@ -151,3 +157,124 @@ def test_postgres_modified_or_unknown_evidence_routines_refused(authority, histo
     source._db.execute(commands[change])
     with pytest.raises(TenantMigrationDenied, match="unsupported"):
         TenantMigration(authority[0], source).freeze(authority[1], "alpha")
+
+
+def _joint_capacity_rows(store):
+    evidence_rows, evidence_policy = state(store)
+    return {
+        "signing_history": [dict(row) for row in store._db.execute(
+            "SELECT * FROM signing_trust_revisions ORDER BY domain,revision")],
+        "signing_policy": [dict(row) for row in store._db.execute("SELECT * FROM " + SIGNING_TABLE)],
+        "evidence_history": evidence_rows,
+        "evidence_policy": evidence_policy,
+    }
+
+
+def _joint_capacity_usage(store):
+    return {
+        "signing": verify_signing_capacity(store._db, postgres=isinstance(store, PostgresStore)),
+        "evidence": usage(store),
+    }
+
+
+def _joint_protected_state(store, agent_id):
+    placeholder = "%s" if isinstance(store, PostgresStore) else "?"
+    parameters = (agent_id, "historical-unknown-12345")
+    operation = store._db.execute(
+        "SELECT fingerprint,state,updated FROM agent_operations WHERE agent_id=" + placeholder
+        + " AND operation_id=" + placeholder, parameters).fetchone()
+    assert operation is not None
+    return {
+        "operation": dict(operation),
+        "operation_reservations": [dict(row) for row in store._db.execute(
+            "SELECT * FROM operation_reservations WHERE agent_id=" + placeholder
+            + " AND operation_id=" + placeholder, parameters)],
+        "budget": store.get_budget(agent_id),
+        "audit": store.load_audit(),
+        "holds": [dict(row) for row in store._db.execute("SELECT * FROM audit_holds ORDER BY name")],
+        "checkpoints": [dict(row) for row in store._db.execute("SELECT * FROM audit_checkpoints ORDER BY 1,2")],
+    }
+
+
+def _joint_capacity_source(historical):
+    source, identity, _, before = historical
+    reconciliation = seed(source)
+    reconciliation.set_evidence_capacity(max_records=7, max_bytes=8000, max_entry_bytes=1000)
+    # The existing historical fixture publishes both signing domains. Give
+    # each capacity an explicit, distinct policy before freezing the same store.
+    signing_policy(source, limits=SigningJournalLimits(11, 20000, 10000))
+    expected = _joint_capacity_rows(source)
+    expected_usage = _joint_capacity_usage(source)
+    protected = _joint_protected_state(source, identity.agent_id)
+    assert expected["signing_history"] and expected["evidence_history"]
+    assert len(expected["signing_policy"]) == len(expected["evidence_policy"]) == 1
+    assert expected["signing_policy"][0]["max_records"] == 11
+    assert expected["evidence_policy"][0]["max_records"] == 7
+    assert expected_usage["signing"]["used_records"] > 0 and expected_usage["evidence"]["records"] > 0
+    assert protected["operation"]["state"] == "unknown"
+    assert len(protected["operation_reservations"]) == 1
+    token = protected["operation_reservations"][0]["token"]
+    assert protected["budget"]["reserved"][token] == 3
+    assert protected["budget"] == before["budget"] and protected["audit"] == before["audit"]
+    assert protected["holds"] and protected["checkpoints"]
+    return source, identity, expected, expected_usage, protected
+
+
+def _joint_trigger_catalog(store):
+    if isinstance(store, PostgresStore):
+        query = (
+            "SELECT t.relname,g.tgname,pg_get_triggerdef(g.oid) AS definition FROM pg_trigger g "
+            "JOIN pg_class t ON t.oid=g.tgrelid JOIN pg_namespace n ON n.oid=t.relnamespace "
+            "WHERE n.nspname=current_schema() AND NOT g.tgisinternal ORDER BY t.relname,g.tgname"
+        )
+    else:
+        query = "SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name"
+    return [dict(row) for row in store._db.execute(query)]
+
+
+def test_joint_signing_and_evidence_real_restore_activation_rollback(
+        authority, namespaces, historical, backup_restore):
+    source, identity, expected, expected_usage, protected = _joint_capacity_source(historical)
+    migration = TenantMigration(authority[0], source)
+    migration.freeze(authority[1], "alpha")
+    restored, archive = backup_restore()
+    assert _joint_capacity_rows(restored) == expected
+    assert _joint_capacity_usage(restored) == expected_usage
+    assert _joint_protected_state(restored, identity.agent_id) == protected
+    migration.verify_backup(authority[1], restored, archive)
+    migration.activate(authority[1], restored, archive)
+    scoped = namespaces("alpha")
+    assert _joint_capacity_rows(scoped) == expected
+    assert _joint_capacity_usage(scoped) == expected_usage
+    assert _joint_protected_state(scoped, identity.agent_id) == protected
+    assert migration.rollback(authority[1])["historical_rows_preserved"]
+    assert _joint_capacity_rows(source) == expected
+    assert _joint_capacity_usage(source) == expected_usage
+    assert _joint_protected_state(source, identity.agent_id) == protected
+
+
+@pytest.mark.parametrize("family", ["signing", "evidence"])
+def test_joint_capacity_missing_trigger_refused_without_repair(authority, historical, family):
+    source, identity, expected, expected_usage, protected = _joint_capacity_source(historical)
+    trigger, table = {
+        "signing": ("signing_capacity_insert_v1", "signing_trust_revisions"),
+        "evidence": ("evidence_capacity_insert_v1", "reconciliation_evidence"),
+    }[family]
+    # Trusted disposable source damage: leave the other complete capacity
+    # installed, and verify the failed freeze neither repairs nor changes it.
+    source._db.execute("DROP TRIGGER " + trigger
+                       + (" ON " + table if isinstance(source, PostgresStore) else ""))
+    damaged_catalog = _joint_trigger_catalog(source)
+    intact_family = "evidence" if family == "signing" else "signing"
+    intact_usage = (usage(source) if intact_family == "evidence" else
+                    verify_signing_capacity(source._db, postgres=isinstance(source, PostgresStore)))
+    assert intact_usage == expected_usage[intact_family]
+    message = "unsupported " + ("signing journal" if family == "signing" else "evidence") + " capacity snapshot"
+    with pytest.raises(TenantMigrationDenied, match=message):
+        TenantMigration(authority[0], source).freeze(authority[1], "alpha")
+    assert _joint_trigger_catalog(source) == damaged_catalog
+    assert _joint_capacity_rows(source) == expected
+    assert _joint_protected_state(source, identity.agent_id) == protected
+    intact_after = (usage(source) if intact_family == "evidence" else
+                    verify_signing_capacity(source._db, postgres=isinstance(source, PostgresStore)))
+    assert intact_after == expected_usage[intact_family]
