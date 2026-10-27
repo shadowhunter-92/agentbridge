@@ -97,6 +97,7 @@ not an execution authority.
 | [Atomic local outcome settlement](ATOMIC_GOVERNANCE_STATE_2026-10-14.md) |
 | [Audit payload capacity and conservative retention](AUDIT_CAPACITY_AND_RETENTION_2026.md) |
 | [Checkpoint registry capacity and retained-history limits](CHECKPOINT_CAPACITY_2026.md) |
+| [Retained reconciliation evidence payload limits](RECONCILIATION_EVIDENCE_CAPACITY_2026-10-26.md) |
 | [Current bounded checkpoint registry and verified source](CHECKPOINT_REGISTRY_2026.md) |
 | [External destination capability, fencing limits and acceptance](EXTERNAL_DESTINATION_FENCING_2026.md) |
 | [Nine-phase engineering checklist and progress](ENGINEERING_PHASE_PROGRESS_2026-10-24.md) |

@@ -108,6 +108,14 @@ def _supported_schema(store, cur):
                     qualified += checkpoint_routines(cur)
                 except CheckpointCapacityDenied as exc:
                     raise TenantMigrationDenied("unsupported checkpoint capacity migration routine") from exc
+            from .evidence_journal_capacity import TABLE as evidence_policy_table
+            if evidence_policy_table in _tables(store, cur):
+                from .evidence_journal_capacity import EvidenceCapacityDenied
+                from .evidence_journal_capacity import qualified_postgres_routines as evidence_routines
+                try:
+                    qualified += evidence_routines(cur)
+                except EvidenceCapacityDenied as exc:
+                    raise TenantMigrationDenied("unsupported evidence capacity migration routine") from exc
             cur.execute(
                 "SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace "
                 "WHERE n.nspname=current_schema() AND NOT (p.proname=ANY(%s)) LIMIT 1",
@@ -134,6 +142,12 @@ def _snapshot(store, cur, *, tables=None):
         verify_if_installed(cur, postgres=isinstance(store, PostgresStore))
     except CheckpointCapacityDenied as exc:
         raise TenantMigrationDenied("unsupported checkpoint capacity snapshot") from exc
+    from .evidence_journal_capacity import EvidenceCapacityDenied
+    from .evidence_journal_capacity import verify_if_installed as verify_evidence
+    try:
+        verify_evidence(cur, postgres=isinstance(store, PostgresStore))
+    except EvidenceCapacityDenied as exc:
+        raise TenantMigrationDenied("unsupported evidence capacity snapshot") from exc
     selected = _tables(store, cur) if tables is None else tables
     manifest = {}
     for table in selected:

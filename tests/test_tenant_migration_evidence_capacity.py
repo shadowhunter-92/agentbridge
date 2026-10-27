@@ -1,0 +1,153 @@
+"""Actual offline restore must preserve exact retained evidence and policy."""
+from contextlib import closing
+
+import pytest
+
+from src.governance.evidence_journal_capacity import TABLE, verify_snapshot
+from src.governance.operation_ledger import OperationLedger
+from src.governance.reconciliation import Reconciliation
+from src.governance.store import PostgresStore, sql_atomic
+from src.governance.tenant_migration import TenantMigration, TenantMigrationDenied
+from tests.test_authority import authority as authority
+from tests.test_tenant_migration import backup_restore as backup_restore
+from tests.test_tenant_migration import historical as historical
+from tests.test_tenant_store import namespaces as namespaces
+
+
+def state(store):
+    return ([dict(row) for row in store._db.execute("SELECT * FROM reconciliation_evidence ORDER BY 1,2")],
+            [dict(row) for row in store._db.execute("SELECT * FROM " + TABLE)])
+
+
+def usage(store):
+    with closing(store._db.cursor()) as cur:
+        return verify_snapshot(cur, postgres=isinstance(store, PostgresStore))
+
+
+def seed(source):
+    rec = Reconciliation(source)
+    placeholder = "%s" if isinstance(source, PostgresStore) else "?"
+    source._db.execute("INSERT INTO reconciliation_evidence VALUES('old','exact-bytes'," + placeholder + ")",
+                       ('{ "unicode": "\u00e9\U0001f642", "history": 1 }\n',))
+    return rec
+
+
+@pytest.mark.parametrize("mode", ["initialized", "over-limit"])
+def test_real_evidence_backup_restore_activation_and_rollback(authority, namespaces, historical, backup_restore, mode):
+    source, identity, _, before = historical
+    rec = seed(source)
+    if mode == "over-limit":
+        rec.set_evidence_capacity(max_records=1, max_bytes=1, max_entry_bytes=1)
+    else:
+        rec.set_evidence_capacity(max_records=7, max_bytes=8000, max_entry_bytes=1000)
+    expected, expected_usage = state(source), usage(source)
+    size = len(expected[0][0]["bundle"].encode("utf-8"))
+    assert expected_usage == {"records": 1, "bytes": size, "largest_entry_bytes": size}
+    migration = TenantMigration(authority[0], source)
+    migration.freeze(authority[1], "alpha")
+    restored, archive = backup_restore()
+    assert state(restored) == expected and usage(restored) == expected_usage
+    migration.verify_backup(authority[1], restored, archive)
+    migration.activate(authority[1], restored, archive)
+    scoped = namespaces("alpha")
+    assert state(scoped) == expected and usage(scoped) == expected_usage
+    assert scoped.load_audit() == before["audit"]
+    assert OperationLedger(scoped).get(identity.agent_id, "historical-unknown-12345")["state"] == "unknown"
+    assert scoped.get_budget(identity.agent_id) == before["budget"]
+    assert migration.rollback(authority[1])["historical_rows_preserved"]
+    assert state(source) == expected and usage(source) == expected_usage
+
+
+def test_real_empty_lazy_policy_backup_does_not_initialize_metadata(authority, historical, backup_restore):
+    source = historical[0]
+    Reconciliation(source)
+    expected = state(source)
+    assert expected == ([], [])
+    migration = TenantMigration(authority[0], source)
+    migration.freeze(authority[1], "alpha")
+    restored, archive = backup_restore()
+    assert state(restored) == expected
+    assert usage(restored) == {"records": 0, "bytes": 0, "largest_entry_bytes": 0}
+    assert state(restored) == expected
+    migration.verify_backup(authority[1], restored, archive)
+    migration.activate(authority[1], restored, archive)
+    assert migration.rollback(authority[1])["historical_rows_preserved"]
+    assert state(source) == expected
+
+
+def test_real_restore_changed_bundle_text_is_not_accepted(authority, historical, backup_restore):
+    source = historical[0]
+    seed(source)
+    expected, expected_usage = state(source), usage(source)
+    migration = TenantMigration(authority[0], source)
+    migration.freeze(authority[1], "alpha")
+    restored, archive = backup_restore()
+    postgres = isinstance(restored, PostgresStore)
+    if postgres:
+        guards = [dict(row) for row in restored._db.execute(
+            "SELECT tgname AS name,pg_get_triggerdef(oid) AS definition FROM pg_trigger "
+            "WHERE tgrelid='reconciliation_evidence'::regclass AND NOT tgisinternal ORDER BY tgname")]
+        affected = [row for row in guards if row["name"] in ("evidence_immutable_v1", "ab_migration_freeze")]
+    else:
+        guards = [dict(row) for row in restored._db.execute(
+            "SELECT name,sql AS definition FROM sqlite_master WHERE type='trigger' AND tbl_name='reconciliation_evidence' ORDER BY name")]
+        affected = [row for row in guards if row["name"] == "evidence_immutable_history_update_v1" or (
+            row["name"].startswith("ab_migration_freeze_") and " BEFORE UPDATE " in row["definition"].upper())]
+    assert len(affected) == 2
+    altered = expected[0][0]["bundle"] + " "
+    placeholder = "%s" if postgres else "?"
+    # Trusted disposable-restore fault injection. Reinstate every saved guard
+    # before asking the verifier; source and all other objects stay unchanged.
+    with sql_atomic(restored):
+        for guard in affected:
+            name = '"' + guard["name"].replace('"', '""') + '"'
+            restored._db.execute("DROP TRIGGER " + name + (" ON reconciliation_evidence" if postgres else ""))
+        restored._db.execute("UPDATE reconciliation_evidence SET bundle=" + placeholder, (altered,))
+        for guard in affected:
+            restored._db.execute(guard["definition"])
+    assert usage(restored) == {"records": 1, "bytes": expected_usage["bytes"] + 1,
+                               "largest_entry_bytes": expected_usage["largest_entry_bytes"] + 1}
+    with pytest.raises(TenantMigrationDenied, match="does not preserve all historical rows"):
+        migration.verify_backup(authority[1], restored, archive)
+    assert state(source) == expected and usage(source) == expected_usage
+    assert state(restored)[0][0]["bundle"] == altered
+
+
+@pytest.mark.parametrize("change", ["missing-trigger", "missing-policy", "modified-trigger"])
+def test_sqlite_partial_or_modified_capacity_freeze_refused_without_repair(authority, historical, change):
+    source = historical[0]
+    if isinstance(source, PostgresStore):
+        pytest.skip("SQLite catalog contract")
+    seed(source)
+    if change == "missing-policy":
+        source._db.execute("DROP TABLE " + TABLE)
+    else:
+        source._db.execute("DROP TRIGGER evidence_capacity_insert_v1")
+        if change == "modified-trigger":
+            source._db.execute("CREATE TRIGGER evidence_capacity_insert_v1 AFTER INSERT ON reconciliation_evidence BEGIN SELECT 1; END")
+    before = [tuple(row) for row in source._db.execute("SELECT name,sql FROM sqlite_master ORDER BY name")]
+    with pytest.raises(TenantMigrationDenied, match="evidence capacity snapshot"):
+        TenantMigration(authority[0], source).freeze(authority[1], "alpha")
+    assert [tuple(row) for row in source._db.execute("SELECT name,sql FROM sqlite_master ORDER BY name")] == before
+
+
+@pytest.mark.parametrize("change", ["body", "security-definer", "stable", "search-path", "strict", "parallel", "overload", "unknown"])
+def test_postgres_modified_or_unknown_evidence_routines_refused(authority, historical, change):
+    source = historical[0]
+    if not isinstance(source, PostgresStore):
+        pytest.skip("PostgreSQL routine source and attributes")
+    seed(source)
+    name = "agentbridge_evidence_capacity_v1"
+    commands = {
+        "body": "CREATE OR REPLACE FUNCTION " + name + "() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog AS $$ BEGIN RETURN NULL; END $$",
+        "security-definer": "ALTER FUNCTION " + name + "() SECURITY DEFINER",
+        "stable": "ALTER FUNCTION " + name + "() STABLE",
+        "search-path": "ALTER FUNCTION " + name + "() SET search_path=public",
+        "strict": "ALTER FUNCTION " + name + "() STRICT",
+        "parallel": "ALTER FUNCTION " + name + "() PARALLEL SAFE",
+        "overload": "CREATE FUNCTION " + name + "(integer) RETURNS integer LANGUAGE sql AS 'SELECT $1'",
+        "unknown": "CREATE FUNCTION unrelated_evidence_hook() RETURNS integer LANGUAGE sql AS 'SELECT 1'",
+    }
+    source._db.execute(commands[change])
+    with pytest.raises(TenantMigrationDenied, match="unsupported"):
+        TenantMigration(authority[0], source).freeze(authority[1], "alpha")
