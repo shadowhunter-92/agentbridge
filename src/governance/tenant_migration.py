@@ -108,6 +108,15 @@ def _supported_schema(store, cur):
                     qualified += checkpoint_routines(cur)
                 except CheckpointCapacityDenied as exc:
                     raise TenantMigrationDenied("unsupported checkpoint capacity migration routine") from exc
+            from .signing_journal_capacity import TABLE as signing_policy_table
+            if signing_policy_table in _tables(store, cur):
+                from .signing_journal_capacity import SigningJournalCapacityDenied
+                from .signing_journal_capacity import qualified_postgres_routines as signing_routines
+
+                try:
+                    qualified += signing_routines(cur)
+                except SigningJournalCapacityDenied as exc:
+                    raise TenantMigrationDenied("unsupported signing journal capacity migration routine") from exc
             from .evidence_journal_capacity import TABLE as evidence_policy_table
             if evidence_policy_table in _tables(store, cur):
                 from .evidence_journal_capacity import EvidenceCapacityDenied
@@ -142,6 +151,13 @@ def _snapshot(store, cur, *, tables=None):
         verify_if_installed(cur, postgres=isinstance(store, PostgresStore))
     except CheckpointCapacityDenied as exc:
         raise TenantMigrationDenied("unsupported checkpoint capacity snapshot") from exc
+    from .signing_journal_capacity import SigningJournalCapacityDenied
+    from .signing_journal_capacity import verify_if_installed as verify_signing_capacity
+
+    try:
+        verify_signing_capacity(cur, postgres=isinstance(store, PostgresStore))
+    except SigningJournalCapacityDenied as exc:
+        raise TenantMigrationDenied("unsupported signing journal capacity snapshot") from exc
     from .evidence_journal_capacity import EvidenceCapacityDenied
     from .evidence_journal_capacity import verify_if_installed as verify_evidence
     try:
