@@ -7,10 +7,18 @@ authoritative fencing service/target.
 """
 import math
 import psycopg
+from psycopg.conninfo import conninfo_to_dict
 
 
 class FenceDenied(RuntimeError):
     pass
+
+
+def _bounded_connection(dsn, **kwargs):
+    """Bound setup and server-side SQL waits; never retry an uncertain action."""
+    options = conninfo_to_dict(dsn).get("options", "")
+    options += " -cstatement_timeout=10000 -clock_timeout=5000"
+    return psycopg.connect(dsn, connect_timeout=5, options=options, **kwargs)
 
 
 class PgFencing:
@@ -25,7 +33,7 @@ class PgFencing:
             raise FenceDenied("scope and owner must be nonempty bounded identities")
 
     def initialize(self):
-        with psycopg.connect(self.dsn,autocommit=True) as c:
+        with _bounded_connection(self.dsn,autocommit=True) as c:
             c.execute(
                 "CREATE TABLE IF NOT EXISTS agentbridge_fences ("
                 "scope TEXT PRIMARY KEY, owner TEXT NOT NULL, epoch BIGINT NOT NULL "
@@ -36,7 +44,7 @@ class PgFencing:
         if (not isinstance(ttl_seconds,(int,float)) or isinstance(ttl_seconds,bool)
                 or not math.isfinite(ttl_seconds) or not 0.5<=ttl_seconds<=3600):
             raise FenceDenied("invalid bounded lease duration")
-        with psycopg.connect(self.dsn,autocommit=True) as c:
+        with _bounded_connection(self.dsn,autocommit=True) as c:
             row=c.execute(
                 "INSERT INTO agentbridge_fences AS f(scope,owner,epoch,expires) "
                 "VALUES(%s,%s,1,clock_timestamp()+%s * interval '1 second') "
@@ -55,13 +63,21 @@ class PgFencing:
                 or not isinstance(ttl_seconds,(int,float)) or isinstance(ttl_seconds,bool)
                 or not math.isfinite(ttl_seconds) or not 0.5<=ttl_seconds<=3600):
             raise FenceDenied("invalid fence token or lease duration")
-        with psycopg.connect(self.dsn,autocommit=True) as c:
-            row=c.execute(
-                "UPDATE agentbridge_fences SET "
-                "expires=clock_timestamp()+%s * interval '1 second' "
-                "WHERE scope=%s AND owner=%s AND epoch=%s "
-                "AND expires>clock_timestamp() RETURNING epoch",
-                (ttl_seconds,scope,owner,epoch)).fetchone()
+        with _bounded_connection(self.dsn,autocommit=True) as c:
+            with c.transaction():
+                # A volatile WHERE expression can precede a lock wait.
+                # Own the row before a later statement reads the live clock.
+                locked=c.execute(
+                    "SELECT 1 FROM agentbridge_fences WHERE scope=%s FOR UPDATE",
+                    (scope,)).fetchone()
+                if locked is None:
+                    raise FenceDenied("stale or expired fencing epoch")
+                row=c.execute(
+                    "UPDATE agentbridge_fences SET "
+                    "expires=clock_timestamp()+%s * interval '1 second' "
+                    "WHERE scope=%s AND owner=%s AND epoch=%s "
+                    "AND expires>clock_timestamp() RETURNING epoch",
+                    (ttl_seconds,scope,owner,epoch)).fetchone()
         if row is None:
             raise FenceDenied("stale or expired fencing epoch")
         return int(row[0])
@@ -70,7 +86,7 @@ class PgFencing:
         self._validate(scope,owner)
         if not isinstance(epoch,int) or isinstance(epoch,bool) or epoch<1:
             return False
-        with psycopg.connect(self.dsn,autocommit=True) as c:
+        with _bounded_connection(self.dsn,autocommit=True) as c:
             row=c.execute(
                 "SELECT 1 FROM agentbridge_fences WHERE "
                 "scope=%s AND owner=%s AND epoch=%s AND expires>clock_timestamp()",
