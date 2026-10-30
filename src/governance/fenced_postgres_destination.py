@@ -15,6 +15,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from .destination_receipts import canonical_receipt_payload
+from .pg_fencing import _bounded_connection
 
 
 class StaleDestinationLeader(RuntimeError):
@@ -34,7 +35,7 @@ class FencedPostgresDestination:
         self.dsn, self.sign = dsn, sign
 
     def initialize(self):
-        with psycopg.connect(self.dsn) as conn:
+        with _bounded_connection(self.dsn) as conn:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS public.ab_evidence_effects ("
                 "agent_id TEXT NOT NULL, operation_id TEXT NOT NULL, "
@@ -63,11 +64,18 @@ class FencedPostgresDestination:
         # The serializing lock on the authoritative fence MUST cover both
         # verification and effect write. A second leader cannot take the
         # lease while this write transaction owns the row lock.
-        with psycopg.connect(self.dsn, row_factory=dict_row) as conn:
+        with _bounded_connection(self.dsn, row_factory=dict_row) as conn:
             with conn.transaction():
+                locked = conn.execute(
+                    "SELECT 1 FROM public.agentbridge_fences WHERE scope=%s FOR UPDATE",
+                    (scope,)).fetchone()
+                if locked is None:
+                    raise StaleDestinationLeader("destination rejected stale or expired fence")
+                # Read the database clock only after acquiring the row lock.
+                # A projection evaluated before a lock wait can become stale.
                 fence = conn.execute(
                     "SELECT owner,epoch,expires>clock_timestamp() AS live "
-                    "FROM public.agentbridge_fences WHERE scope=%s FOR UPDATE",
+                    "FROM public.agentbridge_fences WHERE scope=%s",
                     (scope,)).fetchone()
                 if (not fence or fence["owner"] != owner
                         or fence["epoch"] != epoch or not fence["live"]):

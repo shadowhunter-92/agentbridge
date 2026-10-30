@@ -126,6 +126,10 @@ same-version backup and its preserved manifest, with all writers stopped.
 Audit capacity tests establish synthetic SQLite/PostgreSQL transaction and
 resource behavior. They do not establish independent evidence custody, WORM
 storage, production retention, legal compliance or outcome authenticity.
-Reference-indexed hold-safe retention, bounds for the remaining evidence
-journals/checkpoints, mixed-version operational qualification, sustained
-full-route performance and external storage/custody acceptance remain open.
+Checkpoint payload bounds are documented separately in
+[CHECKPOINT_CAPACITY_2026.md](CHECKPOINT_CAPACITY_2026.md). The later bounded
+manual-reconciliation evidence unit has its own source and qualification
+record in [RECONCILIATION_EVIDENCE_CAPACITY_2026-10-26.md](RECONCILIATION_EVIDENCE_CAPACITY_2026-10-26.md).
+Reference-indexed hold-safe retention, bounds for other remaining journals,
+mixed-version operational qualification, sustained full-route performance
+and external storage/custody acceptance remain open.

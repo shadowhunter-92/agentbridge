@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import time
+from contextlib import closing
 from dataclasses import asdict
 
 from .audit import AuditEntry, AuditLog, _now
@@ -39,19 +40,47 @@ class Reconciliation:
         self.operations = OperationLedger(store)
         if not isinstance(store, (SqliteStore, PostgresStore)):
             raise ReconciliationError("durable database required")
+        from .evidence_journal_capacity import (
+            TABLE, assert_postgres_namespace, assert_sqlite_namespace,
+            install_postgres, install_sqlite,
+        )
         with sql_atomic(store):
             execute = store._db.execute
-            if isinstance(store, PostgresStore):
-                execute("SELECT pg_advisory_xact_lock(%s)", (911004,))
-            stamp = "DOUBLE PRECISION" if isinstance(store, PostgresStore) else "REAL"
-            execute("CREATE TABLE IF NOT EXISTS operation_reconciliations ("
-                    "agent_id TEXT NOT NULL,operation_id TEXT NOT NULL,result TEXT NOT NULL,"
-                    "external_reference TEXT NOT NULL,evidence_sha256 TEXT NOT NULL,reviewer TEXT NOT NULL,"
-                    "created " + stamp + " NOT NULL,PRIMARY KEY(agent_id,operation_id))")
-            execute("CREATE TABLE IF NOT EXISTS reconciliation_readbacks (agent_id TEXT NOT NULL,"
-                    "operation_id TEXT NOT NULL,digest TEXT NOT NULL,PRIMARY KEY(agent_id,operation_id))")
-            execute("CREATE TABLE IF NOT EXISTS reconciliation_evidence (agent_id TEXT NOT NULL,"
-                    "operation_id TEXT NOT NULL,bundle TEXT NOT NULL,PRIMARY KEY(agent_id,operation_id))")
+            postgres = isinstance(store, PostgresStore)
+            with closing(store._db.cursor()) as cur:
+                if postgres:
+                    assert_postgres_namespace(cur)
+                    execute("SELECT pg_advisory_xact_lock(%s)", (911004,))
+                    execute("SELECT pg_advisory_xact_lock(%s)", (store._AUDIT_LOCK_KEY,))
+                else:
+                    assert_sqlite_namespace(cur)
+                stamp = "DOUBLE PRECISION" if postgres else "REAL"
+                execute("CREATE TABLE IF NOT EXISTS operation_reconciliations ("
+                        "agent_id TEXT NOT NULL,operation_id TEXT NOT NULL,result TEXT NOT NULL,"
+                        "external_reference TEXT NOT NULL,evidence_sha256 TEXT NOT NULL,reviewer TEXT NOT NULL,"
+                        "created " + stamp + " NOT NULL,PRIMARY KEY(agent_id,operation_id))")
+                execute("CREATE TABLE IF NOT EXISTS reconciliation_readbacks (agent_id TEXT NOT NULL,"
+                        "operation_id TEXT NOT NULL,digest TEXT NOT NULL,PRIMARY KEY(agent_id,operation_id))")
+                execute("CREATE TABLE IF NOT EXISTS reconciliation_evidence (agent_id TEXT NOT NULL,"
+                        "operation_id TEXT NOT NULL,bundle TEXT NOT NULL,PRIMARY KEY(agent_id,operation_id))")
+                (install_postgres if postgres else install_sqlite)(cur)
+                if getattr(store, "tenant_id", None):
+                    from .tenant_store import _install_postgres_guards, _install_sqlite_guards
+                    tables = ("operation_reconciliations", "reconciliation_readbacks", "reconciliation_evidence", TABLE)
+                    if postgres:
+                        _install_postgres_guards(cur, store.schema, tables)
+                    else:
+                        _install_sqlite_guards(cur, tables)
+
+    def evidence_capacity(self):
+        """Inspect retained bundle payload limits and actual SQL usage."""
+        from .evidence_journal_capacity import policy
+        return policy(self.store)
+
+    def set_evidence_capacity(self, *, max_records, max_bytes, max_entry_bytes, audit=None):
+        """Trusted operator configuration; never prunes or rewrites evidence."""
+        from .evidence_journal_capacity import EvidenceLimits, policy
+        return policy(self.store, limits=EvidenceLimits(max_records, max_bytes, max_entry_bytes), audit=audit)
 
     def _execute(self, query, values=()):
         return self.store._db.execute(query.replace("?", "%s") if isinstance(self.store, PostgresStore) else query, values)
@@ -274,6 +303,8 @@ class Reconciliation:
         p = "?" if isinstance(self.store, SqliteStore) else "%s"
         if isinstance(self.store, PostgresStore):
             cur.execute("SELECT pg_advisory_xact_lock(%s)", (self.store._AUDIT_LOCK_KEY,))
+        from .evidence_journal_capacity import verify_snapshot
+        verify_snapshot(cur, postgres=isinstance(self.store, PostgresStore))
         cur.execute(
             f"INSERT INTO reconciliation_evidence VALUES({p},{p},{p})",
             (agent_id, operation_id, bundle_json),
