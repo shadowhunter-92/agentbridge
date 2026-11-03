@@ -1,10 +1,25 @@
-# Current engineering alpha status — October 22, 2026
+# Current engineering alpha status — November 3, 2026
 
 **Overall: PARTIALLY TESTED; unrestricted consequential-action production NO-GO.**
-This is the current documentation entry point for the recorded source snapshot.
-It supersedes present-tense status, pending-work and branch-count statements in
-older reports; it does not change their original results or authorize a merge,
-release, deployment or deletion. Apache 2.0 remains in force.
+The maintained snapshot is `44a06c364e348966e0b14c724f14e3a14d192433`, tree
+`b9fe952af2e9b92bb98c275315a426213d7c5eb5`. Its own [core CI run 41580327205](https://github.com/shadowhunter-92/agentbridge/actions/runs/41580327205)
+passed all 16 jobs on attempt 1. Source `c4fe9a4f9fa1fd58589bd2f3a9c27e734fe29e7f`
+separately passed all 24 PR checks. The owner approved its normal PR #85 merge;
+all 16 remote branches were retained at the merge readback.
+
+Use the [November 3 progress and acceptance checklist](ALPHA_PROGRESS_2026-11-03.md)
+for current gates and the [controlled worker-trial record](HA_WORKER_LIFECYCLE_CONTROLLED_TRIALS_2026-11-02.md)
+for the bounded component observations. New main CI passed; physical HA, actual
+AWS cluster traffic and production acceptance remain open. This status change
+does not authorize another merge, publication, deployment or deletion. Apache
+2.0 remains in force.
+
+## Historical status record — October 22, 2026
+
+The source/evaluator tables and dated results below are retained historical
+evidence. Their then-current main, draft-PR descriptions, follow-up language and
+six-branch count describe their original cutoff. They do not override the
+November 3 snapshot above, relabel older artifacts or close newer acceptance gates.
 
 ## Source and artifact pins
 

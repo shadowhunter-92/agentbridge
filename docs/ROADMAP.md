@@ -5,6 +5,16 @@ records the merged main, historical source/evaluator pins and open work.
 Historical sprint reports describe their own commits; their test counts and
 pending-PR statements are not current status.
 
+The [November 3 checkpoint](ALPHA_PROGRESS_2026-11-03.md) records the approved
+PR #85 merge and its own successful main CI. The worker-lifecycle component is
+**VERIFIED IN CI**; complete physical HA and actual AWS multi-node traffic are
+still open. Internally controllable next work is actual traffic execution,
+forced-worker and response-loss recovery trials, full governed recovery,
+storage/retention qualification, protocol gaps and sustained full-route load.
+External security, developer, buyer, destination-custody and pilot acceptance
+are separate gates. Dates for these remaining gates depend on execution
+capacity, permissions and participants; no completion deadline is asserted.
+
 ## Implemented foundation
 
 - Six adapter families translate a limited capability/arguments/text subset.
