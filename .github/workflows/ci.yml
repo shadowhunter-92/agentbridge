@@ -212,12 +212,19 @@ jobs:
         run: python -m pip install "psycopg[binary]" -e .
       - name: Fail over to a new epoch and deny suspended old worker
         run: python -m tools.drill_pg_stale_leader
+      - name: Verify participating worker drain, fencing and lost-ACK readback
+        env:
+          AGENTBRIDGE_STALE_LEADER_SCENARIO: worker-lifecycle
+          AGENTBRIDGE_STALE_LEADER_REPORT: postgres-worker-lifecycle-drill.json
+        run: timeout --signal=TERM --kill-after=10s 90s python -m tools.drill_pg_stale_leader
       - name: Upload destination fencing evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: agentbridge-stale-leader-drill
-          path: postgres-stale-leader-drill.json
+          path: |
+            postgres-stale-leader-drill.json
+            postgres-worker-lifecycle-drill.json
           if-no-files-found: warn
 
   postgres-pitr-drill:
