@@ -18,17 +18,17 @@ budgets, approvals and audit history. The long-term goal is a portable trust
 layer that works **alongside** existing agent frameworks and gateways—not
 another all-in-one agent platform.
 
-> **Engineering alpha; production NO-GO.** The recorded `main` is
-> `b0afb7f1da1634330747389e19c896fd7002bd83`, the approved merge of PR #70.
-> Tenant governance, queued acceptance/preparation/atomic admission and audit
-> payload capacity are incorporated there. Its 16 main CI jobs passed;
-> reviewed source `7415718` separately passed 24 jobs across seven workflows.
-> The [private dispatch follow-up](docs/QUEUED_DISPATCH_AND_RECOVERY_2026-10-22.md)
-> adds a bounded synthetic destination and readback recovery. Its exact selected
-> head needs its own checks; local tests are not production acceptance.
-> The [approved consolidation](docs/BRANCH_CONSOLIDATION_2026-10-22.md) retained
-> six remote branches and preserved all deleted heads in history and backup.
-> The older local evaluator wheel remains unsigned and unpublished.
+> **Engineering alpha; production NO-GO.** The November 3 recorded `main` is
+> `44a06c364e348966e0b14c724f14e3a14d192433`, the approved PR #85 merge.
+> Its own 16-job core CI run passed. The reviewed source separately passed
+> 24 checks across seven workflows. The bounded worker-lifecycle drill now
+> tests renewal, expiry, stale refusal and signed readback after one lost-ACK
+> effect; it does not qualify physical HA or production recovery.
+> All 16 branches were retained at this snapshot. Earlier consolidation counts
+> describe their dated observations. Actual AWS multi-node traffic, broader
+> physical HA, trusted published releases and external acceptance remain open.
+> See the [dated progress checklist](docs/ALPHA_PROGRESS_2026-11-03.md).
+> The older evaluator wheel remains separate, unsigned and unpublished.
 > [Current source, evidence and open gates](docs/CURRENT_ALPHA_STATUS.md) ·
 > [Documentation index](docs/README.md) · [Security policy](SECURITY.md)
 
