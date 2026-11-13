@@ -285,16 +285,28 @@ def retention_guard(cur, *, postgres):
     protect it. A future narrower release needs explicit reference mapping and
     independently anchored custody, not inference from a terminal task label.
     """
+    from .checkpoint_capacity import assert_postgres_namespace, assert_sqlite_namespace
+
+    references = ("agent_operations", "task_operation_links_v1", "budgets", "task_lifecycle_snapshots")
+    # Reuse the existing durable namespace boundary before any unqualified
+    # hold/reference reads. These names come only from this trusted library.
     if postgres:
+        assert_postgres_namespace(cur, additional_reserved=references)
+        holds = cur.execute("SELECT to_regclass('audit_holds') AS holds_table").fetchone()["holds_table"]
+        if holds is not None and cur.execute("SELECT 1 FROM audit_holds WHERE enabled=true LIMIT 1").fetchone():
+            raise PermissionError("durable legal hold blocks audit deletion")
         tables = {r["tablename"] for r in cur.execute(
             "SELECT tablename FROM pg_tables WHERE schemaname=current_schema()").fetchall()}
-        protected = [table for table in ("agent_operations", "task_operation_links_v1", "budgets",
-                                         "task_lifecycle_snapshots") if table in tables]
+        protected = [table for table in references if table in tables]
         if protected:
             # Do not hold the audit lock while waiting for an operation writer,
             # which may itself need the audit lock before it can commit.
             cur.execute("LOCK TABLE " + ",".join(protected) + " IN SHARE MODE")
     else:
+        assert_sqlite_namespace(cur, additional_reserved=("audit", "audit_holds") + references)
+        holds = cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='audit_holds'").fetchone()
+        if holds and cur.execute("SELECT 1 FROM audit_holds WHERE enabled=1 LIMIT 1").fetchone():
+            raise PermissionError("durable legal hold blocks audit deletion")
         tables = {r["name"] for r in cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     for table in ("agent_operations", "task_operation_links_v1"):
         if table in tables and cur.execute("SELECT 1 FROM " + table + " LIMIT 1").fetchone():

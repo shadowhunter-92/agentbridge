@@ -107,6 +107,8 @@ jobs:
           name: agentbridge-postgres-restore-drill
           path: postgres-restore-drill.json
           if-no-files-found: warn
+      - name: Verify audit retention namespace boundaries
+        run: python -m pytest tests/test_audit_retention_namespace.py -q
       - name: Measure bounded PostgreSQL governance latency (not a production SLO)
         run: python tools/benchmark_postgres_governance.py --count 50 --workers 4
       - name: Extended SQL load and latency evidence (disposable, not production SLO)
