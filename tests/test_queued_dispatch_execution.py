@@ -2,7 +2,8 @@
 
 These tests use separate authority, tenant and demonstration destination files.
 Local callback fault injection is labelled separately from subprocess death.
-No PostgreSQL fixture or generic transport is involved.
+The reusable reopen/crash helpers also serve the explicitly labelled PostgreSQL
+governance tests; this module's fixtures remain SQLite. No generic transport is involved.
 """
 from __future__ import annotations
 
@@ -31,50 +32,33 @@ from src.governance.identity import AgentIdentity
 from src.governance.queued_destination_contract import canonical_demo_action, normalize_queued_descriptor
 from src.governance.queued_sqlite_adapter import QueuedSqliteAdapter
 from src.governance.sandbox_readback import ObservationUnavailable
-from src.governance.store import SqliteStore
+from src.governance.store import PostgresStore, SqliteStore
 from src.governance.task_intents import IntentLimits
 from src.governance.tenant_kernel import TenantKernel, principal_owner
-from src.governance.tenant_store import TenantSqliteStore
+from src.governance.tenant_store import TenantPostgresStore, TenantSqliteStore
 from src.protocols.task_lifecycle import TaskState
 
 ISSUER = "https://queued-dispatch-issuer.example.test"
 AUDIENCE = "agentbridge-authority"
 CRASH_RETURN_CODES = {"after-marker": 73, "after-effect": 74, "before-marker-commit": 75,
-                      "after-result-insert": 76, "after-local-commit": 77}
+                      "after-result-insert": 76, "after-local-commit": 77, "after-ack": 78}
 _CHILD_CRASH_SCRIPT = """
 import json
 import os
 import sys
-from tests.test_queued_dispatch_execution import _open
-with open(sys.argv[1], encoding="utf-8") as stream:
-    config = json.load(stream)
-app = _open(config)
-stage = sys.argv[2]
-if stage in ("after-marker", "after-effect"):
-    original_commit = app.adapter.commit
-    def crash(authorization, action_bytes):
-        if stage == "after-effect":
-            original_commit(authorization, action_bytes)
-        os._exit(74 if stage == "after-effect" else 73)
-    app.adapter.commit = crash
-elif stage == "before-marker-commit":
-    original_audit = app.runtime.audit.record
-    def crash(*args, **kwargs):
-        result = original_audit(*args, **kwargs)
-        if kwargs.get("action") == "task.attempt-committed":
-            os._exit(75)
-        return result
-    app.runtime.audit.record = crash
-elif stage == "after-result-insert":
-    original_insert = app.runtime.task_executions.insert_result
-    def crash(record):
-        original_insert(record)
-        os._exit(76)
-    app.runtime.task_executions.insert_result = crash
-app.kernel._dispatch_queued_once(*config["refs"])
-if stage == "after-local-commit":
-    os._exit(77)
-raise SystemExit(99)
+from tests.test_queued_dispatch_execution import _open, _dispatch_until_process_death
+if len(sys.argv) == 2:
+    # PostgreSQL connection material stays in this stdin pipe and child memory.
+    # Fail with a distinct code without printing configuration or backend errors.
+    try:
+        config = json.load(sys.stdin)
+        _dispatch_until_process_death(_open(config), sys.argv[1], config["refs"])
+    except BaseException:
+        os._exit(90)
+else:
+    with open(sys.argv[1], encoding="utf-8") as stream:
+        config = json.load(stream)
+    _dispatch_until_process_death(_open(config), sys.argv[2], config["refs"])
 """
 
 
@@ -90,14 +74,25 @@ def _private(key):
 def _verifiers(config):
     # Every reopened process has the actual configured signature verifier. It
     # neither constructs Principal nor trusts serialized principal proof bits.
+    if "verifiers" in config:
+        return {issuer: OidcVerifier(OidcConfig(**settings)) for issuer, settings in config["verifiers"].items()}
     return {ISSUER: OidcVerifier(OidcConfig(
         issuer=ISSUER, audience=AUDIENCE, algorithms=("EdDSA",), public_key_pem=config["issuer_public_pem"],
     ))}
 
 
 def _open(config):
-    directory_store = SqliteStore(config["authority_path"])
-    tenant_store = TenantSqliteStore(config["tenant_path"], tenant_id="alpha")
+    if "postgres_stores" in config:
+        stores = config["postgres_stores"]
+        directory_store = PostgresStore(stores["authority"]["dsn"])
+        try:
+            tenant_store = TenantPostgresStore(stores["tenant"]["dsn"], schema=stores["tenant"]["schema"], tenant_id="alpha")
+        except BaseException:
+            directory_store.close()
+            raise
+    else:
+        directory_store = SqliteStore(config["authority_path"])
+        tenant_store = TenantSqliteStore(config["tenant_path"], tenant_id="alpha")
     try:
         directory = AuthorityDirectory(directory_store, verifiers=_verifiers(config))
         keys = {role: Ed25519PrivateKey.from_private_bytes(bytes.fromhex(raw))
@@ -112,7 +107,8 @@ def _open(config):
             queued_dispatch_adapters={"alpha": {"ledger": adapter}},
         )
         return SimpleNamespace(kernel=kernel, directory=directory, adapter=adapter,
-                               runtime=kernel._runtimes["alpha"], stores=(tenant_store, directory_store), config=config)
+                               runtime=kernel._runtimes["alpha"], stores=(tenant_store, directory_store),
+                               config={"descriptor": config["descriptor"]} if "postgres_stores" in config else config)
     except BaseException:
         tenant_store.close()
         directory_store.close()
@@ -122,6 +118,52 @@ def _open(config):
 def _close(handle):
     for store in handle.stores:
         store.close()
+
+
+def _dispatch_until_process_death(app, stage, refs):
+    """Shared real-process fault hooks; called only inside a disposable child."""
+    import os
+
+    if stage not in CRASH_RETURN_CODES:
+        raise ValueError("known queued dispatch crash stage required")
+    if stage in ("after-marker", "after-effect"):
+        original_commit = app.adapter.commit
+        def crash(authorization, action_bytes):
+            if stage == "after-effect":
+                original_commit(authorization, action_bytes)
+            os._exit(CRASH_RETURN_CODES[stage])
+        app.adapter.commit = crash
+    elif stage == "after-ack":
+        original_commit = app.adapter.commit
+        acknowledged = False
+        def acknowledged_commit(*args):
+            nonlocal acknowledged
+            receipt = original_commit(*args)
+            acknowledged = True
+            return receipt
+        def crash_before_readback(*args):
+            # A failed commit must never masquerade as the post-ACK crash.
+            os._exit(CRASH_RETURN_CODES[stage] if acknowledged else 98)
+        app.adapter.commit = acknowledged_commit
+        app.adapter.observe = crash_before_readback
+    elif stage == "before-marker-commit":
+        original_audit = app.runtime.audit.record
+        def crash(*args, **kwargs):
+            result = original_audit(*args, **kwargs)
+            if kwargs.get("action") == "task.attempt-committed":
+                os._exit(CRASH_RETURN_CODES[stage])
+            return result
+        app.runtime.audit.record = crash
+    elif stage == "after-result-insert":
+        original_insert = app.runtime.task_executions.insert_result
+        def crash(record):
+            original_insert(record)
+            os._exit(CRASH_RETURN_CODES[stage])
+        app.runtime.task_executions.insert_result = crash
+    app.kernel._dispatch_queued_once(*refs)
+    if stage == "after-local-commit":
+        os._exit(CRASH_RETURN_CODES[stage])
+    raise SystemExit(99)
 
 
 @pytest.fixture

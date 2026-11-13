@@ -224,7 +224,7 @@ def _lifecycle_settings(dsn, ttl_seconds, renew_interval, window_seconds):
 def _participating_lease_loop(*, lease, target, role, scope, owner, operation_id,
                               agent_id, fingerprint, ttl_seconds, renew_interval,
                               window_seconds, resume, emit, clock=time.monotonic,
-                              sleep=time.sleep):
+                              sleep=time.sleep, active_until_stopped=False):
     """Finite worker participation; only a known acquisition refusal may retry.
 
     Inject lease/target/clock/event fakes in the offline harness. This does not
@@ -232,6 +232,8 @@ def _participating_lease_loop(*, lease, target, role, scope, owner, operation_id
     """
     if role not in {"old", "replacement"}:
         raise ValueError("known participating-worker role required")
+    if type(active_until_stopped) is not bool or (active_until_stopped and role != "old"):
+        raise ValueError("active-leader fault mode requires the old participant")
     counts = dict(acquire_attempts=0, acquire_refusals=0, renew_acknowledgments=0,
                   lease_response_unknown=0, destination_attempts=0,
                   effect_return_unknown=0, stale_renew_refusals=0, stale_effect_refusals=0)
@@ -284,6 +286,26 @@ def _participating_lease_loop(*, lease, target, role, scope, owner, operation_id
                 return finish("invalid-lease-response", "renew")
             counts["renew_acknowledgments"] += 1
             event("lease-renewed", epoch=epoch)
+        if active_until_stopped:
+            # This explicit fault scenario keeps renewing. The parent stops
+            # this exact process; no cooperative drain or destination follows.
+            event("active-leader-ready", epoch=epoch)
+            for _ in range(64):
+                sleep(min(renew_interval, max(0, deadline-clock())))
+                if clock() >= deadline:
+                    return finish("timeout", "active-renew")
+                try:
+                    renewed = lease.renew(scope, owner, epoch, ttl_seconds=ttl_seconds)
+                except FenceDenied as exc:
+                    return finish("lease-refused", "active-renew", exc)
+                except Exception as exc:
+                    counts["lease_response_unknown"] += 1
+                    return finish("lease-response-unknown", "active-renew", exc)
+                if type(renewed) is not int or renewed != epoch:
+                    return finish("invalid-lease-response", "active-renew")
+                counts["renew_acknowledgments"] += 1
+                event("lease-renewed", epoch=epoch)
+            return finish("attempt-bound", "active-renew")
         # Stop renewal deliberately. The parent observes the actual DB expiry
         # before starting the contender; no lease delete/reset/release exists.
         event("renewal-drained", epoch=epoch)
@@ -335,23 +357,64 @@ def _participating_lease_loop(*, lease, target, role, scope, owner, operation_id
     return finish("effect-acknowledged", "stopped")
 
 
+class ControlledLeaseReplyLoss(RuntimeError):
+    """A committed method returned to the test shim, but not to its worker.
+
+    This is application-boundary fault injection, not a lost network packet.
+    The worker must stop, even though a separate observer may see the lease.
+    """
+
+
+class _CommittedLeaseReplyLoss:
+    def __init__(self, lease, phase, injected):
+        if phase not in {"acquire", "renew"}:
+            raise ValueError("known committed lease-reply phase required")
+        self.lease, self.phase, self.injected = lease, phase, injected
+        self.used = False
+
+    def _call(self, phase, *args, **kwargs):
+        if self.used:
+            raise RuntimeError("consumed lease reply-loss fault cannot retry")
+        epoch = getattr(self.lease, phase)(*args, **kwargs)
+        if phase == self.phase and type(epoch) is int and epoch > 0:
+            self.used = True
+            self.injected(phase)
+            raise ControlledLeaseReplyLoss("controlled committed lease reply withheld")
+        return epoch
+
+    def acquire(self, *args, **kwargs):
+        return self._call("acquire", *args, **kwargs)
+
+    def renew(self, *args, **kwargs):
+        return self._call("renew", *args, **kwargs)
+
+
 def _lifecycle_spawned_worker(dsn, private_key, spec, resume, results):
     """Spawn entry point; no source or credentials appear in result messages."""
     def emit(event):
         results.put(event, timeout=.25)
     try:
         key = Ed25519PrivateKey.from_private_bytes(private_key)
+        loop_spec = dict(spec)
+        reply_loss = loop_spec.pop("lease_reply_loss", None)
+        lease = PgFencing(dsn)
+        if reply_loss is not None:
+            lease = _CommittedLeaseReplyLoss(lease, reply_loss, lambda phase: emit(dict(
+                kind="committed-lease-reply-withheld", owner=spec["owner"], phase=phase)))
         verdict = _participating_lease_loop(
-            lease=PgFencing(dsn), target=FencedPostgresDestination(dsn, sign=key.sign),
-            resume=resume, emit=emit, **spec)
+            lease=lease, target=FencedPostgresDestination(dsn, sign=key.sign),
+            resume=resume, emit=emit, **loop_spec)
     except BaseException as exc:
         verdict = dict(state="worker-harness-error", phase="worker", dispatch_stopped=True,
                        counts={}, error_type=type(exc).__name__)
     results.put(dict(kind="terminal", owner=spec["owner"], verdict=verdict), timeout=.25)
 
 
-def _receive_lifecycle_events(results, events, predicate, deadline, began, clock=None):
+def _receive_lifecycle_events(results, events, predicate, deadline, began, clock=None,
+                              terminal_states=None):
     clock = time.monotonic if clock is None else clock
+    allowed_terminals = ({"stale-probes-complete", "effect-return-unknown"}
+                         if terminal_states is None else terminal_states)
     while not predicate(events):
         remaining = deadline-clock()
         if remaining <= 0 or len(events) >= 128:
@@ -367,8 +430,7 @@ def _receive_lifecycle_events(results, events, predicate, deadline, began, clock
         events.append(event)
         if clock() >= deadline:
             raise TimeoutError("worker message arrived outside observation window")
-        if event["kind"] == "terminal" and event["verdict"]["state"] not in {
-                "stale-probes-complete", "effect-return-unknown"}:
+        if event["kind"] == "terminal" and event["verdict"]["state"] not in allowed_terminals:
             raise RuntimeError("participating worker stopped without the required observations")
 
 
@@ -414,12 +476,48 @@ def _cleanup_lifecycle_children(children):
     return observations
 
 
-def run_worker_lifecycle_drill(dsn, *, ttl_seconds=3, renew_interval=.25, window_seconds=30):
+def _stop_owned_lifecycle_leader(child, deadline, clock=None):
+    """Stop only the already-created old participant; never enumerate PIDs.
+
+    Join/liveness proves this controlled process stopped. In particular, a
+    Windows termination is not inferred from zero versus nonzero exit codes.
+    The enclosing operator still supplies an independent whole-process guard.
+    """
+    clock = time.monotonic if clock is None else clock
+    result = dict(accepted=False, pid=None, alive_before=None, alive_after=None,
+                  exitcode=None, terminate_requested=False, error_type=None)
+    try:
+        if child.name != "agentbridge-owned-lifecycle-old":
+            raise ValueError("only the owned old participant may be stopped")
+        result["pid"] = child.pid
+        if type(child.pid) is not int or child.pid <= 0:
+            raise ValueError("observed owned participant PID required")
+        result["alive_before"] = child.is_alive()
+        if result["alive_before"] is not True or clock() >= deadline:
+            raise TimeoutError("live owned leader and observation time required")
+        result["terminate_requested"] = True
+        child.terminate()
+        remaining = deadline-clock()
+        if remaining <= 0:
+            raise TimeoutError("owned stop response exceeded observation window")
+        child.join(timeout=min(2, remaining))
+        result["alive_after"], result["exitcode"] = child.is_alive(), child.exitcode
+        result["accepted"] = (result["alive_after"] is False
+                              and type(result["exitcode"]) is int and clock() < deadline)
+    except BaseException as exc:
+        result["error_type"] = type(exc).__name__
+    return result
+
+
+def run_worker_lifecycle_drill(dsn, *, ttl_seconds=3, renew_interval=.25, window_seconds=30,
+                               fault=None):
     """One finite two-process drain/expiry trial, not a physical HA service.
 
     Return complete sanitized failure observations. A separate caller must bound
     actual network blackholes: server SQL settings are not a client receive cap.
     """
+    if fault not in {None, "forced-stop", "acquire-reply-loss", "renew-reply-loss"}:
+        raise ValueError("known bounded worker fault required")
     dsn = _lifecycle_settings(dsn, ttl_seconds, renew_interval, window_seconds)
     stamp = uuid.uuid4().hex
     scope, agent_id = "lifecycle-"+stamp, "lifecycle-agent-"+stamp
@@ -436,13 +534,16 @@ def run_worker_lifecycle_drill(dsn, *, ttl_seconds=3, renew_interval=.25, window
                   ttl_seconds=ttl_seconds, renew_interval=renew_interval,
                   observation_window_seconds=window_seconds,
                   governed_unknown_count=None, governed_reservations=None, workload_rpo=None,
+                  fault=fault, forced_stop=None, lease_reply_observation=None,
+                  forced_stop_to_higher_epoch_seconds=None,
+                  forced_stop_to_observed_effect_seconds=None,
                   physical_database_failover_rto=None,
                   limitations="one owned PostgreSQL writer; no governed-task/accounting integration, "
                               "physical promotion, independent custody, real network partition, "
                               "hard client-network deadline or production acceptance")
     began = time.monotonic()
     deadline = began+window_seconds
-    children, resume, results = [], None, None
+    children, resume, results, old_results = [], None, None, None
     try:
         key = Ed25519PrivateKey.generate()
         key_raw = key.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
@@ -460,23 +561,80 @@ def run_worker_lifecycle_drill(dsn, *, ttl_seconds=3, renew_interval=.25, window
             raise TimeoutError("initialization exceeded observation window")
         ctx = multiprocessing.get_context("spawn")
         resume, results = ctx.Event(), ctx.Queue(maxsize=128)
+        if fault == "forced-stop":
+            # Killing a process while it writes a multiprocessing.Queue can
+            # corrupt that queue. Never share its channel with the successor.
+            old_results = ctx.Queue(maxsize=128)
         common = dict(scope=scope, agent_id=agent_id, fingerprint=fingerprint,
                       ttl_seconds=ttl_seconds, renew_interval=renew_interval,
                       window_seconds=window_seconds)
+        old_spec = dict(common, role="old", owner=old_owner, operation_id=old_operation)
+        if fault in {"acquire-reply-loss", "renew-reply-loss"}:
+            old_spec["lease_reply_loss"] = fault.split("-", 1)[0]
+        if fault == "forced-stop":
+            old_spec["active_until_stopped"] = True
         old = ctx.Process(target=_lifecycle_spawned_worker,
-                          args=(dsn, key_raw, dict(common, role="old", owner=old_owner,
-                                                 operation_id=old_operation), resume, results),
+                          args=(dsn, key_raw, old_spec, resume,
+                                old_results if old_results is not None else results),
                           name="agentbridge-owned-lifecycle-old")
         children.append(old)
         old.start()
-        report["stage"] = "old-renew-and-drain"
-        _receive_lifecycle_events(results, report["events"],
-                                  lambda rows: any(r["kind"] == "renewal-drained" and r["owner"] == old_owner for r in rows),
+        if fault in {"acquire-reply-loss", "renew-reply-loss"}:
+            report["stage"] = "controlled-lease-reply-loss"
+            _receive_lifecycle_events(results, report["events"],
+                lambda events: any(row["kind"] == "terminal" for row in events),
+                deadline, began, terminal_states={"lease-response-unknown"})
+            injected = [row for row in report["events"]
+                        if row["kind"] == "committed-lease-reply-withheld"]
+            terminals = [row for row in report["events"] if row["kind"] == "terminal"]
+            phase = old_spec["lease_reply_loss"]
+            if (len(injected) != 1 or injected[0]["owner"] != old_owner
+                    or injected[0]["phase"] != phase or len(terminals) != 1
+                    or terminals[0]["owner"] != old_owner):
+                raise RuntimeError("exact controlled reply-loss observations required")
+            verdict = terminals[0]["verdict"]
+            counts = verdict["counts"]
+            required_counts = {"acquire_attempts": 1, "lease_response_unknown": 1,
+                               "renew_acknowledgments": 0, "destination_attempts": 0}
+            if (verdict["phase"] != phase or verdict["error_type"] != "ControlledLeaseReplyLoss"
+                    or verdict["dispatch_stopped"] is not True
+                    or any(type(counts[name]) is not int or counts[name] != required
+                           for name, required in required_counts.items())):
+                raise RuntimeError("uncertain lease response did not stop without dispatch/retry")
+            report["stage"] = "lease-reply-authoritative-readback"
+            state, rows = _lifecycle_observe(dsn, scope, agent_id)
+            if (time.monotonic() >= deadline or not state or state["owner"] != old_owner
+                    or type(state["epoch"]) is not int or state["epoch"] < 1 or rows):
+                raise RuntimeError("committed lease or zero-effect observation missing")
+            report.update(old_epoch=state["epoch"], separate_connection_observed_effect_count=0,
+                          stale_effect_count=0, retained_scope=scope, retained_agent_id=agent_id,
+                          retained_operation_id=old_operation,
+                          lease_reply_observation="RECORDED_LEASE_WITH_WORKER_REPLY_UNKNOWN")
+            report["server_observations"].append(dict(state, parent_observed_seconds=time.monotonic()-began))
+            report["stage"] = "observed"
+            return report
+        report["stage"] = "old-active-renewal" if fault == "forced-stop" else "old-renew-and-drain"
+        ready_kind = "active-leader-ready" if fault == "forced-stop" else "renewal-drained"
+        _receive_lifecycle_events(old_results if old_results is not None else results, report["events"],
+                                  lambda rows: any(r["kind"] == ready_kind and r["owner"] == old_owner for r in rows),
                                   deadline, began)
         trigger = time.monotonic()-began
-        report["drain_observed_seconds"] = trigger
+        if fault == "forced-stop":
+            if len([r for r in report["events"] if r["kind"] == "lease-renewed" and r["owner"] == old_owner]) < 2:
+                raise RuntimeError("two acknowledged active renewals required before stopping")
+            report["active_leader_observed_seconds"] = trigger
+        else:
+            report["drain_observed_seconds"] = trigger
         old_epoch = next(r["epoch"] for r in report["events"]
-                         if r["kind"] == "renewal-drained" and r["owner"] == old_owner)
+                         if r["kind"] == ready_kind and r["owner"] == old_owner)
+        if type(old_epoch) is not int or old_epoch < 1:
+            raise RuntimeError("valid observed old-worker epoch required")
+        if fault == "forced-stop":
+            report["stage"] = "owned-leader-stop"
+            report["forced_stop"] = _stop_owned_lifecycle_leader(old, deadline)
+            if report["forced_stop"]["accepted"] is not True:
+                raise RuntimeError("owned leader stop was not observed")
+            report["forced_stop_observed_seconds"] = time.monotonic()-began
         report["stage"] = "authoritative-expiry"
         for _ in range(128):
             if time.monotonic() >= deadline:
@@ -505,19 +663,44 @@ def run_worker_lifecycle_drill(dsn, *, ttl_seconds=3, renew_interval=.25, window
                                   lambda rows: any(r["kind"] == "lease-acquired" and r["owner"] == new_owner for r in rows),
                                   deadline, began)
         acquired = next(r for r in report["events"] if r["kind"] == "lease-acquired" and r["owner"] == new_owner)
-        if acquired["epoch"] <= old_epoch:
+        if type(acquired["epoch"]) is not int or acquired["epoch"] <= old_epoch:
             raise RuntimeError("replacement epoch did not increase")
         report["old_epoch"], report["new_epoch"] = old_epoch, acquired["epoch"]
-        report["drain_to_higher_epoch_seconds"] = acquired["parent_observed_seconds"]-trigger
+        if fault != "forced-stop":
+            report["drain_to_higher_epoch_seconds"] = acquired["parent_observed_seconds"]-trigger
+        if fault == "forced-stop":
+            report["forced_stop_to_higher_epoch_seconds"] = (
+                acquired["parent_observed_seconds"]-report["forced_stop_observed_seconds"])
+            # The stopped process cannot resume. These are explicit parent
+            # probes with its old token and a distinct stale-probe operation.
+            report["stage"] = "stopped-leader-stale-gate-probes"
+            try:
+                PgFencing(dsn).renew(scope, old_owner, old_epoch, ttl_seconds=ttl_seconds)
+            except FenceDenied:
+                pass
+            else:
+                raise RuntimeError("stopped leader epoch was renewed")
+            try:
+                FencedPostgresDestination(dsn, sign=key.sign).commit(
+                    scope=scope, owner=old_owner, epoch=old_epoch, agent_id=agent_id,
+                    operation_id=old_operation, fingerprint=fingerprint)
+            except StaleDestinationLeader:
+                pass
+            else:
+                raise RuntimeError("stopped leader epoch committed a stale effect")
+            if time.monotonic() >= deadline:
+                raise TimeoutError("stale gate observations exceeded the window")
         resume.set()
         report["stage"] = "worker-terminal-observations"
         _receive_lifecycle_events(results, report["events"],
-                                  lambda rows: len([r for r in rows if r["kind"] == "terminal"]) == 2,
+                                  lambda rows: len([r for r in rows if r["kind"] == "terminal"]) == (1 if fault == "forced-stop" else 2),
                                   deadline, began)
         terminals = {r["owner"]: r["verdict"] for r in report["events"] if r["kind"] == "terminal"}
-        if (terminals[old_owner]["state"] != "stale-probes-complete"
-                or terminals[old_owner]["counts"]["renew_acknowledgments"] != 2
+        if (fault == "forced-stop" and set(terminals) != {new_owner}
+                or fault != "forced-stop" and (terminals[old_owner]["state"] != "stale-probes-complete"
+                    or terminals[old_owner]["counts"]["renew_acknowledgments"] != 2)
                 or terminals[new_owner]["state"] != "effect-return-unknown"
+                or type(terminals[new_owner]["counts"]["destination_attempts"]) is not int
                 or terminals[new_owner]["counts"]["destination_attempts"] != 1):
             raise RuntimeError("worker lifecycle observations incomplete")
         report["stage"] = "authoritative-effect-readback"
@@ -537,9 +720,13 @@ def run_worker_lifecycle_drill(dsn, *, ttl_seconds=3, renew_interval=.25, window
         report.update(effect_observation="SIGNED_SUCCEEDED_IN_CONTROLLED_DATABASE",
                       separate_connection_observed_effect_count=1, stale_effect_count=0,
                       observed_receipt_sha256=receipt_digest,
-                      drain_to_observed_replacement_effect_seconds=time.monotonic()-began-trigger,
                       retained_scope=scope, retained_agent_id=agent_id,
                       retained_operation_id=new_operation)
+        if fault == "forced-stop":
+            report["forced_stop_to_observed_effect_seconds"] = (
+                time.monotonic()-began-report["forced_stop_observed_seconds"])
+        else:
+            report["drain_to_observed_replacement_effect_seconds"] = time.monotonic()-began-trigger
         report["stage"] = "observed"
         if time.monotonic() >= deadline:
             raise TimeoutError("effect readback exceeded observation window")
@@ -557,12 +744,28 @@ def run_worker_lifecycle_drill(dsn, *, ttl_seconds=3, renew_interval=.25, window
         if results is not None:
             cleanup_action(results.close)
             cleanup_action(results.cancel_join_thread)
+        if old_results is not None:
+            # Never read/drain the possibly interrupted old-worker channel.
+            cleanup_action(old_results.close)
+            cleanup_action(old_results.cancel_join_thread)
         report["elapsed_seconds"] = time.monotonic()-began
-        clean = (not report["cleanup_errors"] and len(report["process_cleanup"]) == 2
+        clean = (not report["cleanup_errors"] and len(report["process_cleanup"]) ==
+                 (1 if fault in {"acquire-reply-loss", "renew-reply-loss"} else 2)
                  and all(r["still_alive"] is False and r["exitcode"] == 0
                          and not r["error_types"]
                          and not r["terminate_requested"] and not r["kill_requested"]
                          for r in report["process_cleanup"]))
+        if fault == "forced-stop":
+            stop = report["forced_stop"]
+            clean = (not report["cleanup_errors"] and stop is not None and stop["accepted"] is True
+                     and len(report["process_cleanup"]) == 2
+                     and {r["name"] for r in report["process_cleanup"]} == {
+                         "agentbridge-owned-lifecycle-old", "agentbridge-owned-lifecycle-replacement"}
+                     and all(r["still_alive"] is False and not r["error_types"]
+                             and not r["terminate_requested"] and not r["kill_requested"]
+                             and r["exitcode"] == (stop["exitcode"] if r["name"] ==
+                                 "agentbridge-owned-lifecycle-old" else 0)
+                             for r in report["process_cleanup"]))
         if report["failure"] is None and not clean:
             report["failure"] = dict(stage="owned-resource-cleanup", error_type="IncompleteCleanup")
         report["accepted"] = (report["failure"] is None and report["stage"] == "observed"
@@ -574,11 +777,15 @@ def main():
     if os.getenv("AGENTBRIDGE_DISPOSABLE_STALE_LEADER") != "1":
         raise SystemExit("explicit disposable fault-drill opt-in required")
     scenario = os.getenv("AGENTBRIDGE_STALE_LEADER_SCENARIO", "stale-leader")
-    if scenario not in {"stale-leader", "worker-lifecycle"}:
+    faults = {"worker-forced-stop": "forced-stop", "lease-acquire-reply-loss": "acquire-reply-loss",
+              "lease-renew-reply-loss": "renew-reply-loss"}
+    if scenario not in {"stale-leader", "worker-lifecycle", *faults}:
         raise SystemExit("known disposable stale-leader scenario required")
     run = run_disposable_drill if scenario == "stale-leader" else run_worker_lifecycle_drill
+    if scenario in faults:
+        run = lambda dsn: run_worker_lifecycle_drill(dsn, fault=faults[scenario])
     output = os.getenv("AGENTBRIDGE_STALE_LEADER_REPORT")
-    if output and scenario == "worker-lifecycle":
+    if output and scenario != "stale-leader":
         # Reserve this receipt before any effect attempt, never after dispatch.
         with open(output, "x", encoding="utf-8") as destination:
             report = run(os.getenv("AGENTBRIDGE_TEST_PG", ""))
@@ -589,7 +796,7 @@ def main():
             with open(output, "w", encoding="utf-8") as destination:
                 json.dump(report, destination, indent=2, sort_keys=True)
     print(json.dumps(report, indent=2, sort_keys=True))
-    if scenario == "worker-lifecycle" and not report["accepted"]:
+    if scenario != "stale-leader" and not report["accepted"]:
         raise SystemExit(1)
 
 

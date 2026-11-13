@@ -217,6 +217,21 @@ jobs:
           AGENTBRIDGE_STALE_LEADER_SCENARIO: worker-lifecycle
           AGENTBRIDGE_STALE_LEADER_REPORT: postgres-worker-lifecycle-drill.json
         run: timeout --signal=TERM --kill-after=10s 90s python -m tools.drill_pg_stale_leader
+      - name: Stop an actively renewing owned worker and verify successor fencing
+        env:
+          AGENTBRIDGE_STALE_LEADER_SCENARIO: worker-forced-stop
+          AGENTBRIDGE_STALE_LEADER_REPORT: postgres-worker-forced-stop-drill.json
+        run: timeout --signal=TERM --kill-after=10s 90s python -m tools.drill_pg_stale_leader
+      - name: Withhold committed acquire reply and require stopped UNKNOWN
+        env:
+          AGENTBRIDGE_STALE_LEADER_SCENARIO: lease-acquire-reply-loss
+          AGENTBRIDGE_STALE_LEADER_REPORT: postgres-lease-acquire-reply-loss-drill.json
+        run: timeout --signal=TERM --kill-after=10s 90s python -m tools.drill_pg_stale_leader
+      - name: Withhold committed renew reply and require stopped UNKNOWN
+        env:
+          AGENTBRIDGE_STALE_LEADER_SCENARIO: lease-renew-reply-loss
+          AGENTBRIDGE_STALE_LEADER_REPORT: postgres-lease-renew-reply-loss-drill.json
+        run: timeout --signal=TERM --kill-after=10s 90s python -m tools.drill_pg_stale_leader
       - name: Upload destination fencing evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -225,6 +240,9 @@ jobs:
           path: |
             postgres-stale-leader-drill.json
             postgres-worker-lifecycle-drill.json
+            postgres-worker-forced-stop-drill.json
+            postgres-lease-acquire-reply-loss-drill.json
+            postgres-lease-renew-reply-loss-drill.json
           if-no-files-found: warn
 
   postgres-pitr-drill:

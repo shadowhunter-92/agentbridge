@@ -1,9 +1,14 @@
 """Real PG authority/accounting with the bounded SQLite demonstration effect."""
 import json
+import os
+from pathlib import Path
+import subprocess
+import sys
 import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import asdict
 from types import SimpleNamespace
 
 import pytest
@@ -17,7 +22,7 @@ from src.governance.tenant_kernel import TenantKernel, principal_owner
 from src.protocols.task_lifecycle import TaskState
 from tests.test_authority import ISSUER
 from tests.test_authority import authority as authority
-from tests.test_queued_dispatch_execution import _effects, _public
+from tests.test_queued_dispatch_execution import _CHILD_CRASH_SCRIPT, CRASH_RETURN_CODES, _effects, _private, _public
 from tests.test_tenant_kernel import tenant_app as tenant_app
 from tests.test_tenant_store import namespaces as namespaces
 
@@ -49,6 +54,18 @@ def pg_dispatch_app(tenant_app, authority, namespaces, tmp_path):
         independent = AuthorityDirectory(authority[3](), verifiers=authority[4])
         return worker(independent, namespaces("alpha"))
     app.reopen, app.token, app.owner = reopen, token, authority[1]
+    def crash_configuration(refs):
+        # These are the exact already assigned fixture namespaces. Never write
+        # their connection material to disk, argv, environment or test output.
+        from psycopg.conninfo import make_conninfo
+        def connection(store):
+            return {"dsn": make_conninfo(store._db.info.dsn, password=store._db.info.password),
+                    "schema": getattr(store, "schema", None)}
+        return {"postgres_stores": {"authority": connection(directory.store), "tenant": connection(app.runtime.store)},
+                "verifiers": {issuer: asdict(verifier.config) for issuer, verifier in directory.verifiers.items()},
+                "demo_private_keys": {role: _private(key) for role, key in keys.items()},
+                "descriptor": descriptor, "refs": refs}
+    app.crash_configuration = crash_configuration
     return app
 
 
@@ -127,6 +144,54 @@ def test_postgres_local_lost_return_readback_outage_restart_never_resends(pg_dis
     monkeypatch.setattr(other.adapter, "commit", lambda *_: pytest.fail("restart cannot resend"))
     assert other.kernel._recover_queued(*task.refs)["state"] == "succeeded"
     _assert_state(app, task, succeeded=True, effects=1)
+
+
+@pytest.mark.parametrize("stage", ["after-effect", "after-ack"])
+def test_postgres_governance_process_death_at_demo_ack_boundary_recovers_without_resend(pg_dispatch_app, stage):
+    """Real PG governance child death; destination remains the SQLite demo.
+
+    after-effect commits the target then dies before returning to the dispatcher.
+    after-ack returns from commit, then dies before readback or any settlement.
+    Neither stage models a network partition or a PostgreSQL destination crash.
+    """
+    app, task = pg_dispatch_app, _task(pg_dispatch_app)
+    # Do not inherit the administrator fixture DSN or libpq connection defaults.
+    environment = {name: value for name, value in os.environ.items()
+                   if name.upper() != "AGENTBRIDGE_TEST_PG" and not name.upper().startswith("PG")}
+    child = subprocess.run([sys.executable, "-c", _CHILD_CRASH_SCRIPT, stage],
+        input=json.dumps(app.crash_configuration(task.refs)),
+        cwd=Path(__file__).resolve().parents[1], env=environment, capture_output=True, text=True, timeout=25)
+    emitted_diagnostics = bool(child.stdout or child.stderr)
+    child.stdout = child.stderr = ""  # backend diagnostics must not enter pytest failure output
+    assert child.returncode == CRASH_RETURN_CODES[stage], "queued child did not reach the exact crash hook"
+    assert not emitted_diagnostics, "queued child emitted unexpected diagnostics"
+    _assert_state(app, task, succeeded=False, effects=1)
+    decision = app.runtime.task_executions.decision(task.refs[1], task.refs[2])
+    assert decision["kind"] == "attempt" and decision["admission_link_sha256"] == task.link["link_sha256"]
+    assert decision["operation_id"] == task.operation_id
+    effects = _effects(app)
+    assert effects[0]["operation_id"] == task.operation_id and effects[0]["action_bytes"] == task.action
+    assert effects[0]["attempt_id"] == decision["attempt_id"]
+    assert not any(entry.action == "task.verified-execution" for entry in app.runtime.audit.entries())
+    restarted = app.reopen()
+    calls = []
+    def forbidden(*args):
+        calls.append("forbidden-retry")
+        raise AssertionError("crash recovery cannot reacquire or resend")
+    restarted.adapter.acquire = restarted.adapter.commit = forbidden
+    try:
+        assert restarted.kernel._recover_queued(*task.refs)["state"] == "succeeded"
+        _assert_state(restarted, task, succeeded=True, effects=1)
+        result = restarted.runtime.task_executions.result(task.refs[1], task.refs[2])
+        assert result["decision_sha256"] == decision["record_sha256"]
+        assert restarted.runtime.task_executions.decision(task.refs[1], task.refs[2]) == decision
+        assert restarted.kernel._dispatch_queued_once(*task.refs)["state"] == "succeeded"
+        assert restarted.runtime.task_executions.result(task.refs[1], task.refs[2]) == result
+        assert _effects(restarted) == effects and calls == []
+        _assert_state(app, task, succeeded=True, effects=1)
+    finally:
+        restarted.runtime.store.close()
+        restarted.directory.store.close()
 
 
 @pytest.mark.parametrize("stage", ["result", "budget", "ledger", "event", "audit"])
