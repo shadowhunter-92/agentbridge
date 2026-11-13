@@ -2,6 +2,12 @@
 
 **Overall: PARTIALLY TESTED. Unrestricted consequential-action production: BLOCKED / NO-GO.**
 
+For the superseding November 13 source and acceptance observations, use
+[current alpha status](CURRENT_ALPHA_STATUS.md) and the
+[independent audit and reconciliation](AUDIT_AND_RECONCILIATION_2026-11-13.md).
+The pins, counts, CI results and then-open work below remain this dated
+November 3 checkpoint.
+
 This checkpoint records evidence through maintained main `44a06c364e348966e0b14c724f14e3a14d192433`, tree `b9fe952af2e9b92bb98c275315a426213d7c5eb5`. The document itself is a later documentation-only follow-up and is not covered by that main run. Earlier dated records retain their original cutoffs.
 
 ## Verified bounded unit

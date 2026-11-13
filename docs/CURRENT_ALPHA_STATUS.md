@@ -1,6 +1,81 @@
-# Current engineering alpha status — November 3, 2026
+# Current engineering alpha status — November 13, 2026
 
 **Overall: PARTIALLY TESTED; unrestricted consequential-action production NO-GO.**
+
+The maintained source at this checkpoint is
+`f309a35cb5c3ec4164acea5ba2622dc04be6807c`, tree
+`17fd9e48708ebed43971a4d0b53b9e6cf703c609`. Its own
+[main push CI run 43371818001](https://github.com/shadowhunter-92/agentbridge/actions/runs/43371818001)
+passed **16/16 jobs on attempt 1**. This documentation reconciliation is later
+source and is not covered by that run. The
+[November 13 independent audit](AUDIT_AND_RECONCILIATION_2026-11-13.md) records
+the source, branch/PR observations, all 81 historical requirement dispositions,
+and limits of historical pin and artifact verification.
+
+## Approved source units and exact CI
+
+The owner approved normal merges of PRs #87–#91. Each reviewed head passed
+**24/24 checks across seven workflows** before merging; those checks are
+separate from the 16-job main push run above.
+
+| PR / bounded unit | Exact reviewed source head | Core CI run |
+| --- | --- | --- |
+| [#87](https://github.com/shadowhunter-92/agentbridge/pull/87): offline Stripe-style contract | `daf350b26fd900c856f1cad2088544a1ff48642f` | [43367504549](https://github.com/shadowhunter-92/agentbridge/actions/runs/43367504549) |
+| [#88](https://github.com/shadowhunter-92/agentbridge/pull/88): governed synthetic MCP demo | `6cbc8da9407c6d977bab2da8b85fe30a351c61ca` | [43367985086](https://github.com/shadowhunter-92/agentbridge/actions/runs/43367985086) |
+| [#89](https://github.com/shadowhunter-92/agentbridge/pull/89): unsupported MCP task refusal | `aad1153a89bcecf018859720b3dff0a18afc2d8a` | [43368761228](https://github.com/shadowhunter-92/agentbridge/actions/runs/43368761228) |
+| [#90](https://github.com/shadowhunter-92/agentbridge/pull/90): audit retention namespace checks | `f0de581e9adad40cff16408cc09acf0995173b60` | [43368983122](https://github.com/shadowhunter-92/agentbridge/actions/runs/43368983122) |
+| [#91](https://github.com/shadowhunter-92/agentbridge/pull/91): bounded worker faults and shared crash tests | `6aea3260cda650e76d080705e171d6e480a07c97` | [43369287096](https://github.com/shadowhunter-92/agentbridge/actions/runs/43369287096) |
+
+The joint local composition at
+`2313030879574fa66400e411f7b8f880eaa0989e` recorded **486 passes and 52 expected
+PostgreSQL skips**; its tree exactly equals the maintained source tree above.
+These cohorts overlap and are not added into a repository-wide total. None is
+independent customer acceptance, a release signature or a production SLO.
+
+## Current scope and open gates
+
+- The [governed MCP quickstart](../demo/governed-mcp-demo/README.md) exercises
+  approval, shared SQL admission, one local fenced effect, UNKNOWN with held
+  exposure, replay refusal and offline signature/action-binding checks through
+  an actual MCP stdio connection. Its client is deterministic; no LLM, Stripe
+  payment or independent institutional custody is claimed. The
+  [dated demo record](GOVERNED_MCP_DEMO_2026-11-12.md) retains its original
+  local qualification. Container negative scenarios and complete dependency
+  hash closure remain separate open work.
+- The [offline Stripe-style example](OFFLINE_STRIPE_STYLE_CONTRACT_2026-11-12.md)
+  is a local SQLite contract with permanent mock request bindings and a webhook
+  inbox. It does not qualify native Stripe fencing, API execution, settlement
+  or aggregate storage/retention limits.
+- Three controlled local worker faults were accepted: active owned worker
+  stop and committed acquire/renew method returns withheld from the worker.
+  The [HA record](HA_CRITICAL_PATH_2026-11-12.md) preserves those observations.
+  The two new PostgreSQL governance crash cases are **VERIFIED IN CI for their
+  bounded hosted cohort**: PR #91's PostgreSQL job
+  [131701011074](https://github.com/shadowhunter-92/agentbridge/actions/runs/43369287096/job/131701011074)
+  recorded 1,964 passes and 147 expected skips, including the selected crash
+  module; its restore step also passed. Those counts belong to that PR job,
+  not the later main run. The separate controlled local operator refused its
+  PUBLIC TEMP prerequisite and accepted no local governed-crash trial.
+- Actual client/gateway partition, dropped network replies, physical database
+  promotion, full-route deadlines under contention, active migration/rollback,
+  independent custody and production acceptance remain open. API/deployment
+  reference omissions found in the legacy review require a separate narrow
+  documentation change; this reconciliation does not restore legacy runtime
+  or production/compliance claims.
+
+The branch API snapshot at **2026-11-13 10:27:40 UTC** recorded **21 retained
+branch names**, with no deletion. Branch tips and PR counts can change; use
+the dated audit rather than treating that count as a permanent invariant. No
+branch deletion, cloud work, new merge or release is authorized by this page.
+P35 remains isolated and untouched. Independent security acceptance, returned
+developer evaluations, qualified buyer interviews and a supervised written
+pilot remain distinct external gates.
+
+## Historical status record — November 3, 2026
+
+The following snapshot and its CI results retain their November 3 cutoff.
+They do not override the November 13 checkpoint above.
+
 The maintained snapshot is `44a06c364e348966e0b14c724f14e3a14d192433`, tree
 `b9fe952af2e9b92bb98c275315a426213d7c5eb5`. Its own [core CI run 41580327205](https://github.com/shadowhunter-92/agentbridge/actions/runs/41580327205)
 passed all 16 jobs on attempt 1. Source `c4fe9a4f9fa1fd58589bd2f3a9c27e734fe29e7f`
@@ -19,7 +94,7 @@ does not authorize another merge, publication, deployment or deletion. Apache
 The source/evaluator tables and dated results below are retained historical
 evidence. Their then-current main, draft-PR descriptions, follow-up language and
 six-branch count describe their original cutoff. They do not override the
-November 3 snapshot above, relabel older artifacts or close newer acceptance gates.
+November 13 checkpoint above, relabel older artifacts or close newer acceptance gates.
 
 ## Source and artifact pins
 
@@ -261,4 +336,6 @@ historical cleanup separately. Maintained and historical branch heads retain
 their separate dispositions. Later units require exact selected-head checks and
 source-associated receipts; descriptions here do not extend earlier test scope.
 
-Current branch count is six after the approved October22 consolidation. Earlier inventories above and dated branch reports retain their historical counts.
+The October 22 snapshot recorded six branches after its approved consolidation.
+Earlier inventories above and dated branch reports retain their historical counts;
+the November 13 branch observation is recorded at the top of this page.

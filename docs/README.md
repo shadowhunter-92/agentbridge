@@ -1,13 +1,18 @@
 # Documentation index
 
 Start with [current alpha status and exact source/artifact pins](CURRENT_ALPHA_STATUS.md),
-[approved October22 consolidation](BRANCH_CONSOLIDATION_2026-10-22.md),
+[November 13 independent audit and reconciliation](AUDIT_AND_RECONCILIATION_2026-11-13.md),
+[governed synthetic MCP quickstart](../demo/governed-mcp-demo/README.md),
+[supported roadmap](ROADMAP.md) and [protocol scope](PROTOCOL_COMPATIBILITY_2026.md).
+For dated history use [approved October22 consolidation](BRANCH_CONSOLIDATION_2026-10-22.md),
 [historical branch documentation dispositions](BRANCH_DOCUMENTATION_DISPOSITIONS_2026-10-16.md),
-[historical 88-row handoff register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md),
-[supported roadmap](ROADMAP.md), [protocol scope](PROTOCOL_COMPATIBILITY_2026.md),
-[deployment](DEPLOYMENT.md), and [four-product gates](FOUR_PRODUCT_EXECUTION_GATES_2026.md).
+[historical 88-row handoff register](HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md)
+and [November 3 checkpoint](ALPHA_PROGRESS_2026-11-03.md).
+See also [deployment](DEPLOYMENT.md) and [four-product gates](FOUR_PRODUCT_EXECUTION_GATES_2026.md).
 
-For SDK evaluation use [evaluator kit](OSS_EVALUATION_KIT.md),
+For the current synthetic action flow use the
+[governed MCP demonstration](GOVERNED_MCP_DEMO_2026-11-12.md).
+For the older pinned SDK/wheel evaluation use [evaluator kit](OSS_EVALUATION_KIT.md),
 [Trust/Evidence qualification](TRUST_EVIDENCE_ACCEPTANCE_2026.md),
 [offline verifier](EXTERNAL_EVIDENCE_VERIFIER_ACCEPTANCE_2026.md), and
 [durable task status](DURABLE_TASK_LIFECYCLE.md) and
@@ -33,6 +38,17 @@ not an execution authority.
 
 | Document |
 | --- |
+| [Independent audit and reconciliation — November 13, 2026](AUDIT_AND_RECONCILIATION_2026-11-13.md) |
+| [Engineering alpha progress and acceptance — November 3, 2026 (historical)](ALPHA_PROGRESS_2026-11-03.md) |
+| [Audit retention namespace and transaction checks — November 4, 2026](AUDIT_RETENTION_NAMESPACE_2026-11-04.md) |
+| [Governed MCP local demonstration — November 12, 2026](GOVERNED_MCP_DEMO_2026-11-12.md) |
+| [HA critical path — November 12, 2026](HA_CRITICAL_PATH_2026-11-12.md) |
+| [Active leader stop and committed lease-reply loss — November 5, 2026](HA_FORCED_STOP_AND_LEASE_REPLY_LOSS_2026-11-05.md) |
+| [HA recovery automation and remaining boundaries](HA_RECOVERY_AUTOMATION_2026.md) |
+| [Controlled worker-lifecycle trials — November 2, 2026](HA_WORKER_LIFECYCLE_CONTROLLED_TRIALS_2026-11-02.md) |
+| [Worker-lifecycle preparation — October 30, 2026](HA_WORKER_LIFECYCLE_PREPARATION_2026-10-30.md) |
+| [Unsupported MCP task refusal — November 4, 2026](MCP_TASK_REFUSAL_2026-11-04.md) |
+| [Offline Stripe-style reference contract — November 12, 2026](OFFLINE_STRIPE_STYLE_CONTRACT_2026-11-12.md) |
 | [AgentBridge scoped developer-alpha release candidate](ALPHA_RELEASE_SCOPE_AND_ROLLBACK.md) |
 | [Control Plane API Reference](API_REFERENCE.md) |
 | [AWS PostgreSQL operational experiment — 2026-10-13](AWS_POSTGRES_STAGING_2026-10-13.md) |
@@ -121,7 +137,7 @@ not an execution authority.
 | [Private queued-intent preparation and first admission](QUEUED_INTENT_PREPARATION_2026-10-18.md) |
 | [Bounded queued dispatch, results and recovery](QUEUED_DISPATCH_AND_RECOVERY_2026-10-22.md) |
 | [Approved October22 branch consolidation](BRANCH_CONSOLIDATION_2026-10-22.md) |
-| [Current engineering alpha status — October 22, 2026](CURRENT_ALPHA_STATUS.md) |
+| [Current engineering alpha status and historical checkpoints](CURRENT_ALPHA_STATUS.md) |
 | [Branch documentation dispositions — October 16, 2026](BRANCH_DOCUMENTATION_DISPOSITIONS_2026-10-16.md) |
 | [Architecture decision records](adr/README.md) |
 | [ADR-001: Canonical Hub-and-Spoke Model for Protocol Translation](adr/001-canonical-hub-and-spoke.md) |
