@@ -127,3 +127,4 @@ not an execution authority.
 | [ADR-001: Canonical Hub-and-Spoke Model for Protocol Translation](adr/001-canonical-hub-and-spoke.md) |
 | [ADR-002: Ed25519 for Agent Identity](adr/002-ed25519-identity.md) |
 | [ADR-003: SHA-256 Hash Chain for Audit Trail](adr/003-sha256-audit-chain.md) |
+| [Governed evaluator entry point and validation limits — November 13, 2026](EVALUATOR_ENTRY_POINT_2026-11-13.md) |
