@@ -105,7 +105,8 @@ def run_worker(role="replacement", *, lease=None, target=None, clock=None, resum
         operation_id="one-operation", agent_id="owned-agent", fingerprint="approved",
         ttl_seconds=3, renew_interval=bounds.get("renew_interval", .25),
         window_seconds=bounds.get("window_seconds", 12), resume=resume, emit=events.append,
-        clock=clock, sleep=clock.sleep)
+        clock=clock, sleep=clock.sleep,
+        active_until_stopped=bounds.get("active_until_stopped", False))
     assert result["dispatch_stopped"] is True
     assert SECRET not in json.dumps(result)
     return result, lease, target, events
