@@ -1,0 +1,33 @@
+services:
+  demo:
+    build:
+      context: ../..
+      dockerfile: demo/governed-mcp-demo/Dockerfile
+    image: agentbridge-governed-mcp-demo:local
+    command: ["--output", "/evidence/${DEMO_RUN:-run}", "--scenario", "${DEMO_SCENARIO:-success}"]
+    stdin_open: true
+    tty: true
+    init: true
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 24
+    mem_limit: 512m
+    cpus: 1.0
+    tmpfs: ["/tmp:size=64m,mode=1777"]
+    volumes: ["evidence:/evidence"]
+  verify:
+    image: agentbridge-governed-mcp-demo:local
+    entrypoint: ["python", "-B", "-m", "src.governance.evidence_cli"]
+    command: ["--bundle", "/evidence/${DEMO_RUN:-run}/evidence-bundle.json", "--trust", "/evidence/${DEMO_RUN:-run}/trust-roots.json", "--expected", "/evidence/${DEMO_RUN:-run}/expected-action.json"]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 8
+    mem_limit: 256m
+    cpus: 1.0
+    volumes: ["evidence:/evidence:ro"]
+volumes:
+  evidence:
