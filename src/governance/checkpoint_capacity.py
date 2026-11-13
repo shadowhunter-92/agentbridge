@@ -40,14 +40,18 @@ DDL = (
 )
 
 
-def assert_sqlite_namespace(cur):
+def assert_sqlite_namespace(cur, *, additional_reserved=()):
     """Embedding TEMP objects must not redirect a durable library operation."""
+    # Additional names are a trusted internal tuple, never request SQL.
     # SQLite folds ASCII identifier case; catalog TEXT comparison does not.
-    if cur.execute("SELECT name FROM sqlite_temp_master WHERE name COLLATE NOCASE IN (?,?,?,?,?) LIMIT 1", _RESERVED).fetchone():
+    reserved = _RESERVED + additional_reserved
+    if cur.execute("SELECT name FROM sqlite_temp_master WHERE name COLLATE NOCASE IN (" +
+                   ",".join("?" for _ in reserved) + ") LIMIT 1", reserved).fetchone():
         raise CheckpointCapacityDenied("reserved checkpoint storage name shadowed by SQLite TEMP object")
+    canonical = (TABLE, "audit_checkpoints") + additional_reserved
     for row in cur.execute("SELECT name FROM main.sqlite_master WHERE type IN ('table','view') AND "
-                           "name COLLATE NOCASE IN (?,?)", (TABLE, "audit_checkpoints")).fetchall():
-        if row["name"] not in (TABLE, "audit_checkpoints"):
+                           "name COLLATE NOCASE IN (" + ",".join("?" for _ in canonical) + ")", canonical).fetchall():
+        if row["name"] not in canonical:
             raise CheckpointCapacityDenied("noncanonical checkpoint table name")
     names = tuple(statement.split()[5] for statement in _sqlite_statements())
     for row in cur.execute("SELECT name FROM main.sqlite_master WHERE type='trigger' AND name COLLATE NOCASE IN (" +
@@ -56,10 +60,10 @@ def assert_sqlite_namespace(cur):
             raise CheckpointCapacityDenied("noncanonical checkpoint capacity trigger name")
 
 
-def assert_postgres_namespace(cur):
+def assert_postgres_namespace(cur, *, additional_reserved=()):
     """A privileged embedding must not redirect durable work to session TEMP."""
     if cur.execute("SELECT relname FROM pg_catalog.pg_class WHERE relnamespace=pg_catalog.pg_my_temp_schema() "
-                   "AND relname=ANY(%s) LIMIT 1", (list(_RESERVED),)).fetchone():
+                   "AND relname=ANY(%s) LIMIT 1", (list(_RESERVED + additional_reserved),)).fetchone():
         raise CheckpointCapacityDenied("reserved checkpoint storage name shadowed by PostgreSQL TEMP object")
 
 

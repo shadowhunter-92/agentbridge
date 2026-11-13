@@ -327,13 +327,6 @@ class SqliteStore(GovernanceStore):
         if seq <= 0:
             return 0
         with sql_atomic(self):
-            exists = self._db.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='audit_holds'"
-            ).fetchone()
-            if exists and self._db.execute(
-                "SELECT 1 FROM audit_holds WHERE enabled=1 LIMIT 1"
-            ).fetchone():
-                raise PermissionError("durable legal hold blocks audit deletion")
             _audit_retention_guard(self._db, postgres=False)
             # Keep a durable head so a later append cannot restart at genesis.
             head = self._db.execute("SELECT max(seq) AS seq FROM audit").fetchone()["seq"]
@@ -596,11 +589,6 @@ class PostgresStore(GovernanceStore):
         with self._lock, self._db.transaction(), self._db.cursor() as cur:
             # Shared with AuditTrustStore.set_hold to serialize hold changes.
             cur.execute("SELECT pg_advisory_xact_lock(%s)", (911003,))
-            cur.execute("SELECT to_regclass('audit_holds') AS holds_table")
-            if cur.fetchone()["holds_table"] is not None:
-                cur.execute("SELECT 1 FROM audit_holds WHERE enabled=true LIMIT 1")
-                if cur.fetchone():
-                    raise PermissionError("durable legal hold blocks audit deletion")
             _audit_retention_guard(cur, postgres=True)
             cur.execute("SELECT pg_advisory_xact_lock(%s)", (self._AUDIT_LOCK_KEY,))
             cur.execute("SELECT max(seq) AS seq FROM audit")
