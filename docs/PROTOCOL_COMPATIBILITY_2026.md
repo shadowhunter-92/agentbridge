@@ -40,6 +40,7 @@ The first supported customer-facing evaluation should be **synthetic/read-only M
 |---|---|---|
 | MCP stdio `tools/call` simple JSON argument map | Real SDK message validation and live add-tool example | Invalid or unavailable tool must produce an error; no implicit arbitrary fallback |
 | MCP `resources/read`, `prompts/get`, sampling, notification, cancellation, session control | Not part of canonical action subset | Adapter rejects unsupported procedures; it MUST NOT convert them to tool actions |
+| MCP `tools/call` with `params.task` | Task augmentation is outside the canonical action subset | Reject any presence of `params.task`, including empty, null or malformed values, before canonical translation or dispatch; an ordinary tool argument named `task` remains supported |
 | MCP Streamable HTTP | Optional developer client session/tool subset qualified against official SDK reference server | Authentication, broad resumability and governed HTTP dispatch remain unqualified |
 | A2A `Task` data schema from pinned 0.3.x SDK | Limited translation | Unknown task lifecycle, streaming, cancellation and notifications are unqualified |
 | A2A 1.0 full interoperable service | Not qualified | Do not claim 1.0 support based on 0.3.x model validation |
@@ -84,3 +85,7 @@ tool errors, bad Origin and invalid sessions against the official read-only SDK
 server. The [A2A observer](A2A_STATUS_STREAMING.md) separately qualifies status
 queries and SSE replay for admitted tasks. Neither result certifies every
 protocol feature, SDK revision or production transport deployment.
+
+The [November 4 task-refusal audit](MCP_TASK_REFUSAL_2026-11-04.md) records the
+local rejection tests, reviewed official versions and remaining error-envelope
+gap. This guard does not implement MCP task creation, polling or cancellation.

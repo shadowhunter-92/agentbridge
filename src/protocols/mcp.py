@@ -14,6 +14,10 @@ class McpAdapter(ProtocolAdapter):
         if "method" in wire and wire["method"] != "tools/call":
             raise ValueError("only MCP tools/call has an explicitly supported canonical action")
         params = require_mapping(wire.get("params", {}), self.name, "params")
+        # Task augmentation changes acceptance and deferred-result semantics;
+        # CanonicalCall cannot represent that lifecycle, even for an empty task.
+        if "task" in params:
+            raise ValueError("MCP task-augmented calls are not supported canonical actions")
         arguments = params.get("arguments", params.get("input", {}))
         if arguments is None:
             arguments = {}
