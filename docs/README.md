@@ -102,6 +102,7 @@ not an execution authority.
 | [External destination capability, fencing limits and acceptance](EXTERNAL_DESTINATION_FENCING_2026.md) |
 | [Nine-phase engineering checklist and progress](ENGINEERING_PHASE_PROGRESS_2026-10-24.md) |
 | [Engineering blockers and external acceptance](BLOCKERS.md) |
+| [Pydantic floor and runtime hash-lock reconciliation — November 14, 2026](DEPENDENCY_LOCK_RECONCILIATION_2026-11-14.md) |
 | [Retained signing-revision capacity and failure limits](SIGNING_JOURNAL_CAPACITY_2026.md) |
 | [Signing publication transaction ownership](SIGNING_PUBLICATION_BOUNDARY_2026-10-24.md) |
 | [Durable aggregate admission quotas](DURABLE_ADMISSION_QUOTAS_2026-10-15.md) |
