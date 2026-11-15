@@ -1,11 +1,56 @@
 # AgentBridge
 
+Governed MCP proxy for consequential tools — identity, budget, human approval,
+and independently verifiable evidence of what actually ran.
+
+**Engineering alpha; production NO-GO.** The runnable example below is a
+synthetic local transfer over an actual MCP stdio connection. Its separate
+read-only observer and offline verifier check the exact signed action. Both
+keys and the SQLite file remain under one local operator; this demonstrates
+verification, not independent institutional custody or real payment completion.
+
+## Run the governed demo
+
+With Git and Docker Compose available, run these three commands in a terminal:
+
+```sh
+git clone https://github.com/shadowhunter-92/agentbridge.git && cd agentbridge && git worktree add --detach ../agentbridge-evaluator-runtime f309a35cb5c3ec4164acea5ba2622dc04be6807c
+docker compose -f ../agentbridge-evaluator-runtime/demo/governed-mcp-demo/docker-compose.yml run --build --rm demo
+docker compose -f ../agentbridge-evaluator-runtime/demo/governed-mcp-demo/docker-compose.yml run --rm verify
+```
+
+Type `APPROVE` at the second command's prompt, then run verification within
+five minutes. The first build downloads dependencies; the demo and verifier
+run without networking. Use `compose run` for interactive stdin. Evidence stays
+in the named volume; a repeated run requires a fresh `DEMO_RUN`, not deleting
+the previous evidence. The detached worktree pins the executable baseline;
+the original checkout keeps this README and its later kit files available.
+Record the documentation checkout's own revision separately.
+
+[Native install and evaluator checklist](evaluation/external_validator_kit/README.md)
+· [Demo and fault scenarios](demo/governed-mcp-demo/README.md)
+· [Structured feedback](evaluation/external_validator_kit/feedback.md)
+
+## Current limitations
+
+- Synthetic tools only: no Stripe API, credentials, money movement or LLM is
+  needed or exercised. Native Stripe fencing and a complete PaymentIntent
+  state machine are not implemented by this demonstration.
+- Lost acknowledgments preserve UNKNOWN and reserved exposure. There is no
+  automatic resend, reconciliation, refund or proof that an absent observation
+  means the action failed.
+- A signed receipt authenticates its signer's statement. Independent operator
+  custody, authoritative external effects, physical HA, combined workload
+  identity/CNI isolation, broad protocol lifecycle conformance and production
+  performance SLOs remain unqualified.
+- This local container recipe is not a signed published release or complete
+  supply-chain qualification. Independently returned evaluations, security
+  acceptance, buyer interviews and a supervised pilot remain open.
+
 > **Production target restriction:** HTTP named-target execution is disabled for
 > generic MCP/A2A/ACP transports in `prod` and `production` until destination-atomic
 > authority/fencing is qualified. Translation and nonproduction synthetic evaluation
 > remain available. See [destination contract](docs/PRODUCTION_TARGET_QUALIFICATION_2026-10-14.md).
-
-**Protocol interoperability and governed execution for AI agents.**
 
 [![CI](https://github.com/shadowhunter-92/agentbridge/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/shadowhunter-92/agentbridge/actions/workflows/ci.yml)
 [![Python 3.11–3.12](https://img.shields.io/badge/Python-3.11%20%7C%203.12-3776AB)](https://www.python.org/)
@@ -13,24 +58,10 @@
 [![Status: experimental alpha](https://img.shields.io/badge/status-experimental%20alpha-orange)](SECURITY.md)
 
 AgentBridge is an open-source Python project for translating selected AI-agent
-tool-call formats and applying controls such as agent identity, authorization,
-budgets, approvals and audit history. The long-term goal is a portable trust
-layer that works **alongside** existing agent frameworks and gateways—not
-another all-in-one agent platform.
-
-> **Engineering alpha; production NO-GO.** The November 3 recorded `main` is
-> `44a06c364e348966e0b14c724f14e3a14d192433`, the approved PR #85 merge.
-> Its own 16-job core CI run passed. The reviewed source separately passed
-> 24 checks across seven workflows. The bounded worker-lifecycle drill now
-> tests renewal, expiry, stale refusal and signed readback after one lost-ACK
-> effect; it does not qualify physical HA or production recovery.
-> All 16 branches were retained at this snapshot. Earlier consolidation counts
-> describe their dated observations. Actual AWS multi-node traffic, broader
-> physical HA, trusted published releases and external acceptance remain open.
-> See the [dated progress checklist](docs/ALPHA_PROGRESS_2026-11-03.md).
-> The older evaluator wheel remains separate, unsigned and unpublished.
-> [Current source, evidence and open gates](docs/CURRENT_ALPHA_STATUS.md) ·
-> [Documentation index](docs/README.md) · [Security policy](SECURITY.md)
+tool-call formats and applying agent identity, authorization, budgets,
+approvals and audit history alongside existing frameworks and gateways.
+[Current source, evidence and open gates](docs/CURRENT_ALPHA_STATUS.md) ·
+[Documentation index](docs/README.md) · [Security policy](SECURITY.md)
 
 ![Demonstration of a bounded AgentBridge workflow](demo.gif)
 
@@ -58,7 +89,7 @@ outcome, reconciliation and auditability questions. Those guarantees remain
 | --- | --- | --- |
 | Canonical tool-call translation across six adapter families | Limited subset with explicit unsupported-feature rejection | Full protocol lifecycle/version matrix |
 | Agent signatures, budgets, policies and approval controls | Selected paths; opt-in enrolled tenant SDK/HTTP and shared-SQL admission/settlement | Remaining ingress, destination and adversarial qualification |
-| SQLite / PostgreSQL support | Bounded tenant namespaces, offline migration, admission caps, retained-task/event/audit-payload caps and shared tenant stream allocations | Remaining evidence bytes, large-history performance, protected retention, physical connection limits, live migration and HA |
+| SQLite / PostgreSQL support | Bounded tenant namespaces, offline migration, admission caps, retained-task/event/audit-payload caps and shared tenant stream allocations | Reference-indexed hold-safe retention, physical storage bounds, large-history performance, physical connection limits, live migration and HA |
 | Separately signed action receipt + readback verification | Tested in bounded sandbox / PostgreSQL paths | Independent administration and real destination acceptance |
 | Production network isolation, HA and full MCP/A2A conformance | **Not qualified** | **Still not qualified** |
 | Native queued tasks | Signed acceptance and atomic admission; private one-shot synthetic dispatch, bounded result and read-only recovery | Public worker/transport, historical-key recovery, acknowledged remote cancellation and production qualification |
@@ -70,7 +101,7 @@ imply all sessions, streaming, async tasks, extensions or current-version
 transports are interoperable. See [protocol details](docs/PROTOCOL_SUPPORT.md)
 and the [review compatibility contract](docs/PROTOCOL_COMPATIBILITY_2026.md).
 
-## Quick start
+## Basic translation examples
 
 **Requires Python 3.11 or 3.12.** Use a new virtual environment and synthetic
 or non-sensitive data for the examples.
@@ -78,8 +109,8 @@ or non-sensitive data for the examples.
 ```bash
 git clone https://github.com/shadowhunter-92/agentbridge.git
 cd agentbridge
-# Pin the recorded reviewed main for this basic example:
-git checkout --detach b0afb7f1da1634330747389e19c896fd7002bd83
+# Pin the reviewed executable baseline:
+git checkout --detach f309a35cb5c3ec4164acea5ba2622dc04be6807c
 python -m venv .venv
 
 # Activate your virtual environment first:
@@ -91,13 +122,14 @@ python examples/quickstart.py
 python examples/demo_story.py
 ```
 
-This pins reviewed `main`, including opt-in tenant governance, queued acceptance,
-private preparation, [first-admission linkage](docs/QUEUED_INTENT_PREPARATION_2026-10-18.md)
-and audit payload limits. Use the documented opt-in tenant factory for tenant
-features. The private dispatch addition belongs to this later follow-up and
-requires its own selected-head evidence. Editable source installation is separate
-from the older local evaluator wheel or a signed public release. The CI badge
-tracks `main`; see [exact source pins](docs/CURRENT_ALPHA_STATUS.md).
+This baseline includes opt-in tenant governance, signed queued acceptance,
+private preparation, [first-admission linkage](docs/QUEUED_INTENT_PREPARATION_2026-10-18.md),
+bounded private dispatch and retained journals. These basic examples exercise
+translation; use the governed demo above for the bounded action/evidence route.
+Use the documented opt-in tenant factory for tenant features. Editable source
+installation remains separate from the older unsigned local evaluator wheel
+and any signed published release. The CI badge tracks moving `main`; record
+the [exact source and its own evidence](docs/CURRENT_ALPHA_STATUS.md).
 
 To execute the local test suite:
 
@@ -176,7 +208,7 @@ external state**: payments, procurement, deployments, customer records or
 other operational systems. What breaks during retries? How do you verify that
 an action happened? What does your existing gateway already solve?
 
-- Try the **basic local examples** and pinned synthetic evaluator workflow on `main`.
+- Try the pinned governed demo and return the [evaluator feedback form](evaluation/external_validator_kit/feedback.md).
 - [Report a reproducible bug](https://github.com/shadowhunter-92/agentbridge/issues/new/choose).
 - [Request a developer evaluation](https://github.com/shadowhunter-92/agentbridge/issues/new)
   (no credentials, private logs or customer data in public issues).
@@ -220,3 +252,22 @@ for the controller-signed Trust/Evidence workflow. The optional durable task SDK
 is documented in [task lifecycle](docs/DURABLE_TASK_LIFECYCLE.md).
 Run `python tools/check_documentation.py` to check local Markdown targets.
 Current source and branch evidence is indexed in [current alpha status](docs/CURRENT_ALPHA_STATUS.md); the [88-row handoff register](docs/HANDOFF_ACCEPTANCE_REGISTER_2026-10-14.md) preserves its historical checkpoint.
+
+## Historical checkpoint — November 3, 2026
+
+The following records its original cutoff; it is not the current branch count
+or source. Later evidence belongs to its own exact source and CI run.
+
+> **Engineering alpha; production NO-GO.** The November 3 recorded `main` is
+> `44a06c364e348966e0b14c724f14e3a14d192433`, the approved PR #85 merge.
+> Its own 16-job core CI run passed. The reviewed source separately passed
+> 24 checks across seven workflows. The bounded worker-lifecycle drill now
+> tests renewal, expiry, stale refusal and signed readback after one lost-ACK
+> effect; it does not qualify physical HA or production recovery.
+> All 16 branches were retained at this snapshot. Earlier consolidation counts
+> describe their dated observations. Actual AWS multi-node traffic, broader
+> physical HA, trusted published releases and external acceptance remain open.
+> See the [dated progress checklist](docs/ALPHA_PROGRESS_2026-11-03.md).
+> The older evaluator wheel remains separate, unsigned and unpublished.
+> [Current source, evidence and open gates](docs/CURRENT_ALPHA_STATUS.md) ·
+> [Documentation index](docs/README.md) · [Security policy](SECURITY.md)
