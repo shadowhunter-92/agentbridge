@@ -1,5 +1,10 @@
 # Governed MCP local demonstration — November 12, 2026
 
+> Historical November 12 snapshot. Subsequent bounded container-negative and
+> hash-closure evidence is recorded in
+> [the November 15 qualification](GOVERNED_MCP_CONTAINER_QUALIFICATION_2026-11-15.md).
+> The limitations and earlier results below retain their original cutoff.
+
 **PARTIALLY TESTED. Synthetic local evaluation only; production NO-GO.**
 
 Baseline is `35f37222597341d2c23e9cd9d0baddf1e36f99f7`, local branch
