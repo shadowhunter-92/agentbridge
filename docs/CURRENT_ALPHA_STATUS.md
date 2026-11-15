@@ -9,8 +9,9 @@ The maintained source at this checkpoint is
 passed **16/16 jobs on attempt 1**. This documentation reconciliation is later
 source and is not covered by that run. The
 [November 13 independent audit](AUDIT_AND_RECONCILIATION_2026-11-13.md) records
-the source, branch/PR observations, all 81 historical requirement dispositions,
-and limits of historical pin and artifact verification.
+the source, branch/PR observations, the historical 81-row register and its
+counts, and limits of pin/artifact verification. Current row-by-row technical
+requalification remains open; the audit does not supply all 81 dispositions.
 
 ## Approved source units and exact CI
 
