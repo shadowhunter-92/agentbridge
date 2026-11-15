@@ -4,6 +4,10 @@
 This unit does not resolve the real external-destination qualification blocker.
 It creates no Stripe object and uses no Stripe account, SDK, key or network.
 
+The [November 13–15 retained-capacity follow-up](STRIPE_STYLE_MOCK_RETAINED_CAPACITY_2026-11-13.md)
+supersedes this original freeze's unbounded-payload limitation. All original
+source hashes and test counts below remain historical evidence for that freeze.
+
 ## Source and integration boundary
 
 - Base: `35f37222597341d2c23e9cd9d0baddf1e36f99f7` (PR #86 already merged).
@@ -117,8 +121,9 @@ synthetic fixture secret is not a Stripe webhook credential.
 - Duplicate and out-of-order webhook delivery is legitimate. Deduplication
   does not make webhooks ordered, exactly once, independent proof of delivery,
   or an automatic resolution mechanism for UNKNOWN.
-- These persistent tables have no aggregate row/byte capacity or retention
-  policy. This is a small-input local demonstration, not a public listener,
+- At this November 12 freeze, the persistent tables had no aggregate row/byte
+  capacity or retention policy. The linked capacity follow-up adds logical
+  payload bounds. This remains a small-input local demonstration, not a public listener,
   scalable service, tenant isolation boundary or bounded-storage product.
   SQLite file/DDL administrators and trusted in-process code remain trusted.
 - Production-mode guards refuse `AGENTBRIDGE_ENV=production` or `prod` for the

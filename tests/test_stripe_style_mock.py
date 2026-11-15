@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from examples.stripe_style_mock import (
-    MockRequestConflict, PaymentIntentRequest, StripeStyleMock, StripeStyleReadback,
+    MockRequestConflict, MockStorageLimits, PaymentIntentRequest, StripeStyleMock, StripeStyleReadback,
     WebhookInbox, WebhookRejected, sign_webhook, verify_payment_evidence,
 )
 from src.governance.budget import Budget, BudgetManager
@@ -72,7 +72,8 @@ def test_roundtrip_uses_existing_fence_observer_and_verifier(setup):
     assert count_effects(path) == 1
 
 
-def test_lost_ack_preserves_original_unknown_and_budget_until_separate_reconciliation(setup, tmp_path):
+@pytest.mark.parametrize("limits", [None, MockStorageLimits(max_records=2)])
+def test_lost_ack_preserves_original_unknown_and_budget_until_separate_reconciliation(setup, tmp_path, limits):
     path, writer, reader, request = setup
     store = SqliteStore(str(tmp_path / "governance.sqlite"))
     try:
@@ -83,7 +84,7 @@ def test_lost_ack_preserves_original_unknown_and_budget_until_separate_reconcili
         ledger = OperationLedger(store)
         ledger.claim(request.agent_id, request.operation_id, request.fingerprint, reservation_token=token)
         before_budget = store.get_budget(request.agent_id)
-        with StripeStyleMock(path, target_id=request.target_id, sign=writer.sign) as mock:
+        with StripeStyleMock(path, target_id=request.target_id, sign=writer.sign, limits=limits) as mock:
             epoch = mock.acquire(owner="worker")
             with pytest.raises(TimeoutError, match="acknowledgement dropped"):
                 mock.confirm(request, owner="worker", epoch=epoch, lose_ack=True)
@@ -256,6 +257,11 @@ def test_readback_rejects_corrupt_persisted_destination_state(setup, column, val
     path, writer, reader, request = setup
     with StripeStyleMock(path, target_id=request.target_id, sign=writer.sign) as mock:
         mock.confirm(request, owner="worker", epoch=mock.acquire(owner="worker"))
+        with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+            mock.target.db.execute(f"UPDATE sandbox_effects SET {column}=?", (value,))
+        # Explicit administrator DDL is outside the ordinary storage boundary.
+        # Even that tampering must not turn a corrupt effect into readback proof.
+        mock.target.db.execute("DROP TRIGGER mock_storage_sandbox_effects_update_v1")
         mock.target.db.execute(f"UPDATE sandbox_effects SET {column}=?", (value,))
     with pytest.raises(ObservationUnavailable):
         observe(path, writer, reader, request)
@@ -402,7 +408,7 @@ def test_event_id_conflict_rejected_and_out_of_order_distinct_notifications_are_
         result = accept(inbox, event_body(event_id="evt_older", event_type="payment_intent.processing"))
         assert result["effect_dispatched"] is False
         assert inbox.db.execute("SELECT count(*) FROM mock_stripe_webhooks").fetchone()[0] == 2
-        assert not inbox.db.execute("SELECT name FROM sqlite_master WHERE name='sandbox_effects'").fetchone()
+        assert inbox.db.execute("SELECT count(*) FROM sandbox_effects").fetchone()[0] == 0
 
 
 @pytest.mark.parametrize("body", [b"[]", b"{bad-json}", b"\xff", b'{"id":"x","id":"y"}',
