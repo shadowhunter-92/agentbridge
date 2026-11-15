@@ -27,6 +27,8 @@ its pinned executable source, an explicit limitations block and links to an
 The full protocol/architecture/four-offering material remains below. The
 November 3 checkpoint is retained and explicitly historical.
 
+The clone remains the documentation checkout; a detached `.evaluator-runtime`
+worktree selects the executable pin without removing the newer kit files.
 The validator kit includes native and Compose setup, positive/negative checks,
 timing fields, feedback, trust boundaries and a review scope. The
 [design-partner kit](../evaluation/design_partner_kit/README.md) includes a

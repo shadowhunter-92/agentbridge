@@ -14,17 +14,18 @@ verification, not independent institutional custody or real payment completion.
 With Git and Docker Compose available, run these three commands in a terminal:
 
 ```sh
-git clone https://github.com/shadowhunter-92/agentbridge.git && cd agentbridge && git checkout --detach f309a35cb5c3ec4164acea5ba2622dc04be6807c
-docker compose -f demo/governed-mcp-demo/docker-compose.yml run --build --rm demo
-docker compose -f demo/governed-mcp-demo/docker-compose.yml run --rm verify
+git clone https://github.com/shadowhunter-92/agentbridge.git && cd agentbridge && git worktree add --detach .evaluator-runtime f309a35cb5c3ec4164acea5ba2622dc04be6807c
+docker compose -f .evaluator-runtime/demo/governed-mcp-demo/docker-compose.yml run --build --rm demo
+docker compose -f .evaluator-runtime/demo/governed-mcp-demo/docker-compose.yml run --rm verify
 ```
 
 Type `APPROVE` at the second command's prompt, then run verification within
 five minutes. The first build downloads dependencies; the demo and verifier
 run without networking. Use `compose run` for interactive stdin. Evidence stays
 in the named volume; a repeated run requires a fresh `DEMO_RUN`, not deleting
-the previous evidence. The source pin is the reviewed executable baseline;
-this README and the kits are a later documentation addition.
+the previous evidence. The detached worktree pins the executable baseline;
+the original checkout keeps this README and its later kit files available.
+Record the documentation checkout's own revision separately.
 
 [Native install and evaluator checklist](evaluation/external_validator_kit/README.md)
 · [Demo and fault scenarios](demo/governed-mcp-demo/README.md)

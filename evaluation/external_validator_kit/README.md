@@ -19,16 +19,16 @@ Install Git, Docker with Compose, and allow the first image build to download
 dependencies. From a terminal:
 
 ```sh
-git clone https://github.com/shadowhunter-92/agentbridge.git && cd agentbridge && git checkout --detach f309a35cb5c3ec4164acea5ba2622dc04be6807c
-docker compose -f demo/governed-mcp-demo/docker-compose.yml run --build --rm demo
-docker compose -f demo/governed-mcp-demo/docker-compose.yml run --rm verify
+git clone https://github.com/shadowhunter-92/agentbridge.git && cd agentbridge && git worktree add --detach .evaluator-runtime f309a35cb5c3ec4164acea5ba2622dc04be6807c
+docker compose -f .evaluator-runtime/demo/governed-mcp-demo/docker-compose.yml run --build --rm demo
+docker compose -f .evaluator-runtime/demo/governed-mcp-demo/docker-compose.yml run --rm verify
 ```
 
 Type `APPROVE` in the demo prompt. Run verification within 300 seconds: the
 existing freshness limit is intentional. Do not replace or disable it to make
-an old bundle pass. The first command selects the executable baseline; these
-later kit files may be viewed in the documentation revision on GitHub after
-checkout. Record that documentation revision separately in your feedback.
+an old bundle pass. The first command creates a detached executable worktree
+at `.evaluator-runtime`; the original documentation checkout and all kit files
+remain available. Record that documentation revision separately in your feedback.
 
 Use `run`, which attaches approval stdin, rather than claiming `up` handles
 interactive approval. The local image and named evidence volume remain on
@@ -43,9 +43,11 @@ This is not a trusted signed release.
 
 ## Native route
 
-Use Python 3.11 or 3.12 and a new virtual environment in the pinned checkout:
+After the clone/worktree command above, enter the pinned runtime worktree.
+Use Python 3.11 or 3.12 and a new virtual environment there:
 
 ```sh
+cd .evaluator-runtime
 python -m venv .venv-evaluator
 ```
 
