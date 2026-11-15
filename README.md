@@ -14,9 +14,9 @@ verification, not independent institutional custody or real payment completion.
 With Git and Docker Compose available, run these three commands in a terminal:
 
 ```sh
-git clone https://github.com/shadowhunter-92/agentbridge.git && cd agentbridge && git worktree add --detach .evaluator-runtime f309a35cb5c3ec4164acea5ba2622dc04be6807c
-docker compose -f .evaluator-runtime/demo/governed-mcp-demo/docker-compose.yml run --build --rm demo
-docker compose -f .evaluator-runtime/demo/governed-mcp-demo/docker-compose.yml run --rm verify
+git clone https://github.com/shadowhunter-92/agentbridge.git && cd agentbridge && git worktree add --detach ../agentbridge-evaluator-runtime f309a35cb5c3ec4164acea5ba2622dc04be6807c
+docker compose -f ../agentbridge-evaluator-runtime/demo/governed-mcp-demo/docker-compose.yml run --build --rm demo
+docker compose -f ../agentbridge-evaluator-runtime/demo/governed-mcp-demo/docker-compose.yml run --rm verify
 ```
 
 Type `APPROVE` at the second command's prompt, then run verification within
