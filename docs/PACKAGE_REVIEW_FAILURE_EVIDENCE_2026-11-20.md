@@ -1,6 +1,7 @@
 # Package review failure evidence — November 20, 2026
 
-Status: **IMPLEMENTED / HOSTED UNTESTED**. This local correction starts from
+Status: **PARTIALLY TESTED**. Hosted failure-upload behavior has not run.
+This local correction starts from
 `f309a35cb5c3ec4164acea5ba2622dc04be6807c`. Publication and an exact-head hosted
 run require separate approval; no hosted result is claimed for this change.
 
@@ -36,7 +37,7 @@ Local validation on November 20, 2026:
 for this bounded change.
 
 These checks establish local structure and documentation only. Artifact upload
-after a failed audit and downstream hosted job behavior remain **UNTESTED**
+after a failed audit and downstream hosted job behavior remain unverified in hosted CI
 until this exact change is separately approved for publication and exercised in
 GitHub Actions. No implementation-mirroring test was added for this one-line
 workflow correction.
