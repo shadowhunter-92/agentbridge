@@ -34,6 +34,7 @@ not an execution authority.
 | Document |
 | --- |
 | [AgentBridge scoped developer-alpha release candidate](ALPHA_RELEASE_SCOPE_AND_ROLLBACK.md) |
+| [OpenTelemetry API dependency floor and local compatibility — November 20, 2026](OTEL_API_DEPENDENCY_FLOOR_2026-11-20.md) |
 | [Control Plane API Reference](API_REFERENCE.md) |
 | [AWS PostgreSQL operational experiment — 2026-10-13](AWS_POSTGRES_STAGING_2026-10-13.md) |
 | [Real AWS staging qualification — 2026-10-13](AWS_REAL_STAGING_TEST_2026-10-13.md) |
