@@ -210,4 +210,3 @@ def test_invalid_image_and_existing_output_refuse_before_docker(tmp_path, monkey
         qualify("--privileged", tmp_path / "unused")
     with pytest.raises(FileExistsError):
         qualify("owned:local", tmp_path)
-

@@ -174,4 +174,3 @@ workload mTLS/CNI, physical HA, broader protocol conformance, release trust and
 production performance qualification. No LLM/LangChain, Stripe-native fencing,
 real money movement, production deployment, cloud use, P35 work, branch deletion,
 protected-main merge or release publication was added or claimed.
-
