@@ -46,7 +46,7 @@ dependencies = [
     "opentelemetry-api>=1.45.2",
     "cryptography>=42.0.0",
     "pyjwt>=2.8.0",
-    "prometheus-client>=0.20.0",
+    "prometheus-client>=0.26.0",
 ]
 
 [project.optional-dependencies]
