@@ -61,6 +61,24 @@ qualify and hash-lock any custom transport-enabled image separately.
 | `AGENTBRIDGE_OIDC_AUDIENCE` | `agentbridge` | Expected `aud` claim |
 | `AGENTBRIDGE_OIDC_PUBLIC_KEY_PEM` / `_FILE` | unset | IdP signing public key (inline PEM or file path) |
 | `AGENTBRIDGE_OIDC_ROLE_CLAIM` | `role` | Token claim mapped to the RBAC role (admin/operator/viewer) |
+| `AGENTBRIDGE_OIDC_JWKS_URL` | unset | Explicit JWKS URL when using dynamic OIDC signing keys; otherwise use issuer discovery |
+| `AGENTBRIDGE_ENV` | unset | `prod`/`production` enables stricter startup/admission restrictions and disables interactive API docs; this mode is not production acceptance |
+| `AGENTBRIDGE_LOG_JSON` | `1` in prod/production, otherwise `0` | JSON stdout logging when `1`, `true` or `yes` |
+| `AGENTBRIDGE_SLOW_LOG_SECONDS` | `2.0` | Finite nonnegative threshold in seconds for the slow-request log |
+| `AGENTBRIDGE_SHUTDOWN_GRACE` | `10` | Finite drain interval in seconds, accepted range 0–300; CLI passes integer seconds to uvicorn |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | Opt-in OTLP HTTP tracing destination; requires the optional exporter dependencies and operator-approved telemetry destination |
+
+Use `/health` as liveness and `/ready` for routing new traffic: readiness is
+HTTP 503 during drain or when the store is unhealthy, while liveness stays
+HTTP 200. `/version` reports software/Python/backend identity; `/metrics`
+exposes optional Prometheus telemetry. Readiness is a process/store probe,
+not a statement that external execution or failover is qualified. See the
+[API reference](API_REFERENCE.md) for exact response shapes.
+
+`AGENTBRIDGE_OTEL_ENABLED=1` can also request optional tracing;
+`OTEL_SERVICE_NAME` defaults to `agentbridge`. Enabling telemetry does not
+provide destination authorization or qualify operated monitoring. Do not put
+sensitive data into spans or send it to an unapproved endpoint.
 
 ## 4. Persistence backends
 
@@ -90,8 +108,9 @@ AGENTBRIDGE_DB=/var/lib/agentbridge/governance.db uvicorn src.api.control_plane:
 AGENTBRIDGE_DB=postgresql://user:pass@host/db uvicorn src.api.control_plane:app --workers 4
 ```
 
-The chain can't fork and budgets can't double-spend across workers (proven by
-`tests/test_concurrency.py`). **Do not** run `--workers > 1` on the default in-memory store —
+The bounded shared-store concurrency tests check chain and budget invariants
+across their participating workers. They do not qualify arbitrary split-brain
+deployments or external effects. **Do not** run `--workers > 1` on the default in-memory store —
 each worker would keep its own state. Current approvals and policy are durable;
 shared SQL transactions do not by themselves establish split-brain-safe HA. See `docs/ENTERPRISE.md` → *Concurrency & scaling*.
 

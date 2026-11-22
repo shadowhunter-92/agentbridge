@@ -5,7 +5,9 @@
 > authority/fencing is qualified. Translation and nonproduction synthetic evaluation
 > remain available. See [destination contract](PRODUCTION_TARGET_QUALIFICATION_2026-10-14.md).
 
-Base: the FastAPI app in `src/api/control_plane.py`. Interactive docs at `/docs`.
+Base: the legacy FastAPI app in `src/api/control_plane.py`; the opt-in enrolled
+tenant factory has a separate contract. Interactive docs at `/docs` are
+disabled in `prod` and `production` configuration mode.
 
 Three planes:
 - **Public** — mesh translation, no auth.
@@ -18,9 +20,12 @@ Three planes:
 
 All `/control/*` paths are rate-limited per client IP (`AGENTBRIDGE_RATE_LIMIT`/min).
 
-OIDC env: `AGENTBRIDGE_OIDC_ISSUER`, `AGENTBRIDGE_OIDC_AUDIENCE`, and one of
-`AGENTBRIDGE_OIDC_PUBLIC_KEY_PEM` / `AGENTBRIDGE_OIDC_PUBLIC_KEY_FILE`
-(+ optional `AGENTBRIDGE_OIDC_ROLE_CLAIM`, default `role`).
+OIDC env: `AGENTBRIDGE_OIDC_ISSUER`, `AGENTBRIDGE_OIDC_AUDIENCE`, and either
+a static `AGENTBRIDGE_OIDC_PUBLIC_KEY_PEM` / `AGENTBRIDGE_OIDC_PUBLIC_KEY_FILE`
+or dynamic JWKS (+ optional `AGENTBRIDGE_OIDC_ROLE_CLAIM`, default `role`).
+Without a static key, `AGENTBRIDGE_OIDC_JWKS_URL` can select the JWKS endpoint;
+otherwise discovery uses the configured issuer. Key-cache and deployment
+acceptance remain subject to the [deployment guide](DEPLOYMENT.md).
 
 ---
 
@@ -28,12 +33,20 @@ OIDC env: `AGENTBRIDGE_OIDC_ISSUER`, `AGENTBRIDGE_OIDC_AUDIENCE`, and one of
 
 | Method | Path | Body | Returns |
 |--------|------|------|---------|
-| GET | `/health` | — | `{status, protocols}` |
+| GET | `/health` | — | `{status: "ok", version, protocols, store}`; liveness stays HTTP 200 during drain |
+| GET | `/ready` | — | `{status: "ready", store}`; HTTP 503 with `draining` or `not_ready` when draining or the store is unhealthy |
+| GET | `/version` | — | `{version, python, store}`; `store` is the backend class name |
+| GET | `/metrics` | — | Prometheus text; a `prometheus_client not installed` comment when the optional backend is absent |
 | GET | `/control/protocols` | — | `{protocols: [...]}` |
 | POST | `/control/translate/call` | `{src, dst, wire}` | `{wire}` — request translated src→dst |
 | POST | `/control/translate/result` | `{src, dst, wire}` | `{wire}` — result translated src→dst |
 
 Malformed wires (non-object, or empty/unroutable) return **400** with a clear reason.
+
+Use `/health` for process liveness and `/ready` to decide whether to send new
+traffic. Neither probe qualifies destination completion, physical HA or
+production safety. The health response includes backend status; a live
+process can still be unready.
 
 ## Operator — admin key or OIDC bearer token (RBAC-enforced)
 
