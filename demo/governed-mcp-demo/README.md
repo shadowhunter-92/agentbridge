@@ -44,10 +44,44 @@ Verify promptly with:
 docker compose -f demo/governed-mcp-demo/docker-compose.yml run --rm verify
 ```
 
-Use the same `DEMO_RUN` for both commands. Container dependency closure is not
-fully hash locked; this is a local evaluation recipe, not release provenance.
-Native execution has been tested; container execution is separately reported
-in the dated qualification record.
+Use the same `DEMO_RUN` for both commands. The reviewed Linux x86_64,
+Python3.12 Alpine image installs the combined runtime and supplemental MCP
+graphs with exact hashes and binary wheels only. Other platforms are not
+qualified. This remains a local evaluation recipe; hashes and a local build
+do not establish trusted release identity or reproducible release provenance.
+
+## Bounded container qualification
+
+After building the image, run the six scripted synthetic scenarios from a host
+Python process (the runner itself needs only the standard library):
+
+```sh
+docker compose -f demo/governed-mcp-demo/docker-compose.yml build
+python -m tools.qualify_governed_mcp_container --output outputs/my-fresh-container-trial
+```
+
+The runner pins the local image ID, supplies scripted approval/denial stdin,
+and checks actual Docker inspection for network-none, nonroot UID/GID 10001,
+read-only root, dropped capabilities, no-new-privileges, CPU/memory/PID bounds
+and a fresh retained evidence volume. Each exited scenario is followed by a
+separate read-only-volume checker. It verifies signed request binding, durable
+ledger/budget/reservation/effect/audit facts and fresh readback through the
+existing verifier. Duplicate replay and concurrent local claim assertions
+remain part of the original demo; this is not physical split-brain testing.
+
+SQLite can need writable SHM metadata even for a read-only WAL connection.
+The checker copies stopped-producer DB/WAL/SHM bytes into private bounded
+temporary storage, opens that copy read-only, and confirms original evidence
+hashes remain unchanged. Inputs have a 32 MiB aggregate ceiling; the container
+temporary filesystem stays 64 MiB. It never checkpoints or edits original
+evidence and never ignores WAL. Retained containers and volumes are not
+automatically deleted; use a fresh output path for each trial.
+
+The [November 15 qualification record](../../docs/GOVERNED_MCP_CONTAINER_QUALIFICATION_2026-11-15.md)
+separates actual local results from production, independent-custody, security
+and release acceptance. These approvals are scripted test inputs, not an
+independently witnessed human-identity control. Revalidate the combined image
+when runtime pins change; this unit does not qualify the wider release graph.
 
 ## What happens
 
