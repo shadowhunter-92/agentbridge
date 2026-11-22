@@ -5,15 +5,21 @@ records the merged main, historical source/evaluator pins and open work.
 Historical sprint reports describe their own commits; their test counts and
 pending-PR statements are not current status.
 
-The [November 3 checkpoint](ALPHA_PROGRESS_2026-11-03.md) records the approved
-PR #85 merge and its own successful main CI. The worker-lifecycle component is
-**VERIFIED IN CI**; complete physical HA and actual AWS multi-node traffic are
-still open. Internally controllable next work is actual traffic execution,
-forced-worker and response-loss recovery trials, full governed recovery,
-storage/retention qualification, protocol gaps and sustained full-route load.
-External security, developer, buyer, destination-custody and pilot acceptance
-are separate gates. Dates for these remaining gates depend on execution
-capacity, permissions and participants; no completion deadline is asserted.
+The [November 13 checkpoint](CURRENT_ALPHA_STATUS.md) records maintained main
+`f309a35cb5c3ec4164acea5ba2622dc04be6807c`, tree
+`17fd9e48708ebed43971a4d0b53b9e6cf703c609`, and its own successful 16-job main
+CI run. The five owner-approved PRs #87–#91 each passed 24 checks separately.
+The [independent audit](AUDIT_AND_RECONCILIATION_2026-11-13.md) distinguishes
+those observations from older source, local qualification and external gates.
+The [November 3 checkpoint](ALPHA_PROGRESS_2026-11-03.md) remains historical.
+
+Bounded active-worker stop and committed acquire/renew method-return-loss
+trials have run, and the supported worker/crash components are **VERIFIED IN
+CI** within their selected cohorts. They do not qualify real dropped network
+replies, client/gateway partition/rejoin, physical HA or sustained full-route
+deadlines. External security, developer, buyer, destination-custody and pilot
+acceptance remain separate gates. Dates depend on execution capacity,
+permissions and participants; no completion deadline is asserted.
 
 ## Implemented foundation
 
@@ -27,6 +33,17 @@ capacity, permissions and participants; no completion deadline is asserted.
 - The offline Evidence verifier is installed as `agentbridge-verify-evidence`.
   Trust roots and expected action inputs must come from the verifier's operator.
 - OIDC/RBAC, Prometheus metrics and optional OpenTelemetry already exist.
+- The [governed MCP demonstration](GOVERNED_MCP_DEMO_2026-11-12.md) supplies an
+  actual local stdio approval/effect/evidence flow and explicit negative cases.
+  Its client and target are synthetic, under one operator; no LLM, native
+  payment or independent custody is claimed.
+- The [offline Stripe-style contract](OFFLINE_STRIPE_STYLE_CONTRACT_2026-11-12.md)
+  reuses the existing fenced SQLite reference target. Mock key bindings and
+  webhook deduplication do not prove external provider fencing or settlement.
+- Unsupported MCP task augmentation refuses before admission; the
+  [task-refusal unit](MCP_TASK_REFUSAL_2026-11-04.md) does not add full MCP task
+  lifecycle support. [Audit retention namespace checks](AUDIT_RETENTION_NAMESPACE_2026-11-04.md)
+  remain distinct from production retention/custody acceptance.
 - Maintained main includes opt-in enrolled tenant SDK/HTTP authority, private SQL
   namespaces, bounded offline historical assignment and shared-SQL admission and
   settlement. Selected operator policy/signing/task mutations compose with SQL.
@@ -52,10 +69,18 @@ revalidate current enrolled authority and atomically link a new operation,
 reservation and WORKING event. The [private dispatch follow-up](QUEUED_DISPATCH_AND_RECOVERY_2026-10-22.md)
 adds one-shot synthetic execution, bounded immutable results and read-only
 success reconciliation on SQLite or PostgreSQL tenant accounting. It never
-automatically replays an uncertain effect. Local final qualification records
+automatically replays an uncertain effect. Its dated local final qualification recorded
 830 passed/31 expected backend-specific skips, separate from selected-head CI.
 Public worker/network dispatch, historical-key recovery, authoritative absence
 proof and acknowledged remote cancellation remain open. Production remains NO-GO.
+
+The [bounded HA follow-up](HA_CRITICAL_PATH_2026-11-12.md) records three accepted
+local worker-fault trials. Its new PostgreSQL governance crash cases also ran
+in PR #91's successful hosted PostgreSQL cohort; their destination remains the
+SQLite demonstration. The separate controlled local crash operator refused
+PUBLIC TEMP before creating roles/schemas and accepted no local staging
+crash trial. Preserve both observations; neither establishes physical database
+failover or arbitrary external execution recovery.
 
 1. Reference transport interoperability for each advertised SDK/version and
    supported behavior. The opt-in A2A 0.3 observer streams existing task status;
@@ -76,6 +101,13 @@ proof and acknowledged remote cancellation remain open. Production remains NO-GO
    owner IDs do not authenticate a network caller. Qualify frontdoor physical
    connection limits and coordinated stream stop/drain/restore; shared SQL
    allocations alone do not establish those operational controls.
+
+Bounded follow-ups include the mock's aggregate storage limits, container
+negative-scenario qualification and dependency hash closure, and a current
+source-bound evaluator route. Accurate `/health`, `/ready`, `/version`,
+`/metrics` and deployment-setting documentation identified by the legacy review
+remains open for a separate narrow change. No runtime cherry-pick, broader
+protocol promise or legacy production/compliance claim follows from that gap.
 
 ## External acceptance
 
