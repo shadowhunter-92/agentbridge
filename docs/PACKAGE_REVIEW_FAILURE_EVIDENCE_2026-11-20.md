@@ -1,9 +1,10 @@
 # Package review failure evidence — November 20, 2026
 
-Status: **PARTIALLY TESTED**. Hosted failure-upload behavior has not run.
-This local correction starts from
-`f309a35cb5c3ec4164acea5ba2622dc04be6807c`. Publication and an exact-head hosted
-run require separate approval; no hosted result is claimed for this change.
+**Failure upload: VERIFIED IN CI.** The November 21 run at
+`af9450dc5ddce1f569fa7b819b28afebc15dde12` exercised the failure path on
+base `f309a35cb5c3ec4164acea5ba2622dc04be6807c`. The November 22 branch update
+includes patched main `53882b153df230861ff3b3aa2761ff26c0301327` for the
+success-path check. Each result belongs to the commit that ran.
 
 The `package-review` dependency audit writes
 `release-review-vulnerabilities.json` and its exit-code record before returning
@@ -36,8 +37,17 @@ Local validation on November 20, 2026:
 `actionlint` was not installed locally and was not run. No tool was installed
 for this bounded change.
 
-These checks establish local structure and documentation only. Artifact upload
-after a failed audit and downstream hosted job behavior remain unverified in hosted CI
-until this exact change is separately approved for publication and exercised in
-GitHub Actions. No implementation-mirroring test was added for this one-line
-workflow correction.
+## Hosted failure-path result
+
+The [package review job](https://github.com/shadowhunter-92/agentbridge/actions/runs/44909193518/job/136861169509)
+reported the OpenTelemetry API 1.45.1 advisory with audit exit 1. The job
+remained failed, and the [dependent container review](https://github.com/shadowhunter-92/agentbridge/actions/runs/44909193518/job/136861504364)
+was skipped.
+
+GitHub retained the [release review evidence archive](https://github.com/shadowhunter-92/agentbridge/actions/runs/44909193518/artifacts/14709153352).
+The downloaded bytes matched GitHub's SHA-256 digest
+`c2e0af0097f8a3548229cf8f998c85fdac81a16a92fc678452e86548b53a9464`.
+All ten members matched the fixed allowlist. The advisory JSON and exit-code
+file contained the recorded failure, and the archive excluded the signing
+private key. The newer head requires its own CI to check the successful
+audit, evidence upload and downstream container review together.

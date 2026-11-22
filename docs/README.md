@@ -34,6 +34,7 @@ not an execution authority.
 | Document |
 | --- |
 | [AgentBridge scoped developer-alpha release candidate](ALPHA_RELEASE_SCOPE_AND_ROLLBACK.md) |
+| [OpenTelemetry API dependency floor and local compatibility — November 20, 2026](OTEL_API_DEPENDENCY_FLOOR_2026-11-20.md) |
 | [Control Plane API Reference](API_REFERENCE.md) |
 | [AWS PostgreSQL operational experiment — 2026-10-13](AWS_POSTGRES_STAGING_2026-10-13.md) |
 | [Real AWS staging qualification — 2026-10-13](AWS_REAL_STAGING_TEST_2026-10-13.md) |
@@ -103,6 +104,7 @@ not an execution authority.
 | [External destination capability, fencing limits and acceptance](EXTERNAL_DESTINATION_FENCING_2026.md) |
 | [Nine-phase engineering checklist and progress](ENGINEERING_PHASE_PROGRESS_2026-10-24.md) |
 | [Engineering blockers and external acceptance](BLOCKERS.md) |
+| [Pydantic floor and runtime hash-lock reconciliation — November 14, 2026](DEPENDENCY_LOCK_RECONCILIATION_2026-11-14.md) |
 | [Retained signing-revision capacity and failure limits](SIGNING_JOURNAL_CAPACITY_2026.md) |
 | [Signing publication transaction ownership](SIGNING_PUBLICATION_BOUNDARY_2026-10-24.md) |
 | [Durable aggregate admission quotas](DURABLE_ADMISSION_QUOTAS_2026-10-15.md) |
