@@ -42,6 +42,7 @@ not an execution authority.
 | [AgentBridge AWS staging — strict $0 preparation](AWS_ZERO_COST_STAGING_PLAN.md) |
 | [Benchmarks — what AgentBridge actually costs](BENCHMARKS.md) |
 | [Branch reconciliation, historical CI, and merge gates](BRANCH_AND_CI_AUDIT.md) |
+| [Package review failure evidence — November 20, 2026](PACKAGE_REVIEW_FAILURE_EVIDENCE_2026-11-20.md) |
 | [Branch lifecycle](BRANCH_LIFECYCLE.md) |
 | [Branch qualification and consolidation — October 13, 2026](BRANCH_REVIEW_2026-10-13.md) |
 | [AgentBridge code protection and intellectual-property controls](CODE_PROTECTION_AND_IP_POLICY_2026.md) |
